@@ -53,12 +53,14 @@ export default async function DashboardPage() {
             Entregas de hoje · {formatDate(today)}
           </p>
         </div>
-        <Link href="/entregas/nova" className="btn-primary w-full sm:w-auto">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nova Entrega
-        </Link>
+        {isAdmin && (
+          <Link href="/entregas/nova" className="btn-primary w-full sm:w-auto">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nova Entrega
+          </Link>
+        )}
       </div>
 
       <DashboardEntregas manha={manha} tarde={tarde} isAdmin={isAdmin} />
