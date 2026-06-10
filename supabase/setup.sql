@@ -99,15 +99,10 @@ create policy "Só admin deleta"
 
 
 -- 3. STORAGE
+-- Bucket público: o app usa getPublicUrl() e os anexos são abertos
+-- direto via <a href>. URLs contêm UUID da entrega + timestamp.
 insert into storage.buckets (id, name, public)
-values ('anexos-entregas', 'anexos-entregas', false);
-
-create policy "Autenticados podem ler anexos"
-  on storage.objects for select
-  using (
-    bucket_id = 'anexos-entregas'
-    and auth.role() = 'authenticated'
-  );
+values ('anexos-entregas', 'anexos-entregas', true);
 
 create policy "Admin faz upload"
   on storage.objects for insert
