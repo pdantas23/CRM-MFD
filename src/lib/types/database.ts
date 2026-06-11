@@ -1,4 +1,4 @@
-export type Role = "admin" | "entregador";
+export type Role = "admin" | "vendedor" | "entregador";
 export type Periodo = "manha" | "tarde";
 export type StatusEntrega = "entrega_final" | "entrega_parcial";
 
@@ -6,6 +6,7 @@ export interface Profile {
   id: string;
   nome: string;
   role: Role;
+  vendedor_id: number | null;
   created_at: string;
 }
 
@@ -22,6 +23,7 @@ export interface Entrega {
   anexo_url: string | null;
   anexo_nome: string | null;
   ordem: number | null;
+  pedido_id: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -48,18 +50,21 @@ export type Database = {
           id: string;
           nome: string;
           role: string;
+          vendedor_id: number | null;
           created_at: string;
         };
         Insert: {
           id: string;
           nome: string;
           role: string;
+          vendedor_id?: number | null;
           created_at?: string | null;
         };
         Update: {
           id?: string;
           nome?: string;
           role?: string;
+          vendedor_id?: number | null;
           created_at?: string | null;
         };
         Relationships: [];
@@ -77,6 +82,7 @@ export type Database = {
           endereco: string;
           anexo_url: string | null;
           anexo_nome: string | null;
+          pedido_id: string | null;
           created_by: string | null;
           created_at: string;
         };
@@ -92,6 +98,7 @@ export type Database = {
           endereco: string;
           anexo_url?: string | null;
           anexo_nome?: string | null;
+          pedido_id?: string | null;
           created_by?: string | null;
           created_at?: string;
         };
@@ -107,6 +114,7 @@ export type Database = {
           endereco?: string;
           anexo_url?: string | null;
           anexo_nome?: string | null;
+          pedido_id?: string | null;
           created_by?: string | null;
           created_at?: string;
         };

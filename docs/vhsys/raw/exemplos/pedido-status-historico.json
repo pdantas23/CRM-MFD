@@ -1,0 +1,35 @@
+{
+  "_meta": {
+    "endpoint": "GET /pedidos/{id_ped}/status",
+    "capturado_em": "2026-06-11",
+    "observacoes": [
+      "Histórico real de um pedido (usuários mascarados).",
+      "Campo `situacao` no histórico TAMBÉM não consta na spec pública — cada mudança de situação grava o id_situacao.",
+      "obs_status registra eventos do sistema, ex.: 'Venda Emitida / nro: 1225'."
+    ]
+  },
+  "code": 200,
+  "status": "success",
+  "data": [
+    {
+      "id_status": 100041227,
+      "id_pedido": 49328570,
+      "data_status": "2026-06-11",
+      "obs_status": "Pedido cadastrado",
+      "tipo_status": "Em Aberto",
+      "id_usuario": 9999999,
+      "nome_usuario": null,
+      "situacao": 858
+    },
+    {
+      "id_status": 100059241,
+      "id_pedido": 49328570,
+      "data_status": "2026-06-11",
+      "obs_status": "Venda Emitida / nro: 1225",
+      "tipo_status": "Atendido",
+      "id_usuario": 9999999,
+      "nome_usuario": "USUÁRIO",
+      "situacao": 777
+    }
+  ]
+}

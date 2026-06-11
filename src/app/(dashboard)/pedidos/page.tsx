@@ -1,0 +1,101 @@
+import { createClient } from "@/lib/supabase/server";
+import { PedidosView } from "@/components/pedidos/PedidosView";
+import { COLUNAS_KANBAN, SITUACAO } from "@/lib/vhsys/fluxo";
+import type {
+  ClientePrefillRow,
+  FinanceiroPedidoRow,
+  PedidoKanban,
+  PedidoRow,
+  SituacaoRow,
+} from "@/lib/types/pedidos";
+
+export const dynamic = "force-dynamic";
+
+// Pedidos do fluxo ativo entram todos; "Entregue" (777) é limitado aos
+// mais recentes para não inflar o quadro com o histórico inteiro.
+const LIMITE_ENTREGUES = 50;
+
+export default async function PedidosPage() {
+  const supabase = await createClient();
+
+  const { data: situacoes } = await supabase
+    .from("vhsys_situacoes")
+    .select("id_vhsys, entidade, nome, tipo_status, ordem, lixeira")
+    .eq("entidade", "pedidos")
+    .eq("lixeira", false)
+    .order("ordem");
+
+  const colunasAtivas = COLUNAS_KANBAN.filter((id) => id !== SITUACAO.ENTREGUE);
+
+  const [{ data: ativos }, { data: entregues }] = await Promise.all([
+    supabase
+      .from("vhsys_pedidos")
+      .select("*")
+      .eq("lixeira", false)
+      .in("situacao_id", colunasAtivas)
+      .order("data_pedido", { ascending: false }),
+    supabase
+      .from("vhsys_pedidos")
+      .select("*")
+      .eq("lixeira", false)
+      .eq("situacao_id", SITUACAO.ENTREGUE)
+      .order("data_mod_vhsys", { ascending: false })
+      .limit(LIMITE_ENTREGUES),
+  ]);
+
+  const pedidos: PedidoRow[] = [...(ativos ?? []), ...(entregues ?? [])];
+  const pedidoIds = pedidos.map((p) => p.id);
+  const clienteIds = Array.from(
+    new Set(pedidos.map((p) => p.cliente_id_vhsys).filter((x): x is number => !!x))
+  );
+
+  const [{ data: financeiro }, { data: clientes }, { data: entregasVinculadas }] =
+    await Promise.all([
+      pedidoIds.length
+        ? supabase
+            .from("vhsys_pedidos_financeiro")
+            .select("*")
+            .in("pedido_id", pedidoIds)
+        : Promise.resolve({ data: [] as FinanceiroPedidoRow[] }),
+      clienteIds.length
+        ? supabase
+            .from("vhsys_clientes")
+            .select("id_vhsys, cnpj_cpf, bairro, endereco, numero")
+            .in("id_vhsys", clienteIds)
+        : Promise.resolve({ data: [] as ClientePrefillRow[] }),
+      pedidoIds.length
+        ? supabase.from("entregas").select("pedido_id").in("pedido_id", pedidoIds)
+        : Promise.resolve({ data: [] as { pedido_id: string | null }[] }),
+    ]);
+
+  const financeiroPorPedido = new Map(
+    (financeiro ?? []).map((f: FinanceiroPedidoRow) => [f.pedido_id, f])
+  );
+  const clientePorId = new Map(
+    (clientes ?? []).map((c: ClientePrefillRow) => [c.id_vhsys, c])
+  );
+  const comEntrega = new Set(
+    (entregasVinculadas ?? []).map((e) => e.pedido_id).filter(Boolean)
+  );
+
+  const kanban: PedidoKanban[] = pedidos.map((p) => ({
+    ...p,
+    financeiro: financeiroPorPedido.get(p.id) ?? null,
+    cliente: p.cliente_id_vhsys ? clientePorId.get(p.cliente_id_vhsys) ?? null : null,
+    entregaRegistrada: comEntrega.has(p.id),
+  }));
+
+  return (
+    <div className="p-8">
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Espelho do VHSYS — situações e valores sincronizados. Mover cards
+          (escrita) será habilitado em fase futura.
+        </p>
+      </div>
+
+      <PedidosView situacoes={(situacoes ?? []) as SituacaoRow[]} pedidos={kanban} />
+    </div>
+  );
+}

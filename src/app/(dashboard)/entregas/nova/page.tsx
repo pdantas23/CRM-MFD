@@ -28,13 +28,14 @@ export default async function NovaEntregaPage({
     redirect("/entregas");
   }
 
-  // Pré-preenchimento opcional vindo da aba Vendas (query params)
+  // Pré-preenchimento opcional vindo da aba Pedidos (query params)
   const prefill: EntregaPrefill = {
     nome_cliente: paramString(searchParams?.nome_cliente),
     cpf_cnpj: paramString(searchParams?.cpf_cnpj),
     numero_orcamento: paramString(searchParams?.numero_orcamento),
     bairro: paramString(searchParams?.bairro),
     endereco: paramString(searchParams?.endereco),
+    pedido_id: paramString(searchParams?.pedido_id),
   };
 
   return (

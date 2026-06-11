@@ -1,0 +1,153 @@
+{
+  "_meta": {
+    "endpoint": "GET /situacoes",
+    "capturado_em": "2026-06-11",
+    "observacoes": [
+      "Endpoint NÃO documentado na doc pública — descoberto por sondagem read-only.",
+      "Envelope usa status:'sucesso' (pt-BR), diferente de 'success' dos demais endpoints.",
+      "Acentos vêm com encoding duplo (ex.: 'Em separaÃ§Ã£o') — normalizar com Buffer.from(s,'latin1').toString('utf8').",
+      "As situações 'Pagamento Parcial' (id 1179) e 'Entrega Parcial' (id 1180) foram criadas em 2026-06-11.",
+      "Ordens foram reordenadas vs captura anterior de 2026-06-11: Aguardando pagamento=1, Pagamento Parcial=2, Pagamento aprovado=3, Em separação=4, Entregue=6, Cancelado=7. Entrega Parcial=5.",
+      "Campos id_empresa/id_usuario_* retornam IDs reais — mascarados com 0."
+    ]
+  },
+  "code": 200,
+  "status": "sucesso",
+  "data": {
+    "Pedidos": [
+      {
+        "id_situacao": 858,
+        "id_empresa": 0,
+        "tipo_pedido": 1,
+        "tipo_status": "Em Aberto",
+        "nome_situacao": "Aguardando pagamento",
+        "ordem": 1,
+        "id_usuario_cad": 0,
+        "id_usuario_mod": 0,
+        "data_cad": "2026-04-15 15:29:26",
+        "data_mod": "2026-06-11 16:44:48",
+        "lixeira": "Nao"
+      },
+      {
+        "id_situacao": 1179,
+        "id_empresa": 0,
+        "tipo_pedido": 1,
+        "tipo_status": "Em Aberto",
+        "nome_situacao": "Pagamento Parcial",
+        "ordem": 2,
+        "id_usuario_cad": 0,
+        "id_usuario_mod": 0,
+        "data_cad": "2026-06-11 16:43:54",
+        "data_mod": "2026-06-11 16:44:48",
+        "lixeira": "Nao"
+      },
+      {
+        "id_situacao": 857,
+        "id_empresa": 0,
+        "tipo_pedido": 1,
+        "tipo_status": "Em Andamento",
+        "nome_situacao": "Pagamento aprovado",
+        "ordem": 3,
+        "id_usuario_cad": 0,
+        "id_usuario_mod": 0,
+        "data_cad": "2026-04-15 15:23:41",
+        "data_mod": "2026-06-11 16:44:48",
+        "lixeira": "Nao"
+      },
+      {
+        "id_situacao": 859,
+        "id_empresa": 0,
+        "tipo_pedido": 1,
+        "tipo_status": "Em Andamento",
+        "nome_situacao": "Em separação",
+        "ordem": 4,
+        "id_usuario_cad": 0,
+        "id_usuario_mod": 0,
+        "data_cad": "2026-04-15 15:29:26",
+        "data_mod": "2026-06-11 16:44:48",
+        "lixeira": "Nao"
+      },
+      {
+        "id_situacao": 1180,
+        "id_empresa": 0,
+        "tipo_pedido": 1,
+        "tipo_status": "Em Aberto",
+        "nome_situacao": "Entrega Parcial",
+        "ordem": 5,
+        "id_usuario_cad": 0,
+        "id_usuario_mod": 0,
+        "data_cad": "2026-06-11 16:43:54",
+        "data_mod": "2026-06-11 16:44:48",
+        "lixeira": "Nao"
+      },
+      {
+        "id_situacao": 777,
+        "id_empresa": 0,
+        "tipo_pedido": 1,
+        "tipo_status": "Atendido",
+        "nome_situacao": "Entregue",
+        "ordem": 6,
+        "id_usuario_cad": 0,
+        "id_usuario_mod": 0,
+        "data_cad": "2026-04-01 10:58:03",
+        "data_mod": "2026-06-11 16:44:48",
+        "lixeira": "Nao"
+      },
+      {
+        "id_situacao": 778,
+        "id_empresa": 0,
+        "tipo_pedido": 1,
+        "tipo_status": "Cancelado",
+        "nome_situacao": "Cancelado",
+        "ordem": 7,
+        "id_usuario_cad": 0,
+        "id_usuario_mod": 0,
+        "data_cad": "2026-04-01 10:58:03",
+        "data_mod": "2026-06-11 16:44:48",
+        "lixeira": "Nao"
+      }
+    ],
+    "Orcamentos": [
+      {
+        "id_situacao": 860,
+        "id_empresa": 0,
+        "tipo_pedido": 2,
+        "tipo_status": "Em Aberto",
+        "nome_situacao": "Em negociação",
+        "ordem": 1,
+        "id_usuario_cad": 0,
+        "id_usuario_mod": 0,
+        "data_cad": "2026-04-15 15:29:58",
+        "data_mod": "2026-06-11 16:44:48",
+        "lixeira": "Nao"
+      },
+      {
+        "id_situacao": 768,
+        "id_empresa": 0,
+        "tipo_pedido": 2,
+        "tipo_status": "Atendido",
+        "nome_situacao": "Aprovado",
+        "ordem": 2,
+        "id_usuario_cad": 0,
+        "id_usuario_mod": 0,
+        "data_cad": "2026-04-01 10:55:58",
+        "data_mod": "2026-06-11 16:44:48",
+        "lixeira": "Nao"
+      },
+      {
+        "id_situacao": 769,
+        "id_empresa": 0,
+        "tipo_pedido": 2,
+        "tipo_status": "Cancelado",
+        "nome_situacao": "Perdido",
+        "ordem": 3,
+        "id_usuario_cad": 0,
+        "id_usuario_mod": 0,
+        "data_cad": "2026-04-01 10:55:58",
+        "data_mod": "2026-06-11 16:44:48",
+        "lixeira": "Nao"
+      }
+    ],
+    "OrdemServico": []
+  }
+}

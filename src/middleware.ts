@@ -35,6 +35,11 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // /api/cron/* tem autenticação própria (Bearer CRON_SECRET), sem sessão
+  if (pathname.startsWith("/api/cron/")) {
+    return supabaseResponse;
+  }
+
   if (!user && pathname !== "/login" && !pathname.startsWith("/api/auth/")) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

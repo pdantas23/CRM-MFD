@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Select } from "@/components/ui/Select";
 import type { Entrega, EntregaFormData, Periodo, StatusEntrega } from "@/lib/types/database";
 
-// Pré-preenchimento opcional dos dados do cliente (ex.: vindo da aba Vendas
+// Pré-preenchimento opcional dos dados do cliente (ex.: vindo da aba Pedidos
 // por query params). Campos ausentes continuam vazios; nada muda sem prefill.
 export interface EntregaPrefill {
   nome_cliente?: string;
@@ -14,6 +14,8 @@ export interface EntregaPrefill {
   numero_orcamento?: string;
   bairro?: string;
   endereco?: string;
+  /** Vínculo com o pedido espelhado do VHSYS (vhsys_pedidos.id). */
+  pedido_id?: string;
 }
 
 interface EntregaFormProps {
@@ -180,6 +182,7 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
           endereco: form.endereco,
           anexo_url: null as string | null,
           anexo_nome: null as string | null,
+          pedido_id: prefill?.pedido_id ?? null,
         };
 
         const { data: newEntrega, error: insertError } = await supabase

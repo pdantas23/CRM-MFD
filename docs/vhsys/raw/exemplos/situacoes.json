@@ -1,0 +1,29 @@
+{
+  "_meta": {
+    "endpoint": "GET /situacoes",
+    "capturado_em": "2026-06-11",
+    "observacoes": [
+      "Endpoint NÃO documentado na doc pública — descoberto por sondagem read-only.",
+      "Envelope usa status:'sucesso' (pt-BR), diferente de 'success' dos demais endpoints.",
+      "Acentos vêm com encoding duplo (ex.: 'Em separaÃ§Ã£o') — normalizar no client.",
+      "Campos id_empresa/id_usuario_* mascarados."
+    ]
+  },
+  "code": 200,
+  "status": "sucesso",
+  "data": {
+    "Pedidos": [
+      { "id_situacao": 858, "id_empresa": 0, "tipo_pedido": 1, "tipo_status": "Em Aberto", "nome_situacao": "Aguardando pagamento", "ordem": 1, "data_cad": "2026-04-15 15:29:26", "data_mod": "2026-04-22 18:34:53", "lixeira": "Nao" },
+      { "id_situacao": 857, "id_empresa": 0, "tipo_pedido": 1, "tipo_status": "Em Andamento", "nome_situacao": "Pagamento aprovado", "ordem": 2, "data_cad": "2026-04-15 15:23:41", "data_mod": "2026-04-22 18:34:53", "lixeira": "Nao" },
+      { "id_situacao": 859, "id_empresa": 0, "tipo_pedido": 1, "tipo_status": "Em Andamento", "nome_situacao": "Em separação", "ordem": 3, "data_cad": "2026-04-15 15:29:26", "data_mod": "2026-04-22 18:34:53", "lixeira": "Nao" },
+      { "id_situacao": 777, "id_empresa": 0, "tipo_pedido": 1, "tipo_status": "Atendido", "nome_situacao": "Entregue", "ordem": 4, "data_cad": "2026-04-01 10:58:03", "data_mod": "2026-04-22 18:34:53", "lixeira": "Nao" },
+      { "id_situacao": 778, "id_empresa": 0, "tipo_pedido": 1, "tipo_status": "Cancelado", "nome_situacao": "Cancelado", "ordem": 5, "data_cad": "2026-04-01 10:58:03", "data_mod": "2026-04-22 18:34:53", "lixeira": "Nao" }
+    ],
+    "Orcamentos": [
+      { "id_situacao": 860, "id_empresa": 0, "tipo_pedido": 2, "tipo_status": "Em Aberto", "nome_situacao": "Em negociação", "ordem": 1, "data_cad": "2026-04-15 15:29:58", "data_mod": "2026-04-22 18:34:53", "lixeira": "Nao" },
+      { "id_situacao": 768, "id_empresa": 0, "tipo_pedido": 2, "tipo_status": "Atendido", "nome_situacao": "Aprovado", "ordem": 2, "data_cad": "2026-04-01 10:55:58", "data_mod": "2026-04-22 18:34:53", "lixeira": "Nao" },
+      { "id_situacao": 769, "id_empresa": 2, "tipo_pedido": 2, "tipo_status": "Cancelado", "nome_situacao": "Perdido", "ordem": 3, "data_cad": "2026-04-01 10:55:58", "data_mod": "2026-04-22 18:34:53", "lixeira": "Nao" }
+    ],
+    "OrdemServico": []
+  }
+}
