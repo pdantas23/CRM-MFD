@@ -1,9 +1,17 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { EntregaForm } from "@/components/entregas/EntregaForm";
+import { EntregaForm, type EntregaPrefill } from "@/components/entregas/EntregaForm";
 import type { Profile } from "@/lib/types/database";
 
-export default async function NovaEntregaPage() {
+function paramString(value: string | string[] | undefined): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+export default async function NovaEntregaPage({
+  searchParams,
+}: {
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
   const supabase = await createClient();
 
   const {
@@ -20,6 +28,15 @@ export default async function NovaEntregaPage() {
     redirect("/entregas");
   }
 
+  // Pré-preenchimento opcional vindo da aba Vendas (query params)
+  const prefill: EntregaPrefill = {
+    nome_cliente: paramString(searchParams?.nome_cliente),
+    cpf_cnpj: paramString(searchParams?.cpf_cnpj),
+    numero_orcamento: paramString(searchParams?.numero_orcamento),
+    bairro: paramString(searchParams?.bairro),
+    endereco: paramString(searchParams?.endereco),
+  };
+
   return (
     <div className="p-8">
       <div className="mb-8">
@@ -28,7 +45,7 @@ export default async function NovaEntregaPage() {
       </div>
 
       <div className="mx-auto max-w-3xl">
-        <EntregaForm mode="create" />
+        <EntregaForm mode="create" prefill={prefill} />
       </div>
     </div>
   );

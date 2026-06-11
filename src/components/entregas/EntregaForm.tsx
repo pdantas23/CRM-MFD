@@ -6,9 +6,20 @@ import { createClient } from "@/lib/supabase/client";
 import { Select } from "@/components/ui/Select";
 import type { Entrega, EntregaFormData, Periodo, StatusEntrega } from "@/lib/types/database";
 
+// Pré-preenchimento opcional dos dados do cliente (ex.: vindo da aba Vendas
+// por query params). Campos ausentes continuam vazios; nada muda sem prefill.
+export interface EntregaPrefill {
+  nome_cliente?: string;
+  cpf_cnpj?: string;
+  numero_orcamento?: string;
+  bairro?: string;
+  endereco?: string;
+}
+
 interface EntregaFormProps {
   entrega?: Entrega;
   mode: "create" | "edit";
+  prefill?: EntregaPrefill;
 }
 
 const periodoOptions = [
@@ -54,7 +65,7 @@ function cpfCnpjDigits(value: string): number {
   return value.replace(/\D/g, "").length;
 }
 
-export function EntregaForm({ entrega, mode }: EntregaFormProps) {
+export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -62,11 +73,11 @@ export function EntregaForm({ entrega, mode }: EntregaFormProps) {
     data: entrega?.data ?? getTodayISO(),
     periodo: entrega?.periodo ?? "manha",
     status: entrega?.status ?? "entrega_final",
-    nome_cliente: entrega?.nome_cliente ?? "",
-    cpf_cnpj: formatCpfCnpj(entrega?.cpf_cnpj ?? ""),
-    numero_orcamento: entrega?.numero_orcamento ?? "",
-    bairro: entrega?.bairro ?? "",
-    endereco: entrega?.endereco ?? "",
+    nome_cliente: entrega?.nome_cliente ?? prefill?.nome_cliente ?? "",
+    cpf_cnpj: formatCpfCnpj(entrega?.cpf_cnpj ?? prefill?.cpf_cnpj ?? ""),
+    numero_orcamento: entrega?.numero_orcamento ?? prefill?.numero_orcamento ?? "",
+    bairro: entrega?.bairro ?? prefill?.bairro ?? "",
+    endereco: entrega?.endereco ?? prefill?.endereco ?? "",
     anexo: null,
   });
 

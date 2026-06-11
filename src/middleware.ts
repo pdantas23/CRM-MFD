@@ -27,11 +27,11 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  // getUser() valida o token no servidor de Auth (em vez de confiar no
+  // cookie) e limpa cookies órfãos quando o refresh token é inválido.
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  const user = session?.user ?? null;
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
 
