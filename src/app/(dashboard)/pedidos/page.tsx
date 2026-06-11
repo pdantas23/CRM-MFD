@@ -27,23 +27,33 @@ export default async function PedidosPage() {
 
   const colunasAtivas = COLUNAS_KANBAN.filter((id) => id !== SITUACAO.ENTREGUE);
 
+  // Colunas explícitas — exclui `dados` (jsonb volumoso) e demais não usados
+  // pelo Kanban/modal (frete, desconto, data_cad_vhsys, sincronizado_em).
+  const COLS_PEDIDO =
+    "id, id_vhsys, numero, cliente_id_vhsys, nome_cliente, vendedor_id_vhsys, " +
+    "vendedor_nome, valor_total, situacao_id, status_base, origem_situacao, " +
+    "data_pedido, prazo_entrega, referencia, obs, data_mod_vhsys, lixeira";
+
   const [{ data: ativos }, { data: entregues }] = await Promise.all([
     supabase
       .from("vhsys_pedidos")
-      .select("*")
+      .select(COLS_PEDIDO)
       .eq("lixeira", false)
       .in("situacao_id", colunasAtivas)
       .order("data_pedido", { ascending: false }),
     supabase
       .from("vhsys_pedidos")
-      .select("*")
+      .select(COLS_PEDIDO)
       .eq("lixeira", false)
       .eq("situacao_id", SITUACAO.ENTREGUE)
       .order("data_mod_vhsys", { ascending: false })
       .limit(LIMITE_ENTREGUES),
   ]);
 
-  const pedidos: PedidoRow[] = [...(ativos ?? []), ...(entregues ?? [])];
+  const pedidos: PedidoRow[] = [
+    ...((ativos ?? []) as unknown as PedidoRow[]),
+    ...((entregues ?? []) as unknown as PedidoRow[]),
+  ];
   const pedidoIds = pedidos.map((p) => p.id);
   const clienteIds = Array.from(
     new Set(pedidos.map((p) => p.cliente_id_vhsys).filter((x): x is number => !!x))

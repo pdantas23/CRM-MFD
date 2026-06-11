@@ -3,8 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 import { EntregaForm, type EntregaPrefill } from "@/components/entregas/EntregaForm";
 import type { Profile } from "@/lib/types/database";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function paramString(value: string | string[] | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function paramUuid(value: string | string[] | undefined): string | undefined {
+  const s = paramString(value);
+  return s && UUID_RE.test(s) ? s : undefined;
 }
 
 export default async function NovaEntregaPage({
@@ -35,7 +42,7 @@ export default async function NovaEntregaPage({
     numero_orcamento: paramString(searchParams?.numero_orcamento),
     bairro: paramString(searchParams?.bairro),
     endereco: paramString(searchParams?.endereco),
-    pedido_id: paramString(searchParams?.pedido_id),
+    pedido_id: paramUuid(searchParams?.pedido_id),
   };
 
   return (

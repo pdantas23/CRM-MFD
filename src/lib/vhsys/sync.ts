@@ -49,7 +49,8 @@ function dataOuNull(s: string | null | undefined): string | null {
   return s;
 }
 
-function paraLinhaProduto(p: VhsysProduto) {
+function paraLinhaProduto(registro: unknown) {
+  const p = registro as VhsysProduto;
   return {
     id_vhsys: p.id_produto,
     codigo: p.cod_produto || null,
@@ -69,7 +70,8 @@ function paraLinhaProduto(p: VhsysProduto) {
   };
 }
 
-function paraLinhaCliente(c: VhsysCliente) {
+function paraLinhaCliente(registro: unknown) {
+  const c = registro as VhsysCliente;
   return {
     id_vhsys: c.id_cliente,
     razao: c.razao_cliente,
@@ -96,7 +98,8 @@ function paraLinhaCliente(c: VhsysCliente) {
   };
 }
 
-function paraLinhaVendedor(v: VhsysVendedor) {
+function paraLinhaVendedor(registro: unknown) {
+  const v = registro as VhsysVendedor;
   return {
     id_vhsys: v.id_vendedor,
     nome: v.razao_vendedor,
@@ -114,7 +117,8 @@ function paraLinhaVendedor(v: VhsysVendedor) {
   };
 }
 
-function paraLinhaPedido(p: VhsysPedido) {
+function paraLinhaPedido(registro: unknown) {
+  const p = registro as VhsysPedido;
   const efetiva = situacaoEfetiva(p.situacao || null, p.status_pedido || null);
   return {
     id_vhsys: p.id_ped,
@@ -141,7 +145,8 @@ function paraLinhaPedido(p: VhsysPedido) {
   };
 }
 
-function paraLinhaOrcamento(o: VhsysOrcamento) {
+function paraLinhaOrcamento(registro: unknown) {
+  const o = registro as VhsysOrcamento;
   const efetiva = situacaoEfetiva(o.situacao || null, o.status_pedido || null);
   return {
     id_vhsys: o.id_orcamento,
@@ -167,7 +172,8 @@ function paraLinhaOrcamento(o: VhsysOrcamento) {
   };
 }
 
-function paraLinhaContaReceber(c: VhsysContaReceber) {
+function paraLinhaContaReceber(registro: unknown) {
+  const c = registro as VhsysContaReceber;
   // Vínculo com pedido: id_registro cru NÃO é o número do pedido (colisão
   // entre origens — validado em 2026-06-11). O vínculo confiável vem de
   // identificacao "Ped_<id_ped>" (PK) e nome_conta "Pedido <numero>".
@@ -200,7 +206,8 @@ function paraLinhaContaReceber(c: VhsysContaReceber) {
   };
 }
 
-function paraLinhaNotaFiscal(n: VhsysNotaFiscal) {
+function paraLinhaNotaFiscal(registro: unknown) {
+  const n = registro as VhsysNotaFiscal;
   return {
     id_vhsys: n.id_venda,
     numero: n.id_pedido || null,
@@ -219,7 +226,8 @@ function paraLinhaNotaFiscal(n: VhsysNotaFiscal) {
   };
 }
 
-function paraLinhaSituacao(s: VhsysSituacao & { entidade: string }) {
+function paraLinhaSituacao(registro: unknown) {
+  const s = registro as VhsysSituacao & { entidade: string };
   return {
     id_vhsys: s.id_situacao,
     entidade: s.entidade,
@@ -261,7 +269,7 @@ interface EntidadeSync {
   entidade: string;
   tabela: string;
   listar: (opcoes: { modificadosApos?: Date; lixeira?: "Sim" }) => Promise<unknown[]>;
-  paraLinha: (registro: never) => Record<string, unknown>;
+  paraLinha: (registro: unknown) => Record<string, unknown>;
   /** Entidade sem suporte a data_modificacao/lixeira (sempre lista completa). */
   semIncremental?: boolean;
 }
@@ -303,12 +311,14 @@ export async function sincronizarEspelho(modo: ModoSync): Promise<ResultadoEntid
       }
 
       const ativos = await listar({ modificadosApos });
-      const linhas = (ativos as never[]).map(paraLinha);
+      const linhas = ativos.map(paraLinha);
 
-      // Reconciliação completa também varre a lixeira para marcar exclusões
-      if (modo === "completo" && !semIncremental) {
+      // Incremental e completo varrem a lixeira para propagar exclusões feitas
+      // no VHSYS entre reconciliações completas — sem isso, pedidos excluídos
+      // continuam visíveis no Kanban até o próximo sync completo.
+      if (!semIncremental) {
         const excluidos = await listar({ modificadosApos, lixeira: "Sim" });
-        linhas.push(...(excluidos as never[]).map(paraLinha));
+        linhas.push(...excluidos.map(paraLinha));
       }
 
       // Algumas listagens (ex.: produtos) já incluem itens da lixeira, e a

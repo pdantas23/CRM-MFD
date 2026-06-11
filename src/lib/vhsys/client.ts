@@ -160,10 +160,25 @@ export async function vhsysGetTodos<T>(
   return todos;
 }
 
-/** Formata Date no formato aceito por data_modificacao ("YYYY-MM-DD HH:MM:SS"). */
+/**
+ * Formata Date no formato aceito por data_modificacao ("YYYY-MM-DD HH:MM:SS").
+ * A API VHSYS interpreta este campo no horário de Brasília (America/Sao_Paulo):
+ * os timestamps data_mod_pedido nos exemplos reais (capturado em 2026-06-11)
+ * são coerentes com BRT (UTC-3), sem sufixo de fuso — não UTC.
+ */
 export function formatarDataModificacao(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  // en-CA produz "YYYY-MM-DD, HH:MM:SS" — normalizar para "YYYY-MM-DD HH:MM:SS"
+  return fmt.format(d).replace(", ", " ");
 }
 
 /** Corrige encoding duplo (UTF-8 lido como latin1) — ex.: "separaÃ§Ã£o" → "separação". */

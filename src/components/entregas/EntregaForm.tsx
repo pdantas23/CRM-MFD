@@ -6,6 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { Select } from "@/components/ui/Select";
 import type { Entrega, EntregaFormData, Periodo, StatusEntrega } from "@/lib/types/database";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function validarUuid(v: string | undefined): string | null {
+  return v && UUID_RE.test(v) ? v : null;
+}
+
 // Pré-preenchimento opcional dos dados do cliente (ex.: vindo da aba Pedidos
 // por query params). Campos ausentes continuam vazios; nada muda sem prefill.
 export interface EntregaPrefill {
@@ -182,7 +187,7 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
           endereco: form.endereco,
           anexo_url: null as string | null,
           anexo_nome: null as string | null,
-          pedido_id: prefill?.pedido_id ?? null,
+          pedido_id: validarUuid(prefill?.pedido_id),
         };
 
         const { data: newEntrega, error: insertError } = await supabase
