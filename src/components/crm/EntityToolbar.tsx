@@ -175,7 +175,15 @@ export function EntityToolbar({
     ultimaTecla.current = null;
     setTermo("");
     logFilter(`replace tipo=limpar ts=${Date.now()}`);
-    router.replace(pathname, { scroll: false });
+    // Zera APENAS as chaves de filtro conhecidas; preserva params extra (ex.: perf=1).
+    const CHAVES_FILTRO = [
+      "q", "situacao", "vendedor", "periodo", "data_de", "data_ate",
+      "pedido_emitido", "com_saldo", "ocultar_legado", "pagina", "periodo_entrega",
+    ];
+    const params = new URLSearchParams(searchParams.toString());
+    for (const k of CHAVES_FILTRO) params.delete(k);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
   return (

@@ -71,9 +71,14 @@ export default async function PedidosPage({
   // Detecção de cache hit/miss: leitura barata e sem efeito (além da expiração
   // natural) ANTES da chamada. Se já há valor válido, comCache devolverá ele.
   const cacheHit = cacheGet(chavePedidos) !== null;
-  const onda1 = await comCache(chavePedidos, 30_000, () =>
-    pedidosOnda1(supabase, filtros, escopo, dadosPedidos, numerosSaldo, traceTag)
-  );
+  // ── Ondas 1+2 juntas no mesmo comCache ────────────────────────────────────
+  // Cache hit pula AMBAS as ondas (kanban + financeiro/clientes/entregas).
+  // Os logs `traced` de onda2 aparecem só no miss — correto.
+  const { onda1, onda2 } = await comCache(chavePedidos, 30_000, async () => {
+    const onda1 = await pedidosOnda1(supabase, filtros, escopo, dadosPedidos, numerosSaldo, traceTag);
+    const onda2 = await pedidosOnda2(supabase, onda1.pedidos, traceTag);
+    return { onda1, onda2 };
+  });
   const tOnda1 = performance.now();
 
   const situacoes = onda1.situacoes;
@@ -82,12 +87,8 @@ export default async function PedidosPage({
   const pedidos = onda1.pedidos;
   const atingiuLimitePorSituacao = onda1.atingiuLimitePorSituacao;
 
-  // ── Onda 2: financeiro + clientes + entregas dos cards visíveis ───────────
-  const { financeiro, clientes, entregasVinculadas } = await pedidosOnda2(
-    supabase,
-    pedidos,
-    traceTag
-  );
+  // ── Onda 2: financeiro + clientes + entregas (resultado do cache) ─────────
+  const { financeiro, clientes, entregasVinculadas } = onda2;
   const tOnda2 = performance.now();
 
   const financeiroPorPedido = new Map(financeiro.map((f) => [f.pedido_id, f]));
