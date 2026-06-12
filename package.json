@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "test:perf": "vitest run tests/perf/run.test.ts",
     "test:perf:update-baseline": "tsx tests/perf/compare.ts --update-baseline",
     "test:perf:http": "tsx tests/perf/http.ts"

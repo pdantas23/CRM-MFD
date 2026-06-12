@@ -4,9 +4,13 @@
 import { useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { formatBRL, formatarData } from "@/lib/format";
-import { DropdownFiltro, type OpcaoFiltro } from "@/components/ui/DropdownFiltro";
+import { EntityToolbar } from "@/components/crm/EntityToolbar";
+import { EntityMetrics } from "@/components/crm/EntityMetrics";
+import { FiltroConvertido } from "@/components/crm/FiltroConvertido";
 import { NovoOrcamentoModal } from "./NovoOrcamentoModal";
 import { OrcamentoModal } from "./OrcamentoModal";
+import type { Metrica } from "@/lib/crm/metricas";
+import type { FiltrosCrm } from "@/lib/crm/filtros";
 import type { OrcamentoRow, SituacaoRow } from "@/lib/types/pedidos";
 import type { Profile } from "@/lib/types/database";
 
@@ -20,9 +24,12 @@ interface Props {
   situacoes: SituacaoRow[];
   vendedores: VendedorOpcao[];
   profile: Profile;
-  totalAproximado: number;
+  filtros: FiltrosCrm;
+  metricas: Metrica[];
   pagina: number;
   totalPaginas: number;
+  /** Quando true, o total de páginas é estimativa do planner (count: "planned"). */
+  countAproximado?: boolean;
 }
 
 // Cores por situação (ids da conta — 860, 768, 769)
@@ -37,9 +44,11 @@ export function OrcamentosClient({
   situacoes,
   vendedores,
   profile,
-  totalAproximado,
+  filtros,
+  metricas,
   pagina,
   totalPaginas,
+  countAproximado = false,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -50,148 +59,43 @@ export function OrcamentosClient({
 
   const situacaoPorId = new Map(situacoes.map((s) => [s.id_vhsys, s]));
 
-  // Constrói URL com parâmetro alterado
-  function hrefCom(mudancas: Record<string, string | undefined>): string {
+  function navegarCom(mudancas: Record<string, string | undefined>) {
     const params = new URLSearchParams(searchParams.toString());
     for (const [k, v] of Object.entries(mudancas)) {
-      if (v === undefined || v === "") {
-        params.delete(k);
-      } else {
-        params.set(k, v);
-      }
+      if (v === undefined || v === "") params.delete(k);
+      else params.set(k, v);
     }
-    // Resetar página ao mudar filtros
-    if (!("pagina" in mudancas)) params.delete("pagina");
     const qs = params.toString();
-    return qs ? `${pathname}?${qs}` : pathname;
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
-
-  function navegarCom(mudancas: Record<string, string | undefined>) {
-    router.push(hrefCom(mudancas));
-  }
-
-  const filtroSituacao = searchParams.get("situacao") ?? undefined;
-  const filtroVendedor = searchParams.get("vendedor") ?? undefined;
-  const filtroPedidoEmitido = searchParams.get("pedido_emitido") ?? undefined;
-  const dataInicio = searchParams.get("data_de") ?? "";
-  const dataFim = searchParams.get("data_ate") ?? "";
-  const busca = searchParams.get("q") ?? "";
-
-  const opcoesSituacao: OpcaoFiltro[] = situacoes.map((s) => ({
-    valor: String(s.id_vhsys),
-    label: s.nome,
-  }));
-
-  const opcoesVendedor: OpcaoFiltro[] = vendedores.map((v) => ({
-    valor: String(v.id_vhsys),
-    label: v.nome,
-  }));
-
-  const opcoesPedidoEmitido: OpcaoFiltro[] = [
-    { valor: "true", label: "Emitido" },
-    { valor: "false", label: "Não emitido" },
-  ];
 
   // Somente admin e vendedor veem botão Novo Orçamento
   const podeNovo = profile.role === "admin" || profile.role === "vendedor";
 
+  const opcoesSituacao = situacoes.map((s) => ({ id: s.id_vhsys, nome: s.nome }));
+
   return (
     <>
-      {/* Linha 1: busca full-width + botão Novo Orçamento */}
-      <div className="mb-3 flex w-full items-center gap-2">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const fd = new FormData(e.currentTarget);
-            navegarCom({ q: fd.get("q")?.toString() ?? "" });
-          }}
-          className="flex flex-1 items-center gap-2"
-        >
-          <input
-            type="text"
-            name="q"
-            defaultValue={busca}
-            placeholder="Buscar cliente, nº, vendedor..."
-            maxLength={100}
-            className="input-base flex-1"
-          />
-          <button type="submit" className="btn-secondary !px-3 !py-2 text-sm">
-            Buscar
-          </button>
-          {busca && (
+      <EntityToolbar
+        filtros={filtros}
+        situacoes={opcoesSituacao}
+        vendedores={vendedores}
+        mostrarVendedor={profile.role === "admin"}
+        acaoPrimaria={
+          podeNovo ? (
             <button
               type="button"
-              onClick={() => navegarCom({ q: "" })}
-              className="text-sm text-gray-500 hover:text-gray-700"
+              onClick={() => setMostrarNovoModal(true)}
+              className="btn-primary w-full sm:w-auto"
             >
-              Limpar
+              + Novo Orçamento
             </button>
-          )}
-        </form>
+          ) : undefined
+        }
+        filtroEspecifico={<FiltroConvertido />}
+      />
 
-        {podeNovo && (
-          <button
-            type="button"
-            onClick={() => setMostrarNovoModal(true)}
-            className="btn-primary shrink-0"
-          >
-            + Novo Orçamento
-          </button>
-        )}
-      </div>
-
-      {/* Linha 2: dropdowns à esquerda, período à direita */}
-      <div className="mb-4 flex w-full flex-wrap items-center justify-between gap-2">
-        {/* Dropdowns de filtro — à esquerda */}
-        <div className="flex flex-wrap items-center gap-2">
-          <DropdownFiltro
-            label="Situação"
-            opcoes={opcoesSituacao}
-            valorAtual={filtroSituacao}
-            onChange={(v) => navegarCom({ situacao: v })}
-          />
-
-          {profile.role === "admin" && (
-            <DropdownFiltro
-              label="Vendedor"
-              opcoes={opcoesVendedor}
-              valorAtual={filtroVendedor}
-              onChange={(v) => navegarCom({ vendedor: v })}
-            />
-          )}
-
-          <DropdownFiltro
-            label="Pedido"
-            opcoes={opcoesPedidoEmitido}
-            valorAtual={filtroPedidoEmitido}
-            onChange={(v) => navegarCom({ pedido_emitido: v })}
-            placeholder="Qualquer"
-          />
-        </div>
-
-        {/* Período — à direita */}
-        <div className="ml-auto flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
-          <span className="text-xs text-gray-400">De:</span>
-          <input
-            type="date"
-            value={dataInicio}
-            onChange={(e) => navegarCom({ data_de: e.target.value || undefined })}
-            className="border-none bg-transparent text-sm outline-none"
-          />
-          <span className="text-xs text-gray-400">Até:</span>
-          <input
-            type="date"
-            value={dataFim}
-            onChange={(e) => navegarCom({ data_ate: e.target.value || undefined })}
-            className="border-none bg-transparent text-sm outline-none"
-          />
-        </div>
-      </div>
-
-      {/* Contador */}
-      <p className="mb-2 text-xs text-gray-400">
-        {totalAproximado} orçamentos
-      </p>
+      <EntityMetrics metricas={metricas} />
 
       {/* Tabela */}
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
@@ -256,9 +160,9 @@ export function OrcamentosClient({
         </table>
       </div>
 
-      {/* Paginação */}
+      {/* Paginação (total de páginas estimado quando count: "planned" — sinalizado com ≈) */}
       <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
-        <span>Página {pagina} de {totalPaginas}</span>
+        <span>Página {pagina} de {countAproximado ? "≈ " : ""}{totalPaginas}</span>
         <div className="flex gap-2">
           {pagina > 1 && (
             <button

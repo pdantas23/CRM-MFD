@@ -66,6 +66,6 @@ export function escopoVendedorTeste(id: number): Escopo {
 export function filtrosDeURL(query: string, entidade: Entidade): FiltrosCrm {
   const sp: Record<string, string> = {};
   const params = new URLSearchParams(query);
-  for (const [k, v] of params.entries()) sp[k] = v;
+  for (const [k, v] of Array.from(params.entries())) sp[k] = v;
   return parseFiltros(sp, entidade);
 }
