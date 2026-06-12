@@ -10,10 +10,11 @@
 # workflow_dispatch com input update_baseline=true para gerar e COMMITAR
 # baseline.json gerado dentro do Actions (medida fria, ambiente do CI).
 #
-# Secrets necessários (Settings → Secrets and variables → Actions):
-#   SUPABASE_URL              → mapeado para NEXT_PUBLIC_SUPABASE_URL
-#   SUPABASE_ANON_KEY         → mapeado para NEXT_PUBLIC_SUPABASE_ANON_KEY
-#   SUPABASE_SERVICE_ROLE_KEY → lido pelo client de teste (read-only)
+# Secrets (Environment secrets do environment "dev" — por isso todos os jobs
+# declaram `environment: dev`):
+#   PUBLIC_SUPABASE_URL       → mapeado para NEXT_PUBLIC_SUPABASE_URL
+#   PUBLIC_SUPABASE_ANON_KEY  → mapeado para NEXT_PUBLIC_SUPABASE_ANON_KEY
+#   SERVICE_ROLE_KEY          → mapeado para SUPABASE_SERVICE_ROLE_KEY (read-only)
 # Obs.: tests/perf/client.ts lê NEXT_PUBLIC_SUPABASE_URL e
 # SUPABASE_SERVICE_ROLE_KEY — por isso mapeamos os secrets para esses nomes no env.
 
@@ -38,30 +39,32 @@ jobs:
   # Settings → Secrets and variables → Actions para ativar automaticamente.
   preflight:
     runs-on: ubuntu-latest
+    environment: dev
     outputs:
       has_secrets: ${{ steps.check.outputs.has_secrets }}
     steps:
       - id: check
         env:
-          URL: ${{ secrets.SUPABASE_URL }}
-          KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          KEY: ${{ secrets.SERVICE_ROLE_KEY }}
         run: |
           if [ -n "$URL" ] && [ -n "$KEY" ]; then
             echo "has_secrets=true" >> "$GITHUB_OUTPUT"
             echo "Secrets de perf presentes — jobs de performance habilitados."
           else
             echo "has_secrets=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Secrets de perf ausentes (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY). Jobs de performance PULADOS. Configure em Settings → Secrets and variables → Actions para ativar."
+            echo "::warning::Secrets de perf ausentes no environment 'dev' (PUBLIC_SUPABASE_URL / SERVICE_ROLE_KEY). Jobs de performance PULADOS. Configure em Settings → Environments → dev para ativar."
           fi
 
   perf-server:
     needs: preflight
     if: ${{ needs.preflight.outputs.has_secrets == 'true' }}
     runs-on: ubuntu-latest
+    environment: dev
     env:
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -116,12 +119,13 @@ jobs:
   perf-http:
     needs: preflight
     runs-on: ubuntu-latest
+    environment: dev
     # Roda só em push/dispatch (evita custo de build em todo PR) E com secrets presentes.
     if: ${{ needs.preflight.outputs.has_secrets == 'true' && github.event_name != 'pull_request' }}
     env:
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
