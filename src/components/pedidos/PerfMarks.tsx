@@ -19,7 +19,53 @@ export interface ServerTimings {
   cache: string;
 }
 
-export function PerfMarks({ server }: { server: ServerTimings }) {
+/** Só loga quando ?perf=1 está na URL (mesmo padrão do bloco de mount). */
+function querPerf(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("perf") === "1"
+  );
+}
+
+export function PerfMarks({
+  server,
+  filterNonce,
+  filterCount,
+}: {
+  server: ServerTimings;
+  /**
+   * Identidade dos dados que MUDA a cada troca de filtro (len + primeiros ids
+   * dos pedidos, derivada no servidor). Dispara o marcador render-done a cada
+   * soft navigation, não só no mount.
+   */
+  filterNonce?: string;
+  /** Nº de pedidos renderizados (para o log render-done). */
+  filterCount?: number;
+}) {
+  // render-done: pinta-se DEPOIS de reconciliar os novos dados do servidor.
+  // Roda em CADA mudança de filterNonce (inclui o mount). requestAnimationFrame
+  // garante que o ts caia após o paint. Mesma timeline wall-clock (Date.now())
+  // dos logs [perf-trace] do servidor. Não muda comportamento.
+  useEffect(() => {
+    if (filterNonce === undefined) return;
+    if (!querPerf()) return;
+    const raf =
+      typeof requestAnimationFrame !== "undefined"
+        ? requestAnimationFrame(() => {
+            // eslint-disable-next-line no-console
+            console.log(
+              `[perf-filter] render-done ts=${Date.now()} n_pedidos=${
+                filterCount ?? 0
+              }`
+            );
+          })
+        : null;
+    return () => {
+      if (raf !== null && typeof cancelAnimationFrame !== "undefined")
+        cancelAnimationFrame(raf);
+    };
+  }, [filterNonce, filterCount]);
+
   useEffect(() => {
     // Guarda defensiva: ambientes sem User Timing API simplesmente não medem.
     if (typeof performance === "undefined" || !performance.mark) return;
@@ -59,11 +105,7 @@ export function PerfMarks({ server }: { server: ServerTimings }) {
     }
 
     // Console só com ?perf=1, para não poluir o console de usuários reais.
-    const querPerf =
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("perf") === "1";
-
-    if (querPerf) {
+    if (querPerf()) {
       // eslint-disable-next-line no-console
       console.log(
         `[perf /pedidos client] server_total=${Math.round(

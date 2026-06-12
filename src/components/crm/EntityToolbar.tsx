@@ -65,6 +65,22 @@ export function EntityToolbar({
   // Último valor que ESTE componente emitiu para a URL (evita loop de sync).
   const ultimoEmitido = useRef(buscaUrl);
   const digitando = useRef(false);
+  // Instante (Date.now()) da última tecla, só para medir o gap até o debounce
+  // assentar. Não altera comportamento — apenas leitura para o log de perf.
+  const ultimaTecla = useRef<number | null>(null);
+
+  // Log de perf do caminho de FILTRO (lado cliente). Mesma timeline wall-clock
+  // (Date.now()) dos logs [perf-trace] do servidor. Só com ?perf=1 na URL, lendo
+  // window.location.search (mesmo padrão do PerfMarks). Não muda comportamento.
+  function logFilter(linha: string) {
+    if (
+      typeof window === "undefined" ||
+      new URLSearchParams(window.location.search).get("perf") !== "1"
+    )
+      return;
+    // eslint-disable-next-line no-console
+    console.log(`[perf-filter] ${linha}`);
+  }
 
   /** Aplica mudanças na URL com replace (sem scroll, sem push). */
   function aplicar(mudancas: Record<string, string | undefined>) {
@@ -75,6 +91,20 @@ export function EntityToolbar({
     }
     if (!("pagina" in mudancas)) params.delete("pagina");
     const qs = params.toString();
+    // Log do disparo do replace (demais filtros). O tipo é derivado das chaves
+    // mudadas — data_de/data_ate/periodo viram "periodo". Busca NÃO passa aqui
+    // como tipo: o caminho do debounce loga "busca" separadamente.
+    const chaves = Object.keys(mudancas);
+    // Busca é logada no caminho do debounce (tipo=busca, com termo_len): aqui
+    // só logamos os DEMAIS filtros, para não duplicar nem perder o termo_len.
+    const soBusca = chaves.length === 1 && chaves[0] === "q";
+    if (!soBusca) {
+      const tipo =
+        chaves.includes("data_de") || chaves.includes("data_ate")
+          ? "periodo"
+          : chaves[0] ?? "outro";
+      logFilter(`replace tipo=${tipo} ts=${Date.now()}`);
+    }
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
@@ -83,6 +113,16 @@ export function EntityToolbar({
     if (termoDebounced === ultimoEmitido.current) return;
     ultimoEmitido.current = termoDebounced;
     digitando.current = false;
+    // debounce-end: o valor debounced assentou e vamos disparar o replace.
+    // gap = tempo desde a última tecla até aqui (quando o usuário parou de
+    // digitar). Mede só perf — não altera o debounce/replace.
+    const gap =
+      ultimaTecla.current !== null ? Date.now() - ultimaTecla.current : null;
+    logFilter(
+      `replace tipo=busca termo_len=${termoDebounced.length} ts=${Date.now()}` +
+        (gap !== null ? ` gap_desde_ultima_tecla=${gap}ms` : "")
+    );
+    ultimaTecla.current = null;
     aplicar({ q: termoDebounced || undefined });
     // aplicar/searchParams capturados de propósito — só roda no debounce.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -101,6 +141,9 @@ export function EntityToolbar({
 
   function onDigitar(v: string) {
     digitando.current = true;
+    // Marca o instante da última tecla — só para medir o gap até o debounce
+    // assentar (lido no effect do termoDebounced). Não muda comportamento.
+    ultimaTecla.current = Date.now();
     setTermo(v);
   }
 
@@ -129,7 +172,9 @@ export function EntityToolbar({
   function limparTudo() {
     digitando.current = false;
     ultimoEmitido.current = "";
+    ultimaTecla.current = null;
     setTermo("");
+    logFilter(`replace tipo=limpar ts=${Date.now()}`);
     router.replace(pathname, { scroll: false });
   }
 

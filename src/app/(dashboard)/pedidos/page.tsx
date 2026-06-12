@@ -104,6 +104,14 @@ export default async function PedidosPage({
   }));
   mark(traceTag, "kanban-montado");
 
+  // Nonce de filtro: identidade dos dados que MUDA a cada troca de filtro
+  // (len + primeiros ids). Passado ao <PerfMarks> para disparar o marcador
+  // client `render-done` em CADA soft navigation. Só medição — não afeta a UI.
+  const filterNonce = `${kanban.length}:${kanban
+    .slice(0, 5)
+    .map((p) => p.id)
+    .join(",")}`;
+
   // ── Timings server-side (wall clock) ────────────────────────────────────────
   // Custo desprezível, sempre ligado. Logs de função são invisíveis ao usuário.
   // SEM PII: apenas durações, role e flags booleanas (nada de nome/id de cliente).
@@ -138,6 +146,8 @@ export default async function PedidosPage({
           serverTotal: perf.serverTotal,
           cache: perf.cache,
         }}
+        filterNonce={filterNonce}
+        filterCount={kanban.length}
       />
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
