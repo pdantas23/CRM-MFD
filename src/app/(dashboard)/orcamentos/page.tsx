@@ -1,10 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { OrcamentosClient } from "@/components/orcamentos/OrcamentosClient";
 import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
 import { orcamentosOnda, POR_PAGINA } from "@/lib/crm/carregar";
 import { comCache } from "@/lib/crm/cache";
-import type { Profile } from "@/lib/types/database";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +19,7 @@ export default async function OrcamentosPage({
 }) {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: profileData } = user
-    ? await supabase.from("profiles").select("role, vendedor_id").eq("id", user.id).single()
-    : { data: null };
-  const profile = profileData as Profile | null;
+  const { profile } = await getSessaoComProfile();
 
   // Filtros unificados (mesmo predicado para lista, contagem e métricas).
   const filtros = parseFiltros(searchParams, "orcamentos");

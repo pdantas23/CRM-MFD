@@ -1,10 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { aplicarEntregas, metricasEntregas } from "@/lib/crm/metricas";
 import { comCache } from "@/lib/crm/cache";
 import { EntregasClient } from "@/components/entregas/EntregasClient";
 import { Suspense } from "react";
-import type { Entrega, Profile } from "@/lib/types/database";
+import type { Entrega } from "@/lib/types/database";
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +20,9 @@ export default async function EntregasPage({
 }) {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: profileData } = user
-    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
-    : { data: null };
+  const { profile } = await getSessaoComProfile();
 
-  const role = (profileData as Pick<Profile, "role"> | null)?.role;
+  const role = profile?.role;
   const podeNovaEntrega = role === "admin" || role === "vendedor";
   const isAdmin = role === "admin";
 

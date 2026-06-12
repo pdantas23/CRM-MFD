@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { PedidosView } from "@/components/pedidos/PedidosView";
 import { PerfMarks } from "@/components/pedidos/PerfMarks";
 import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
@@ -9,7 +10,6 @@ import type {
   PedidoKanban,
   SituacaoRow,
 } from "@/lib/types/pedidos";
-import type { Profile } from "@/lib/types/database";
 
 export const dynamic = "force-dynamic";
 
@@ -30,19 +30,12 @@ export default async function PedidosPage({
   const t0 = performance.now();
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: profile } = user
-    ? await supabase
-        .from("profiles")
-        .select("role, vendedor_id")
-        .eq("id", user.id)
-        .single()
-    : { data: null };
+  const { profile } = await getSessaoComProfile();
   const tAuthProfile = performance.now();
 
-  const role = (profile as Profile | null)?.role;
+  const role = profile?.role;
   const podeEscrever = role === "admin" || role === "vendedor";
-  const vendedorId = (profile as { vendedor_id?: number | null } | null)?.vendedor_id ?? null;
+  const vendedorId = profile?.vendedor_id ?? null;
 
   const escopo: Escopo = { role: role ?? "", vendedorId };
   const filtros = parseFiltros(searchParams, "pedidos");

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { PeriodoBadge, StatusBadge } from "@/components/ui/Badge";
 import { DeleteButton } from "@/components/entregas/DeleteButton";
-import type { Entrega, Profile } from "@/lib/types/database";
+import type { Entrega } from "@/lib/types/database";
 
 function formatDate(dateStr: string) {
   const [year, month, day] = dateStr.split("-");
@@ -42,20 +43,16 @@ export default async function EntregaDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [{ user, profile }, { data: entrega }] = await Promise.all([
+    getSessaoComProfile(),
+    supabase.from("entregas").select("*").eq("id", id).single(),
+  ]);
 
   if (!user) redirect("/login");
 
-  const [{ data: entrega }, { data: profile }] = await Promise.all([
-    supabase.from("entregas").select("*").eq("id", id).single(),
-    supabase.from("profiles").select("role").eq("id", user.id).single(),
-  ]);
-
   if (!entrega) notFound();
 
-  const isAdmin = (profile as Profile | null)?.role === "admin";
+  const isAdmin = profile?.role === "admin";
   const e = entrega as Entrega;
 
   return (

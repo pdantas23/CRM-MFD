@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { EntregaForm, type EntregaPrefill } from "@/components/entregas/EntregaForm";
-import type { Profile } from "@/lib/types/database";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,18 +21,10 @@ export default async function NovaEntregaPage({
 }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user!.id)
-    .single();
+  const { profile } = await getSessaoComProfile();
 
   // Entregador não pode criar entregas; apenas admin e vendedor têm acesso
-  const role = (profile as Profile | null)?.role;
+  const role = profile?.role;
   if (role !== "admin" && role !== "vendedor") {
     redirect("/entregas");
   }

@@ -1,8 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { EntregaForm } from "@/components/entregas/EntregaForm";
-import type { Entrega, Profile } from "@/lib/types/database";
+import type { Entrega } from "@/lib/types/database";
 
 export default async function EditarEntregaPage({
   params,
@@ -12,18 +13,14 @@ export default async function EditarEntregaPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const [{ data: profile }, { data: entrega }] = await Promise.all([
-    supabase.from("profiles").select("role").eq("id", user.id).single(),
+  const [{ user, profile }, { data: entrega }] = await Promise.all([
+    getSessaoComProfile(),
     supabase.from("entregas").select("*").eq("id", id).single(),
   ]);
 
-  if ((profile as Profile | null)?.role !== "admin") {
+  if (!user) redirect("/login");
+
+  if (profile?.role !== "admin") {
     redirect(`/entregas/${id}`);
   }
 

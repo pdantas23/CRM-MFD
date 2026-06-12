@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { DashboardEntregas } from "@/components/dashboard/DashboardEntregas";
-import type { Entrega, Profile } from "@/lib/types/database";
+import type { Entrega } from "@/lib/types/database";
 
 function formatDate(dateStr: string) {
   const [year, month, day] = dateStr.split("-");
@@ -24,22 +25,20 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const today = getTodayISO();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const [{ data: entregasData }, { data: profileData }] = await Promise.all([
+  // Profile vem do helper memoizado (já resolvido no layout — zero roundtrip
+  // novo). Entregas de hoje seguem sendo carregadas aqui, em paralelo.
+  const [{ profile }, { data: entregasData }] = await Promise.all([
+    getSessaoComProfile(),
     supabase
       .from("entregas")
       .select("*")
       .eq("data", today)
       .order("ordem", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: true }),
-    supabase.from("profiles").select("role").eq("id", user!.id).single(),
   ]);
 
   const entregas = (entregasData ?? []) as Entrega[];
-  const isAdmin = (profileData as Pick<Profile, "role"> | null)?.role === "admin";
+  const isAdmin = profile?.role === "admin";
 
   const manha = entregas.filter((e) => e.periodo === "manha");
   const tarde = entregas.filter((e) => e.periodo === "tarde");
