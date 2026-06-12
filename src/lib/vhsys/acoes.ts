@@ -21,22 +21,38 @@ import type {
 
 // ── Helpers internos ───────────────────────────────────────────────────────
 
-/** Valida que o usuário logado é admin; lança erro se não for. */
-async function exigirAdmin(): Promise<void> {
+export interface ContextoAcao {
+  role: "admin" | "vendedor" | "entregador";
+  vendedorId: number | null;
+  userId: string;
+}
+
+/**
+ * Valida que o usuário logado é admin ou vendedor.
+ * Entregador não tem permissão de escrita no VHSYS.
+ */
+async function exigirAdminOuVendedor(): Promise<ContextoAcao> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Não autenticado.");
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, vendedor_id")
     .eq("id", user.id)
     .single();
 
-  if (!profile || profile.role !== "admin") {
-    throw new Error("Permissão negada: somente administradores podem executar esta ação.");
+  if (!profile || !["admin", "vendedor"].includes(profile.role as string)) {
+    throw new Error("Permissão negada: somente administradores e vendedores podem executar esta ação.");
   }
+
+  return {
+    role: profile.role as "admin" | "vendedor",
+    vendedorId: (profile as { vendedor_id: number | null }).vendedor_id ?? null,
+    userId: user.id,
+  };
 }
+
 
 /** Formata Date como YYYY-MM-DD no fuso de Brasília. */
 function hojeISO(): string {
@@ -155,7 +171,7 @@ export async function moverSituacaoPedido(
   obs?: string
 ): Promise<ResultadoAcao> {
   try {
-    await exigirAdmin();
+    const ctx = await exigirAdminOuVendedor();
 
     // Validação de entrada
     if (!Number.isInteger(idVhsys) || idVhsys <= 0) {
@@ -168,9 +184,17 @@ export async function moverSituacaoPedido(
     const admin = createAdminClient();
     const { data: pedidoEspelho } = await admin
       .from("vhsys_pedidos")
-      .select("situacao_id")
+      .select("situacao_id, vendedor_id_vhsys")
       .eq("id_vhsys", idVhsys)
       .single();
+
+    // Vendedor só pode mover pedidos do próprio vendedor_id
+    if (ctx.role === "vendedor") {
+      const vendedorPedido = (pedidoEspelho as { vendedor_id_vhsys: number | null } | null)?.vendedor_id_vhsys ?? null;
+      if (vendedorPedido !== ctx.vendedorId) {
+        throw new Error("Permissão negada: este pedido não pertence ao seu vendedor.");
+      }
+    }
 
     const situacaoAtual = (pedidoEspelho as { situacao_id: number | null } | null)?.situacao_id ?? null;
 
@@ -216,7 +240,7 @@ export async function registrarEntregaEmSeparacao(
   idVhsysPedido: number
 ): Promise<ResultadoAcao> {
   try {
-    await exigirAdmin();
+    const ctx = await exigirAdminOuVendedor();
 
     if (!Number.isInteger(idVhsysPedido) || idVhsysPedido <= 0) {
       throw new Error("idVhsysPedido inválido.");
@@ -226,9 +250,17 @@ export async function registrarEntregaEmSeparacao(
     const admin = createAdminClient();
     const { data: espelho } = await admin
       .from("vhsys_pedidos")
-      .select("situacao_id")
+      .select("situacao_id, vendedor_id_vhsys")
       .eq("id_vhsys", idVhsysPedido)
       .single();
+
+    // Vendedor só pode agir sobre pedidos do próprio vendedor_id
+    if (ctx.role === "vendedor") {
+      const vendedorPedido = (espelho as { vendedor_id_vhsys: number | null } | null)?.vendedor_id_vhsys ?? null;
+      if (vendedorPedido !== ctx.vendedorId) {
+        throw new Error("Permissão negada: este pedido não pertence ao seu vendedor.");
+      }
+    }
 
     const situacaoAtual = (espelho as { situacao_id: number | null } | null)?.situacao_id ?? null;
 
@@ -274,7 +306,7 @@ export async function emitirPedidoDeOrcamento(
   idOrcamentoVhsys: number
 ): Promise<ResultadoAcao & { idPedidoVhsys?: number }> {
   try {
-    await exigirAdmin();
+    const ctx = await exigirAdminOuVendedor();
 
     if (!Number.isInteger(idOrcamentoVhsys) || idOrcamentoVhsys <= 0) {
       throw new Error("idOrcamentoVhsys inválido.");
@@ -291,7 +323,15 @@ export async function emitirPedidoDeOrcamento(
 
     if (!orcEspelho) throw new Error("Orçamento não encontrado no espelho.");
 
-    // Idempotência: já emitido → erro visível ao admin
+    // Vendedor só pode emitir orçamentos do próprio vendedor_id
+    if (ctx.role === "vendedor") {
+      const vendedorOrc = (orcEspelho as { vendedor_id_vhsys: number | null }).vendedor_id_vhsys ?? null;
+      if (vendedorOrc !== ctx.vendedorId) {
+        throw new Error("Permissão negada: este orçamento não pertence ao seu vendedor.");
+      }
+    }
+
+    // Idempotência: já emitido → erro visível
     if ((orcEspelho as { pedido_emitido: boolean }).pedido_emitido) {
       return { ok: false, erro: "Pedido já emitido para este orçamento." };
     }
