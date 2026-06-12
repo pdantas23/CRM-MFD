@@ -30,8 +30,9 @@ export interface ContextoAcao {
 /**
  * Valida que o usuário logado é admin ou vendedor.
  * Entregador não tem permissão de escrita no VHSYS.
+ * Exportado para reutilização em acoes-orcamentos.ts.
  */
-async function exigirAdminOuVendedor(): Promise<ContextoAcao> {
+export async function exigirAdminOuVendedor(): Promise<ContextoAcao> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Não autenticado.");

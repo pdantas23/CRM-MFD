@@ -51,7 +51,9 @@ export interface OrcamentoRow {
   id: string;
   id_vhsys: number;
   numero: number;
+  cliente_id_vhsys: number | null;
   nome_cliente: string;
+  vendedor_id_vhsys: number | null;
   vendedor_nome: string | null;
   valor_total: number | null;
   situacao_id: number | null;
@@ -60,6 +62,8 @@ export interface OrcamentoRow {
   pedido_emitido: boolean;
   data_orcamento: string | null;
   validade: string | null;
+  referencia: string | null;
+  obs: string | null;
   lixeira: boolean;
 }
 

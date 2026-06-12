@@ -227,6 +227,44 @@ export interface PayloadAtualizarOrcamento {
   status_pedido?: string;
 }
 
+// ── Payloads de criação/edição de orçamento ────────────────────────────────
+
+/** POST /orcamentos — campos aceitos pela API (somente nome_cliente obrigatório). */
+export interface PayloadCriarOrcamento {
+  nome_cliente: string;
+  id_cliente?: number;
+  vendedor_pedido?: string;
+  vendedor_pedido_id?: number;
+  data_pedido?: string;          // YYYY-MM-DD
+  validade_orcamento?: string;   // YYYY-MM-DD
+  obs_pedido?: string;
+  referencia_pedido?: string;
+  status_pedido?: string;        // "Em Aberto" padrão
+}
+
+/** POST /orcamentos/{id}/produtos — item de orçamento. */
+export interface PayloadItemOrcamento {
+  id_produto: number;
+  desc_produto: string;
+  qtde_produto: number;
+  valor_unit_produto: number;
+  desconto_produto?: number;
+}
+
+/** Diferença de itens para edição: itens a deletar (id_ped_produto) e itens a inserir. */
+export interface ItensDiff {
+  deletar: number[];                    // id_ped_produto dos itens removidos
+  inserir: PayloadItemOrcamento[];      // itens novos a adicionar
+}
+
+/** Resposta de POST /orcamentos com id_orcamento gerado. */
+export interface RespostaCriarOrcamento {
+  id_orcamento: number;
+  id_pedido: number;   // número sequencial
+  nome_cliente: string;
+  [key: string]: unknown;
+}
+
 /** Resposta de POST /pedidos (data[] traz objeto com id_ped e id_pedido). */
 export interface RespostaCriarPedido {
   id_ped: number;
