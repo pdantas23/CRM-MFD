@@ -1,0 +1,132 @@
+# Suíte de PERFORMANCE (regressão de tempo).
+#
+# Dois jobs independentes:
+#   - perf-server: roda os cenários server-side (núcleo das ondas em carregar.ts)
+#     contra o Supabase, compara medianas vs baseline.json e comenta a tabela no PR.
+#   - perf-http: sobe o app (build É permitido NO CI — a regra "sem build" é só do
+#     loop local) e roda a suíte HTTP com Cache-Control: no-store.
+#
+# O baseline OFICIAL nasce AQUI, nunca da máquina local: use o
+# workflow_dispatch com input update_baseline=true para gerar e COMMITAR
+# baseline.json gerado dentro do Actions (medida fria, ambiente do CI).
+#
+# Secrets necessários (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL              → mapeado para NEXT_PUBLIC_SUPABASE_URL
+#   SUPABASE_ANON_KEY         → mapeado para NEXT_PUBLIC_SUPABASE_ANON_KEY
+#   SUPABASE_SERVICE_ROLE_KEY → lido pelo client de teste (read-only)
+# Obs.: tests/perf/client.ts lê NEXT_PUBLIC_SUPABASE_URL e
+# SUPABASE_SERVICE_ROLE_KEY — por isso mapeamos os secrets para esses nomes no env.
+
+name: perf
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      update_baseline:
+        description: "Regenera e COMMITA baseline.json a partir deste run (medida fria do CI)"
+        type: boolean
+        default: false
+
+# Sem cache de Vitest entre runs: medida fria por commit (ver vitest.config.ts).
+jobs:
+  perf-server:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # Modo normal (PR/push): roda os cenários e compara vs baseline.
+      # Falha o job se mediana > baseline × 1.25 (exit 1 em compare.ts).
+      - name: Rodar cenários server-side (compara vs baseline)
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.update_baseline != true }}
+        run: npx tsx tests/perf/compare.ts | tee tests/perf/.report.md
+
+      # Comenta a tabela de delta no PR.
+      - name: Comentar tabela no PR
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "### Performance — delta vs baseline";
+            echo "";
+            cat tests/perf/.report.md;
+          } > /tmp/perf-comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/perf-comment.md
+
+      # ── Geração do baseline OFICIAL (manual via workflow_dispatch) ──────────
+      # Quando update_baseline=true: roda a suíte, regrava baseline.json com as
+      # medianas DESTE run do CI e commita de volta. É a única forma legítima de
+      # criar/atualizar o baseline (nunca copiado da máquina local).
+      - name: Regenerar baseline (workflow_dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.update_baseline == true }}
+        run: npx tsx tests/perf/compare.ts --update-baseline
+
+      - name: Commitar baseline.json regenerado
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.update_baseline == true }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tests/perf/baseline.json
+          if git diff --cached --quiet; then
+            echo "baseline.json sem alterações.";
+          else
+            git commit -m "chore(perf): atualiza baseline.json a partir do CI"
+            git push
+          fi
+
+  perf-http:
+    runs-on: ubuntu-latest
+    # Roda só em push/dispatch (evita custo de build em todo PR). Ajustável na Fase 2.
+    if: ${{ github.event_name != 'pull_request' }}
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # Build É permitido no CI (a regra "sem build" vale só para o loop local).
+      - name: Build de produção
+        run: npm run build
+
+      - name: Subir o servidor
+        run: npm run start &
+
+      - name: Aguardar o servidor responder
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sSf http://localhost:3000 >/dev/null 2>&1; then
+              echo "Servidor no ar."; exit 0;
+            fi
+            sleep 2;
+          done
+          echo "Servidor não subiu a tempo."; exit 1
+
+      # Suíte HTTP (scripts dos cenários vêm na Fase 2; o esqueleto já existe).
+      - name: Rodar suíte HTTP
+        env:
+          PERF_BASE_URL: http://localhost:3000
+        run: npm run test:perf:http
