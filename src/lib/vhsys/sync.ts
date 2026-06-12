@@ -352,5 +352,11 @@ export async function sincronizarEspelho(modo: ModoSync): Promise<ResultadoEntid
     }
   }
 
+  // Reconciliação pós-loop (NÃO no upsert de cada conta): contas_receber
+  // sincroniza ANTES de notas_fiscais (ver ENTIDADES), então o pedido_resolvido
+  // de contas "NFe_" exige a nota já presente. Aqui ambas já foram upsertadas.
+  const { error: erroReconc } = await supabase.rpc("reconciliar_pedido_resolvido");
+  if (erroReconc) console.error(`reconciliar_pedido_resolvido: ${erroReconc.message}`);
+
   return resultados;
 }
