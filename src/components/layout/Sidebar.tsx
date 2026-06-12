@@ -146,6 +146,11 @@ export function Sidebar({ profile }: SidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                // Rotas do dashboard são force-dynamic: o prefetch default
+                // executaria o RSC inteiro (auth + ondas) de cada item visível
+                // no viewport, disparando ~4 pipelines Supabase em paralelo no
+                // load. Desligado — navega no clique (loading.tsx dá feedback).
+                prefetch={false}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-blue-700 text-white"
@@ -162,6 +167,7 @@ export function Sidebar({ profile }: SidebarProps) {
           {(profile.role === "admin" || profile.role === "vendedor") && (
             <Link
               href="/entregas/nova"
+              prefetch={false}
               className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 pathname === "/entregas/nova"
                   ? "bg-blue-700 text-white"
