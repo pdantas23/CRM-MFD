@@ -44,9 +44,27 @@ A agregação em si é trivial (9ms); todo o custo está no join não-indexável
 
 A migration é idempotente e traz um bloco de rollback comentado.
 
-## 4. DEPOIS (preencher após aplicar a migration)
+## 4. DEPOIS (medições reais — migration aplicada 2026-06-12)
 
-Rodar no SQL Editor e colar os resultados aqui. Esperado: **ms em vez de ~28s**.
+| Cenário | ANTES | DEPOIS | Ganho |
+|---|---:|---:|---:|
+| RPC `pedidos_metricas` (30d) | 28.551 ms | **452 ms** | **63×** |
+| View por 50 ids/números | 31.651 ms | **160 ms** | **198×** |
+| Buffers (RPC) | 17.277.669 | 20.335 | **850×** menos I/O |
+
+Backfill: 3.101/3.411 contas não-lixeira resolvidas (91%); 310 sem vínculo
+(contas manuais sem `Ped_`/`NFe_` — lacuna conhecida, ficam com `pedido_resolvido`
+null e não entram no índice parcial).
+
+O plano DEPOIS troca o `Nested Loop` de 10,9M por
+`Index Scan using idx_contas_receber_pedido_resolvido` com
+`Index Cond: (pedido_resolvido = p.id_vhsys)`. Como 452ms < ~8s do
+`statement_timeout`, a RPC `pedidos_metricas` agora **completa** — o app deixa de
+cair no fallback de lotes.
+
+> Nota: a view ainda agrega os ~3.210 pedidos por chamada (GroupAggregate); com o
+> join indexado isso custa ~70ms (era ~31s). Micro-otimização futura possível
+> (empurrar o filtro de pedidos para dentro da agregação), mas hoje é irrelevante.
 
 ### 4.1 RPC `pedidos_metricas`
 
@@ -66,11 +84,8 @@ select * from public.pedidos_metricas(
 rollback;
 ```
 
-Resultado:
-
-```
-(colar aqui)
-```
+Resultado: `Function Scan on pedidos_metricas (actual time=452.277..452.279 rows=1)`,
+`Buffers: shared hit=20335`, **Execution Time: 452.374 ms** (era 28.551 ms).
 
 ### 4.2 View `vhsys_pedidos_financeiro` por 50 números
 
@@ -91,8 +106,7 @@ where numero in (
 rollback;
 ```
 
-Resultado:
-
-```
-(colar aqui)
-```
+Resultado: `Index Scan using idx_contas_receber_pedido_resolvido on
+vhsys_contas_receber c` (`Index Cond: pedido_resolvido = p.id_vhsys`, 0.003ms/loop),
+`Buffers: shared hit=25231`, **Execution Time: 160.401 ms** (era 31.651 ms). O
+`Nested Loop` com 10,9M linhas removidas desapareceu.
