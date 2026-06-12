@@ -1,1 +1,13 @@
-{}
+{
+  "rpc:pedidos:30d": 266.36,
+  "rpc:pedidos:busca": 152.61,
+  "rpc:pedidos:so-com-saldo": 258.12,
+  "rpc:orcamentos:30d": 136.25,
+  "rpc:orcamentos:busca": 135.36,
+  "rpc:orcamentos:tudo": 130.31,
+  "onda:pedidos:1:30d": 259.96,
+  "onda:pedidos:2:30d": 120.03,
+  "onda:orcamentos:30d": 187.67,
+  "count:orcamentos:exact:30d": 134.67,
+  "count:orcamentos:planned:tudo": 152.2
+}
