@@ -8,8 +8,6 @@ import type { createClient } from "@/lib/supabase/server";
 import { formatBRL } from "@/lib/format";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import { COLUNAS_KANBAN } from "@/lib/vhsys/fluxo";
-import { traced } from "@/lib/perf/trace";
-
 // Cliente Supabase server — o projeto não gera tipos para as tabelas vhsys_*,
 // então as queries usam encadeamento livre sem checagem de schema.
 type DB = Awaited<ReturnType<typeof createClient>>;
@@ -83,20 +81,11 @@ function aplicarComuns(
 /** Busca todas as linhas (colunas mínimas) paginando em lotes de 1000. */
 async function buscarLotes<T>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  montarQuery: () => any,
-  /** Tag de trace opcional (no-op quando ausente). */
-  traceTag?: string,
-  /** Prefixo do label de cada lote (ex.: "lote:orc"). */
-  rotulo?: string
+  montarQuery: () => any
 ): Promise<T[]> {
   const acc: T[] = [];
-  let i = 0;
   for (let inicio = 0; inicio < CAP_LINHAS; inicio += LOTE) {
-    const exec = () => montarQuery().range(inicio, inicio + LOTE - 1);
-    const { data, error } = traceTag
-      ? await traced(traceTag, `${rotulo ?? "lote"}:${i}`, exec)
-      : await exec();
-    i += 1;
+    const { data, error } = await montarQuery().range(inicio, inicio + LOTE - 1);
     if (error || !data) break;
     acc.push(...(data as T[]));
     if (data.length < LOTE) break;
@@ -160,13 +149,11 @@ function montarMetricasOrcamentos(
 export async function metricasOrcamentos(
   supabase: DB,
   filtros: FiltrosCrm,
-  escopo: Escopo,
-  /** Tag de trace opcional (no-op quando ausente). Propagado de carregar.ts. */
-  traceTag?: string
+  escopo: Escopo
 ): Promise<Metrica[]> {
   // Caminho rápido: RPC agrega tudo num roundtrip. Fallback silencioso para
   // a varredura em lotes se a function não existir / der qualquer erro.
-  const rpc = await tentarRpcOrcamentos(supabase, filtros, escopo, traceTag);
+  const rpc = await tentarRpcOrcamentos(supabase, filtros, escopo);
   if (rpc) {
     return montarMetricasOrcamentos(
       rpc.n,
@@ -177,18 +164,15 @@ export async function metricasOrcamentos(
     );
   }
 
-  const linhas = await buscarLotes<OrcAgg>(
-    () =>
-      aplicarOrcamentos(
-        supabase
-          .from("vhsys_orcamentos")
-          .select("valor_total, situacao_id, pedido_emitido")
-          .eq("lixeira", false),
-        filtros,
-        escopo
-      ).order("numero", { ascending: false }),
-    traceTag,
-    "lote:orc-metricas"
+  const linhas = await buscarLotes<OrcAgg>(() =>
+    aplicarOrcamentos(
+      supabase
+        .from("vhsys_orcamentos")
+        .select("valor_total, situacao_id, pedido_emitido")
+        .eq("lixeira", false),
+      filtros,
+      escopo
+    ).order("numero", { ascending: false })
   );
 
   const n = linhas.length;
@@ -217,25 +201,19 @@ function avisarFallbackRpc(nome: string): void {
 async function tentarRpcOrcamentos(
   supabase: DB,
   filtros: FiltrosCrm,
-  escopo: Escopo,
-  traceTag?: string
+  escopo: Escopo
 ): Promise<OrcMetricasRpc | null> {
-  const exec = () =>
-    supabase
-      .rpc("orcamentos_metricas", {
-        p_busca: filtros.buscaNumero === null && filtros.busca ? filtros.busca : null,
-        p_numero: filtros.buscaNumero,
-        p_situacoes: filtros.situacoes.length > 0 ? filtros.situacoes : null,
-        p_vendedor_id: vendedorParaRpc(filtros, escopo),
-        p_pedido_emitido: filtros.pedidoEmitido,
-        p_data_de: filtros.dataDe,
-        p_data_ate: filtros.dataAte,
-      })
-      .maybeSingle();
-
-  const { data, error } = traceTag
-    ? await traced(traceTag, "rpc:orcamentos_metricas", exec)
-    : await exec();
+  const { data, error } = await supabase
+    .rpc("orcamentos_metricas", {
+      p_busca: filtros.buscaNumero === null && filtros.busca ? filtros.busca : null,
+      p_numero: filtros.buscaNumero,
+      p_situacoes: filtros.situacoes.length > 0 ? filtros.situacoes : null,
+      p_vendedor_id: vendedorParaRpc(filtros, escopo),
+      p_pedido_emitido: filtros.pedidoEmitido,
+      p_data_de: filtros.dataDe,
+      p_data_ate: filtros.dataAte,
+    })
+    .maybeSingle();
 
   if (error || !data) {
     if (error) avisarFallbackRpc("orcamentos_metricas");
@@ -296,22 +274,15 @@ export function aplicarPedidos(
 /** Carrega da view os numeros com saldo > 0, em chunks de 200, dado o conjunto. */
 async function carregarSaldoPorNumero(
   supabase: DB,
-  numeros: number[],
-  traceTag?: string
+  numeros: number[]
 ): Promise<Map<number, FinAgg>> {
   const mapa = new Map<number, FinAgg>();
-  let i = 0;
   for (let pos = 0; pos < numeros.length; pos += CHUNK_FIN) {
     const chunk = numeros.slice(pos, pos + CHUNK_FIN);
-    const exec = () =>
-      supabase
-        .from("vhsys_pedidos_financeiro")
-        .select("numero, recebido, saldo")
-        .in("numero", chunk);
-    const { data } = traceTag
-      ? await traced(traceTag, `fin-chunk:${i}`, exec)
-      : await exec();
-    i += 1;
+    const { data } = await supabase
+      .from("vhsys_pedidos_financeiro")
+      .select("numero, recebido, saldo")
+      .in("numero", chunk);
     for (const f of (data ?? []) as FinAgg[]) mapa.set(f.numero, f);
   }
   return mapa;
@@ -331,28 +302,19 @@ export interface DadosPedidosPrecarregados {
 export async function buscarDadosPedidos(
   supabase: DB,
   filtros: FiltrosCrm,
-  escopo: Escopo,
-  /** Tag de trace opcional (no-op quando ausente). */
-  traceTag?: string
+  escopo: Escopo
 ): Promise<DadosPedidosPrecarregados> {
-  const pedidos = await buscarLotes<PedAgg>(
-    () =>
-      aplicarPedidos(
-        supabase
-          .from("vhsys_pedidos")
-          .select("numero, valor_total")
-          .eq("lixeira", false),
-        filtros,
-        escopo
-      ).order("numero", { ascending: false }),
-    traceTag,
-    "lote:ped-dados"
+  const pedidos = await buscarLotes<PedAgg>(() =>
+    aplicarPedidos(
+      supabase
+        .from("vhsys_pedidos")
+        .select("numero, valor_total")
+        .eq("lixeira", false),
+      filtros,
+      escopo
+    ).order("numero", { ascending: false })
   );
-  const fin = await carregarSaldoPorNumero(
-    supabase,
-    pedidos.map((p) => p.numero),
-    traceTag
-  );
+  const fin = await carregarSaldoPorNumero(supabase, pedidos.map((p) => p.numero));
   return { pedidos, fin };
 }
 
@@ -403,26 +365,20 @@ function montarMetricasPedidos(
 async function tentarRpcPedidos(
   supabase: DB,
   filtros: FiltrosCrm,
-  escopo: Escopo,
-  traceTag?: string
+  escopo: Escopo
 ): Promise<PedMetricasRpc | null> {
-  const exec = () =>
-    supabase
-      .rpc("pedidos_metricas", {
-        p_busca: filtros.buscaNumero === null && filtros.busca ? filtros.busca : null,
-        p_numero: filtros.buscaNumero,
-        p_situacoes: filtros.situacoes.length > 0 ? filtros.situacoes : null,
-        p_vendedor_id: vendedorParaRpc(filtros, escopo),
-        p_ocultar_legado: filtros.ocultarLegado,
-        p_so_com_saldo: filtros.soComSaldo,
-        p_data_de: filtros.dataDe,
-        p_data_ate: filtros.dataAte,
-      })
-      .maybeSingle();
-
-  const { data, error } = traceTag
-    ? await traced(traceTag, "rpc:pedidos_metricas", exec)
-    : await exec();
+  const { data, error } = await supabase
+    .rpc("pedidos_metricas", {
+      p_busca: filtros.buscaNumero === null && filtros.busca ? filtros.busca : null,
+      p_numero: filtros.buscaNumero,
+      p_situacoes: filtros.situacoes.length > 0 ? filtros.situacoes : null,
+      p_vendedor_id: vendedorParaRpc(filtros, escopo),
+      p_ocultar_legado: filtros.ocultarLegado,
+      p_so_com_saldo: filtros.soComSaldo,
+      p_data_de: filtros.dataDe,
+      p_data_ate: filtros.dataAte,
+    })
+    .maybeSingle();
 
   if (error || !data) {
     if (error) avisarFallbackRpc("pedidos_metricas");
@@ -436,15 +392,13 @@ export async function metricasPedidos(
   filtros: FiltrosCrm,
   escopo: Escopo,
   /** Dados já carregados pela página — evita varredura dupla quando soComSaldo=true. */
-  precarregados?: DadosPedidosPrecarregados,
-  /** Tag de trace opcional (no-op quando ausente). Propagado de carregar.ts. */
-  traceTag?: string
+  precarregados?: DadosPedidosPrecarregados
 ): Promise<Metrica[]> {
   // Com dados já pré-carregados (toggle "só com saldo" ligado): agrega em
   // memória, sem nova ida ao banco. Sem pré-carregados: tenta a RPC (um
   // roundtrip) e cai no fallback de lotes só se a function não existir.
   if (!precarregados) {
-    const rpc = await tentarRpcPedidos(supabase, filtros, escopo, traceTag);
+    const rpc = await tentarRpcPedidos(supabase, filtros, escopo);
     if (rpc) {
       return montarMetricasPedidos(
         rpc.n,
@@ -456,7 +410,7 @@ export async function metricasPedidos(
   }
 
   const { pedidos: todosPedidos, fin } =
-    precarregados ?? (await buscarDadosPedidos(supabase, filtros, escopo, traceTag));
+    precarregados ?? (await buscarDadosPedidos(supabase, filtros, escopo));
 
   // Toggle "só com saldo a receber": recorta o conjunto.
   const pedidos = filtros.soComSaldo
