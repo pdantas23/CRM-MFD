@@ -161,6 +161,9 @@ export interface ResultadoAcao {
   erro?: string;
 }
 
+// buscarMaisPedidos e buscarPedidosDoMes foram movidas para acoes-pedidos.ts
+// para manter este arquivo abaixo de 500 linhas (M4).
+
 /**
  * Mover pedido para nova situação no Kanban.
  * Escopo: qualquer transição exceto CANCELADO (regra 9).

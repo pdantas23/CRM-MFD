@@ -234,7 +234,7 @@ export function OrcamentoModal({ orcamento, situacaoNome, profile, onClose }: Pr
               <textarea
                 value={obs}
                 onChange={(e) => setObs(e.target.value)}
-                maxLength={1000}
+                maxLength={500}
                 rows={2}
                 className="input-base w-full resize-none text-sm"
               />

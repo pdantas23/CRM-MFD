@@ -157,6 +157,23 @@ export function Sidebar({ profile }: SidebarProps) {
               </Link>
             );
           })}
+
+          {/* Link rápido "Nova Entrega" — visível apenas para admin e vendedor */}
+          {(profile.role === "admin" || profile.role === "vendedor") && (
+            <Link
+              href="/entregas/nova"
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                pathname === "/entregas/nova"
+                  ? "bg-blue-700 text-white"
+                  : "text-blue-200 hover:bg-blue-800 hover:text-white"
+              }`}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Nova Entrega
+            </Link>
+          )}
         </nav>
 
         <div className="shrink-0 border-t border-blue-800 p-3">

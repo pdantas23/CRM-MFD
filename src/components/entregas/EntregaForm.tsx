@@ -182,6 +182,10 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
       const supabase = createClient();
 
       if (mode === "create") {
+        // C1: created_by é obrigatório pela policy de INSERT do vendedor
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (!currentUser) throw new Error("Sessão expirada. Faça login novamente.");
+
         const payload = {
           data: form.data,
           periodo: form.periodo as Periodo,
@@ -194,6 +198,7 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
           anexo_url: null as string | null,
           anexo_nome: null as string | null,
           pedido_id: validarUuid(prefill?.pedido_id),
+          created_by: currentUser.id,
         };
 
         const { data: newEntrega, error: insertError } = await supabase

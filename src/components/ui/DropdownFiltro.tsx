@@ -56,11 +56,16 @@ export function DropdownFiltro({
 
   const ativo = Boolean(valorAtual);
 
+  const listboxId = `dropdown-${label.replace(/\s+/g, "-").toLowerCase()}`;
+
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setAberto((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={aberto}
+        aria-controls={listboxId}
         className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
           ativo
             ? "border-blue-600 bg-blue-50 text-blue-700"
@@ -80,10 +85,17 @@ export function DropdownFiltro({
       </button>
 
       {aberto && (
-        <div className="absolute left-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+        <div
+          id={listboxId}
+          role="listbox"
+          aria-label={label}
+          className="absolute left-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+        >
           {/* Opção "Todos" para limpar filtro */}
           <button
             type="button"
+            role="option"
+            aria-selected={!valorAtual}
             onClick={() => { onChange(undefined); setAberto(false); }}
             className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
               !valorAtual ? "font-semibold text-blue-700" : "text-gray-700"
@@ -95,6 +107,8 @@ export function DropdownFiltro({
             <button
               key={op.valor}
               type="button"
+              role="option"
+              aria-selected={valorAtual === op.valor}
               onClick={() => { onChange(op.valor); setAberto(false); }}
               className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
                 valorAtual === op.valor ? "font-semibold text-blue-700" : "text-gray-700"

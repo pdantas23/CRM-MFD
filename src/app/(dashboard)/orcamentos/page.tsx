@@ -28,8 +28,9 @@ export default async function OrcamentosPage({
     : { data: null };
   const profile = profileData as Profile | null;
 
-  // Parâmetros de filtro vindos da URL
-  const busca = paramStr(searchParams?.q);
+  // Parâmetros de filtro vindos da URL — B4: cap 100 chars no servidor
+  const buscaRaw = paramStr(searchParams?.q);
+  const busca = buscaRaw ? buscaRaw.slice(0, 100) : undefined;
   const filtroSituacao = paramStr(searchParams?.situacao);
   const filtroVendedor = paramStr(searchParams?.vendedor);
   const filtroPedidoEmitido = paramStr(searchParams?.pedido_emitido);
@@ -67,12 +68,17 @@ export default async function OrcamentosPage({
     .order("numero", { ascending: false })
     .range((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA - 1);
 
-  // Busca em uma linha: nome_cliente, numero (cast) ou vendedor_nome
+  // Busca: se inteiro, filtra por numero exato (M3); caso contrário ilike
   if (busca) {
-    const escapado = busca.replace(/'/g, "''");
-    query = query.or(
-      `nome_cliente.ilike.%${escapado}%,vendedor_nome.ilike.%${escapado}%`
-    );
+    const qNumero = /^\d+$/.test(busca) ? parseInt(busca, 10) : null;
+    if (qNumero !== null) {
+      query = query.eq("numero", qNumero);
+    } else {
+      const escapado = busca.replace(/'/g, "''");
+      query = query.or(
+        `nome_cliente.ilike.%${escapado}%,vendedor_nome.ilike.%${escapado}%`
+      );
+    }
   }
 
   if (filtroSituacao) query = query.eq("situacao_id", Number(filtroSituacao));

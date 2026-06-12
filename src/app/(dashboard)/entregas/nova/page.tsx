@@ -31,7 +31,9 @@ export default async function NovaEntregaPage({
     .eq("id", user!.id)
     .single();
 
-  if ((profile as Profile | null)?.role !== "admin") {
+  // Entregador não pode criar entregas; apenas admin e vendedor têm acesso
+  const role = (profile as Profile | null)?.role;
+  if (role !== "admin" && role !== "vendedor") {
     redirect("/entregas");
   }
 

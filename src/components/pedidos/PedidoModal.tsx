@@ -12,11 +12,11 @@ interface PedidoModalProps {
   pedido: PedidoKanban;
   situacoes: SituacaoRow[];
   onClose: () => void;
-  /** Se true, exibe controles de mover situação. Só passar true para admin. */
-  isAdmin?: boolean;
+  /** Se true, exibe controles de mover situação (admin ou vendedor). */
+  podeEscrever?: boolean;
 }
 
-export function PedidoModal({ pedido, situacoes, onClose, isAdmin }: PedidoModalProps) {
+export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: PedidoModalProps) {
   const router = useRouter();
   const situacao = situacoes.find((s) => s.id_vhsys === pedido.situacao_id);
   const fin = pedido.financeiro;
@@ -152,8 +152,8 @@ export function PedidoModal({ pedido, situacoes, onClose, isAdmin }: PedidoModal
             </div>
           )}
 
-          {/* Painel de mover situação — apenas admin, sem drag-and-drop */}
-          {isAdmin && opcoesDestino.length > 0 && (
+          {/* Painel de mover situação — admin ou vendedor, sem drag-and-drop */}
+          {podeEscrever && opcoesDestino.length > 0 && (
             <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-700">
                 Mover situação

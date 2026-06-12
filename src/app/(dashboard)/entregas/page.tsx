@@ -150,7 +150,9 @@ export default async function EntregasPage({
     .select("role")
     .eq("id", user!.id)
     .single();
-  const isAdmin = (profileData as Pick<Profile, "role"> | null)?.role === "admin";
+  // Admin e vendedor podem criar entregas; entregador não
+  const roleEntregas = (profileData as Pick<Profile, "role"> | null)?.role;
+  const podeNovaEntrega = roleEntregas === "admin" || roleEntregas === "vendedor";
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -159,7 +161,7 @@ export default async function EntregasPage({
           <h1 className="text-2xl font-bold text-gray-900">Entregas</h1>
           <p className="mt-1 text-sm text-gray-500">Gerencie todas as entregas cadastradas</p>
         </div>
-        {isAdmin && (
+        {podeNovaEntrega && (
           <Link href="/entregas/nova" className="btn-primary w-full sm:w-auto">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

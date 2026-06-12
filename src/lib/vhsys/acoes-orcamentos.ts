@@ -94,7 +94,7 @@ function validarPayload(payload: PayloadCriarOrcamento): void {
   if (!payload.nome_cliente || payload.nome_cliente.length > 255) {
     throw new Error("nome_cliente inválido (vazio ou >255 chars).");
   }
-  if (payload.obs_pedido && payload.obs_pedido.length > 1000) {
+  if (payload.obs_pedido && payload.obs_pedido.length > 500) {
     throw new Error("obs_pedido excede 1000 caracteres.");
   }
   if (payload.referencia_pedido && payload.referencia_pedido.length > 100) {
@@ -175,7 +175,7 @@ export async function editarOrcamento(
       throw new Error("idVhsys inválido.");
     }
 
-    if (payload.obs_pedido && payload.obs_pedido.length > 1000) {
+    if (payload.obs_pedido && payload.obs_pedido.length > 500) {
       throw new Error("obs_pedido excede 1000 caracteres.");
     }
     if (payload.referencia_pedido && payload.referencia_pedido.length > 100) {
