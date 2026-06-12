@@ -112,21 +112,38 @@ jobs:
       - name: Build de produção
         run: npm run build
 
-      - name: Subir o servidor
-        run: npm run start &
-
-      - name: Aguardar o servidor responder
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sSf http://localhost:3000 >/dev/null 2>&1; then
-              echo "Servidor no ar."; exit 0;
-            fi
-            sleep 2;
-          done
-          echo "Servidor não subiu a tempo."; exit 1
-
-      # Suíte HTTP (scripts dos cenários vêm na Fase 2; o esqueleto já existe).
-      - name: Rodar suíte HTTP
+      # Subir + aguardar + rodar a suíte no MESMO step: no Actions cada `run:` é
+      # um processo separado, então um `npm run start &` em step próprio morreria
+      # antes do step seguinte. Mantendo tudo junto, o servidor em background
+      # sobrevive durante a espera e a medição.
+      - name: Subir servidor, aguardar e rodar suíte HTTP
         env:
           PERF_BASE_URL: http://localhost:3000
-        run: npm run test:perf:http
+        run: |
+          npm run start > /tmp/next-server.log 2>&1 &
+          SERVER_PID=$!
+
+          pronto=0
+          for i in $(seq 1 45); do
+            if curl -sSf http://localhost:3000 >/dev/null 2>&1; then
+              echo "Servidor no ar (após $((i*2))s)."; pronto=1; break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              echo "::error::Processo do servidor morreu durante o boot."
+              cat /tmp/next-server.log; exit 1
+            fi
+            sleep 2
+          done
+
+          if [ "$pronto" != "1" ]; then
+            echo "::error::Servidor não subiu a tempo."
+            cat /tmp/next-server.log
+            kill "$SERVER_PID" 2>/dev/null || true
+            exit 1
+          fi
+
+          # Suíte HTTP (Cache-Control: no-store). Baseline vazio = modo estabelecer.
+          npm run test:perf:http
+          status=$?
+          kill "$SERVER_PID" 2>/dev/null || true
+          exit $status
