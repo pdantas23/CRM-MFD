@@ -32,7 +32,31 @@ on:
 
 # Sem cache de Vitest entre runs: medida fria por commit (ver vitest.config.ts).
 jobs:
+  # Preflight: a suíte de perf é OPT-IN e depende de secrets externos (Supabase).
+  # Sem eles, os jobs de perf são PULADOS (não falham) — o main não fica vermelho
+  # por uma capacidade ainda não configurada. Adicione os secrets em
+  # Settings → Secrets and variables → Actions para ativar automaticamente.
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      has_secrets: ${{ steps.check.outputs.has_secrets }}
+    steps:
+      - id: check
+        env:
+          URL: ${{ secrets.SUPABASE_URL }}
+          KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -n "$URL" ] && [ -n "$KEY" ]; then
+            echo "has_secrets=true" >> "$GITHUB_OUTPUT"
+            echo "Secrets de perf presentes — jobs de performance habilitados."
+          else
+            echo "has_secrets=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Secrets de perf ausentes (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY). Jobs de performance PULADOS. Configure em Settings → Secrets and variables → Actions para ativar."
+          fi
+
   perf-server:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.has_secrets == 'true' }}
     runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -90,9 +114,10 @@ jobs:
           fi
 
   perf-http:
+    needs: preflight
     runs-on: ubuntu-latest
-    # Roda só em push/dispatch (evita custo de build em todo PR). Ajustável na Fase 2.
-    if: ${{ github.event_name != 'pull_request' }}
+    # Roda só em push/dispatch (evita custo de build em todo PR) E com secrets presentes.
+    if: ${{ needs.preflight.outputs.has_secrets == 'true' && github.event_name != 'pull_request' }}
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
