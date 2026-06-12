@@ -1,9 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { PedidosView } from "@/components/pedidos/PedidosView";
+import { PerfMarks } from "@/components/pedidos/PerfMarks";
 import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
 import { pedidosOnda0, pedidosOnda1, pedidosOnda2 } from "@/lib/crm/carregar";
-import { comCache } from "@/lib/crm/cache";
+import { cacheGet, comCache } from "@/lib/crm/cache";
 import type {
   PedidoKanban,
   SituacaoRow,
@@ -12,11 +13,21 @@ import type { Profile } from "@/lib/types/database";
 
 export const dynamic = "force-dynamic";
 
+// ── Observabilidade ─────────────────────────────────────────────────────────
+// NÃO setamos o header Server-Timing aqui: um Server Component do App Router
+// não consegue escrever headers da resposta (a página já está sendo
+// renderizada/streamed quando os dados chegam). Middleware tampouco serve — ele
+// roda ANTES da página e desconhece a duração das ondas. A observabilidade
+// equivalente vem de (1) um console.log estruturado server-side abaixo (visível
+// nos logs de função da Vercel) e (2) marcas de User Timing no cliente
+// (<PerfMarks />). Caminho limpo no futuro: medir num route handler dedicado.
+
 export default async function PedidosPage({
   searchParams,
 }: {
   searchParams?: SearchParamsLike;
 }) {
+  const t0 = performance.now();
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -27,6 +38,7 @@ export default async function PedidosPage({
         .eq("id", user.id)
         .single()
     : { data: null };
+  const tAuthProfile = performance.now();
 
   const role = (profile as Profile | null)?.role;
   const podeEscrever = role === "admin" || role === "vendedor";
@@ -44,6 +56,7 @@ export default async function PedidosPage({
     : null;
   const numerosSaldo = onda0?.numerosSaldo ?? null;
   const dadosPedidos = onda0?.dadosPedidos ?? null;
+  const tOnda0 = performance.now();
 
   // Chave de cache inclui rota, filtros, página-kanban e escopo do usuário
   // (obrigatório para não vazar dados entre usuários em instâncias quentes).
@@ -54,9 +67,13 @@ export default async function PedidosPage({
   // Métricas: com toggle ligado reusa os dados pré-carregados (sem nova ida);
   // com desligado, a RPC agrega num único roundtrip (fallback de lotes se a
   // function não existir). dadosPedidos === null → RPC; senão → in-memory.
+  // Detecção de cache hit/miss: leitura barata e sem efeito (além da expiração
+  // natural) ANTES da chamada. Se já há valor válido, comCache devolverá ele.
+  const cacheHit = cacheGet(chavePedidos) !== null;
   const onda1 = await comCache(chavePedidos, 30_000, () =>
     pedidosOnda1(supabase, filtros, escopo, dadosPedidos, numerosSaldo)
   );
+  const tOnda1 = performance.now();
 
   const situacoes = onda1.situacoes;
   const vendedores = onda1.vendedores;
@@ -69,6 +86,7 @@ export default async function PedidosPage({
     supabase,
     pedidos
   );
+  const tOnda2 = performance.now();
 
   const financeiroPorPedido = new Map(financeiro.map((f) => [f.pedido_id, f]));
   const clientePorId = new Map(clientes.map((c) => [c.id_vhsys, c]));
@@ -83,8 +101,37 @@ export default async function PedidosPage({
     entregaRegistrada: comEntrega.has(p.id),
   }));
 
+  // ── Timings server-side (wall clock) ────────────────────────────────────────
+  // Custo desprezível, sempre ligado. Logs de função são invisíveis ao usuário.
+  // SEM PII: apenas durações, role e flags booleanas (nada de nome/id de cliente).
+  const round = (ms: number) => Math.round(ms);
+  const perf = {
+    authProfile: round(tAuthProfile - t0),
+    onda0: round(filtros.soComSaldo ? tOnda0 - tAuthProfile : 0),
+    onda1: round(tOnda1 - tOnda0),
+    onda2: round(tOnda2 - tOnda1),
+    serverTotal: round(tOnda2 - t0),
+    cache: cacheHit ? "hit" : "miss",
+  };
+  // eslint-disable-next-line no-console
+  console.log(
+    `[perf /pedidos] auth_profile=${perf.authProfile}ms onda0=${perf.onda0}ms ` +
+      `onda1=${perf.onda1}ms onda2=${perf.onda2}ms server_total=${perf.serverTotal}ms ` +
+      `cache=${perf.cache} role=${role ?? "none"} soSaldo=${filtros.soComSaldo}`
+  );
+
   return (
     <div className="p-8">
+      <PerfMarks
+        server={{
+          authProfile: perf.authProfile,
+          onda0: perf.onda0,
+          onda1: perf.onda1,
+          onda2: perf.onda2,
+          serverTotal: perf.serverTotal,
+          cache: perf.cache,
+        }}
+      />
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
         <p className="mt-1 text-sm text-gray-500">
