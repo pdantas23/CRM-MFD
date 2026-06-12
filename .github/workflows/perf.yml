@@ -123,9 +123,13 @@ jobs:
           npm run start > /tmp/next-server.log 2>&1 &
           SERVER_PID=$!
 
+          # Prontidão = servidor ACEITA conexão e devolve QUALQUER status HTTP.
+          # Sem `-f`: uma página que responda 4xx/5xx (ex.: env ausente) ainda
+          # significa "servidor de pé" — a suíte mede TTFB da resposta como vier.
+          # curl sai !=0 só em conexão recusada (porta ainda fechada).
           pronto=0
           for i in $(seq 1 45); do
-            if curl -sSf http://localhost:3000 >/dev/null 2>&1; then
+            if curl -s -o /dev/null http://localhost:3000; then
               echo "Servidor no ar (após $((i*2))s)."; pronto=1; break
             fi
             if ! kill -0 "$SERVER_PID" 2>/dev/null; then
