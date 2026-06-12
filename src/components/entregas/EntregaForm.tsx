@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Select } from "@/components/ui/Select";
+import { registrarEntregaEmSeparacao } from "@/lib/vhsys/acoes";
 import type { Entrega, EntregaFormData, Periodo, StatusEntrega } from "@/lib/types/database";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -19,8 +20,10 @@ export interface EntregaPrefill {
   numero_orcamento?: string;
   bairro?: string;
   endereco?: string;
-  /** Vínculo com o pedido espelhado do VHSYS (vhsys_pedidos.id). */
+  /** UUID do registro em vhsys_pedidos (FK da tabela entregas). */
   pedido_id?: string;
+  /** id_vhsys (número inteiro) do pedido — usado para chamar a API VHSYS. */
+  pedido_id_vhsys?: number;
 }
 
 interface EntregaFormProps {
@@ -99,6 +102,8 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+  // Aviso discreto: falha ao mover situação VHSYS não reverte a entrega
+  const [avisoVhsys, setAvisoVhsys] = useState<string | null>(null);
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -171,6 +176,7 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
 
     setLoading(true);
     setError(null);
+    setAvisoVhsys(null);
 
     try {
       const supabase = createClient();
@@ -205,6 +211,19 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
             .from("entregas")
             .update({ anexo_url: url, anexo_nome: nome })
             .eq("id", typed.id);
+        }
+
+        // Tenta mover pedido para EM_SEPARACAO no VHSYS (falha não reverte entrega)
+        if (prefill?.pedido_id_vhsys) {
+          const resultadoVhsys = await registrarEntregaEmSeparacao(prefill.pedido_id_vhsys);
+          if (!resultadoVhsys.ok) {
+            // Permanecer na página para o aviso ser exibido; o usuário navega manualmente
+            setAvisoVhsys(
+              `Entrega salva, mas não foi possível atualizar o pedido no VHSYS: ${resultadoVhsys.erro}`
+            );
+            setLoading(false);
+            return;
+          }
         }
 
         router.push("/entregas");
@@ -250,6 +269,20 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
+        </div>
+      )}
+      {/* Aviso discreto: falha na atualização do VHSYS não reverte a entrega.
+          Permanecemos na página para o aviso ser visto; botão para navegar manualmente. */}
+      {avisoVhsys && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p>{avisoVhsys}</p>
+          <button
+            type="button"
+            onClick={() => router.push("/entregas")}
+            className="mt-2 text-xs font-medium underline hover:no-underline"
+          >
+            Ir para entregas
+          </button>
         </div>
       )}
 

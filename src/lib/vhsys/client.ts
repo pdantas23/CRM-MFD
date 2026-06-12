@@ -190,3 +190,83 @@ export function corrigirEncoding(s: string): string {
     return s;
   }
 }
+
+// ── Funções de ESCRITA ─────────────────────────────────────────────────────
+// Sem retry automático: mutações são 1 tentativa, timeout 15 s.
+// Em escrita, HTTP 403 é ERRO real (não "lista vazia") — lança VhsysApiError.
+
+const TIMEOUT_ESCRITA_MS = 15_000;
+
+function headersEscrita(accessToken: string, secretToken: string): Record<string, string> {
+  return {
+    "access-token": accessToken,
+    "secret-access-token": secretToken,
+    "User-Agent": "MFD-CRM/0.1",
+    "Content-Type": "application/json",
+    "Cache-Control": "no-cache",
+  };
+}
+
+async function vhsysEscrever<T>(
+  method: "POST" | "PUT" | "DELETE",
+  path: string,
+  // Aceita qualquer objeto serializável (não apenas Record<string, unknown>)
+  body?: object
+): Promise<T> {
+  const { base, accessToken, secretToken } = config();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_ESCRITA_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(base + path, {
+      method,
+      headers: headersEscrita(accessToken, secretToken),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+      cache: "no-store",
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new VhsysApiError(`VHSYS ${method} ${path} — erro de rede: ${msg}`, 0, err);
+  }
+  clearTimeout(timer);
+
+  const parsed = (await res.json().catch(() => null)) as VhsysEnvelope<unknown> | null;
+  const okCode = parsed && (Number(parsed.code) === 200 || Number(parsed.code) === 201);
+  const okStatus = parsed && (parsed.status === "success" || parsed.status === "sucesso");
+
+  if (!res.ok || !parsed || !okCode || !okStatus) {
+    throw new VhsysApiError(
+      `VHSYS ${method} ${path} falhou (HTTP ${res.status}, code ${parsed?.code}): ${
+        typeof parsed?.data === "string" ? parsed.data : JSON.stringify(parsed?.data)
+      }`,
+      res.status,
+      parsed
+    );
+  }
+
+  return parsed.data as T;
+}
+
+/**
+ * POST tipado contra a API VHSYS — sem retry.
+ * Lança VhsysApiError se a resposta não for code 200/201 + status success.
+ */
+export function vhsysPost<T>(path: string, body: object): Promise<T> {
+  return vhsysEscrever<T>("POST", path, body);
+}
+
+/** PUT tipado contra a API VHSYS — sem retry. */
+export function vhsysPut<T>(path: string, body: object): Promise<T> {
+  return vhsysEscrever<T>("PUT", path, body);
+}
+
+/**
+ * DELETE contra a API VHSYS — sem retry.
+ * Retorna os dados do envelope (normalmente { id_ped } ou similar).
+ */
+export function vhsysDelete<T>(path: string): Promise<T> {
+  return vhsysEscrever<T>("DELETE", path);
+}

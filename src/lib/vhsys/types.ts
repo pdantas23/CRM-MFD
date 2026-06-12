@@ -180,3 +180,64 @@ export interface VhsysSituacoesPorEntidade {
   Orcamentos: VhsysSituacao[];
   OrdemServico: VhsysSituacao[];
 }
+
+// ── Payloads de ESCRITA ────────────────────────────────────────────────────
+
+/** POST /pedidos/{id_ped}/status */
+export interface PayloadStatusPedido {
+  data_status: string; // YYYY-MM-DD
+  tipo_status: "Em Aberto" | "Em Andamento" | "Atendido" | "Cancelado";
+  obs_status?: string; // ≤255 chars
+  /** Campo extra testado durante o teste controlado — pode não ser aceito pela API. */
+  situacao?: number;
+}
+
+/** POST /orcamentos/{id}/status */
+export interface PayloadStatusOrcamento {
+  data_status: string;
+  tipo_status: "Em Aberto" | "Em Andamento" | "Atendido" | "Cancelado";
+  obs_status?: string;
+}
+
+/** POST /pedidos — campos mínimos para criar pedido de teste ou emitir de orçamento. */
+export interface PayloadCriarPedido {
+  nome_cliente: string;
+  id_cliente?: number;
+  vendedor_pedido?: string;
+  vendedor_pedido_id?: number;
+  data_pedido?: string;
+  referencia_pedido?: string;
+  obs_pedido?: string;
+  status_pedido?: string;
+  estoque_pedido?: 0 | 1;
+  contas_pedido?: 0 | 1;
+}
+
+/** POST /pedidos/{id_ped}/produtos */
+export interface PayloadItemPedido {
+  id_produto: number;
+  desc_produto: string;
+  qtde_produto: number;
+  valor_unit_produto: number;
+  desconto_produto?: number;
+}
+
+/** PUT /orcamentos/{id_orcamento} — campos usados ao marcar Atendido */
+export interface PayloadAtualizarOrcamento {
+  status_pedido?: string;
+}
+
+/** Resposta de POST /pedidos (data[] traz objeto com id_ped e id_pedido). */
+export interface RespostaCriarPedido {
+  id_ped: number;
+  id_pedido: number;
+  [key: string]: unknown;
+}
+
+/** Resposta de POST /pedidos/{id}/status */
+export interface RespostaStatusPedido {
+  data_status: string;
+  obs_status: string;
+  tipo_status: string;
+  id_pedido: number;
+}

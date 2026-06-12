@@ -104,9 +104,11 @@ Sondagem read-only contra produção (exemplos mascarados em `raw/exemplos/`):
 - **`GET /pedidos/{id}/status` real** também inclui `situacao` em cada item do histórico.
 - **Detecção de pagamento (decisão d2):** ler `situacao` do pedido via polling
   (`data_modificacao`): 858 = aguardando pagamento → 857 = pagamento aprovado (gate de entrega).
-- **[LACUNA restante]** Como ESCREVER a situação personalizada: `POST /pedidos/{id}/status` aceita
-  `tipo_status` (enum-base) na spec; não testado se aceita `situacao`/`id_situacao` (testes de
-  escrita não autorizados nesta fase).
+- **✅ LACUNA RESOLVIDA EM TESTE (2026-06-11):** `POST /pedidos/{id}/status` aceita o campo extra
+  **`situacao`** (id numérico da situação personalizada) além do `tipo_status` obrigatório. Quando
+  enviado, o VHSYS registra a situação personalizada corretamente (confirmado: pedido TESTE-APAGAR
+  id_ped=49342019 teve situacao atualizada para 1179 com sucesso). O campo alternativo `id_situacao`
+  foi testado e ignorado pela API. Protocolo de escrita: sempre enviar `tipo_status` + `situacao`.
 
 ### ✅ Contas a Receber — RESOLVIDO (2026-06-11)
 

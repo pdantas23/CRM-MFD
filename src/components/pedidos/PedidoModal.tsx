@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatBRL, formatarData } from "@/lib/format";
-import { entregaHabilitada } from "@/lib/vhsys/fluxo";
+import { entregaHabilitada, COLUNAS_KANBAN, SITUACAO } from "@/lib/vhsys/fluxo";
+import { moverSituacaoPedido } from "@/lib/vhsys/acoes";
 import { hrefNovaEntrega } from "./PedidoCard";
 import type { PedidoKanban, SituacaoRow } from "@/lib/types/pedidos";
 
@@ -10,12 +12,42 @@ interface PedidoModalProps {
   pedido: PedidoKanban;
   situacoes: SituacaoRow[];
   onClose: () => void;
+  /** Se true, exibe controles de mover situação. Só passar true para admin. */
+  isAdmin?: boolean;
 }
 
-export function PedidoModal({ pedido, situacoes, onClose }: PedidoModalProps) {
+export function PedidoModal({ pedido, situacoes, onClose, isAdmin }: PedidoModalProps) {
   const router = useRouter();
   const situacao = situacoes.find((s) => s.id_vhsys === pedido.situacao_id);
   const fin = pedido.financeiro;
+
+  // Controle de mover situação — só visível para admin
+  const [erroMover, setErroMover] = useState<string | null>(null);
+  const [situacaoPendente, setSituacaoPendente] = useState<number | null>(null);
+  const [, startTransition] = useTransition();
+
+  // Opções de destino: situações do Kanban excluindo Cancelado e a atual
+  const opcoesDestino = situacoes.filter(
+    (s) =>
+      COLUNAS_KANBAN.includes(s.id_vhsys) &&
+      s.id_vhsys !== SITUACAO.CANCELADO &&
+      s.id_vhsys !== pedido.situacao_id
+  );
+
+  function handleMoverSituacao(novaSituacaoId: number) {
+    setErroMover(null);
+    setSituacaoPendente(novaSituacaoId);
+    startTransition(async () => {
+      const resultado = await moverSituacaoPedido(pedido.id_vhsys, novaSituacaoId);
+      setSituacaoPendente(null);
+      if (!resultado.ok) {
+        setErroMover(resultado.erro ?? "Erro ao mover situação.");
+        return;
+      }
+      router.refresh();
+      onClose();
+    });
+  }
 
   return (
     <div
@@ -117,6 +149,37 @@ export function PedidoModal({ pedido, situacoes, onClose }: PedidoModalProps) {
             <div>
               <p className="text-xs uppercase tracking-wider text-gray-400">Observações</p>
               <p className="whitespace-pre-line text-sm text-gray-700">{pedido.obs}</p>
+            </div>
+          )}
+
+          {/* Painel de mover situação — apenas admin, sem drag-and-drop */}
+          {isAdmin && opcoesDestino.length > 0 && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-700">
+                Mover situação
+              </p>
+              {erroMover && (
+                <p className="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {erroMover}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {opcoesDestino.map((s) => {
+                  const esteEstaPendente = situacaoPendente === s.id_vhsys;
+                  const algumPendente = situacaoPendente !== null;
+                  return (
+                    <button
+                      key={s.id_vhsys}
+                      type="button"
+                      disabled={algumPendente}
+                      onClick={() => handleMoverSituacao(s.id_vhsys)}
+                      className="rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-800 transition-colors hover:bg-blue-100 disabled:opacity-50"
+                    >
+                      {esteEstaPendente ? "Movendo..." : `-> ${s.nome}`}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

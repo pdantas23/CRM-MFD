@@ -36,13 +36,27 @@ export default async function NovaEntregaPage({
   }
 
   // Pré-preenchimento opcional vindo da aba Pedidos (query params)
+  const pedidoUuid = paramUuid(searchParams?.pedido_id);
+
+  // Busca id_vhsys do pedido para chamar a API VHSYS ao criar a entrega
+  let pedidoIdVhsys: number | undefined;
+  if (pedidoUuid) {
+    const { data: pedidoRow } = await supabase
+      .from("vhsys_pedidos")
+      .select("id_vhsys")
+      .eq("id", pedidoUuid)
+      .single();
+    pedidoIdVhsys = (pedidoRow as { id_vhsys: number } | null)?.id_vhsys;
+  }
+
   const prefill: EntregaPrefill = {
     nome_cliente: paramString(searchParams?.nome_cliente),
     cpf_cnpj: paramString(searchParams?.cpf_cnpj),
     numero_orcamento: paramString(searchParams?.numero_orcamento),
     bairro: paramString(searchParams?.bairro),
     endereco: paramString(searchParams?.endereco),
-    pedido_id: paramUuid(searchParams?.pedido_id),
+    pedido_id: pedidoUuid,
+    pedido_id_vhsys: pedidoIdVhsys,
   };
 
   return (

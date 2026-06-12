@@ -1,9 +1,14 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatBRL, formatarData } from "@/lib/format";
+import { BotaoEmitirPedido } from "@/components/orcamentos/BotaoEmitirPedido";
 import type { OrcamentoRow, SituacaoRow } from "@/lib/types/pedidos";
+import type { Profile } from "@/lib/types/database";
 
 export const dynamic = "force-dynamic";
+
+// Situação 768 = "Aprovado" na conta — orçamentos elegíveis para emitir pedido
+const SITUACAO_APROVADO = 768;
 
 const POR_PAGINA = 50;
 
@@ -25,6 +30,13 @@ export default async function OrcamentosPage({
   searchParams?: { [key: string]: string | string[] | undefined };
 }) {
   const supabase = await createClient();
+
+  // Verifica role do usuário para exibir botão de emitir pedido
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: profile } = user
+    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+    : { data: null };
+  const isAdmin = (profile as Profile | null)?.role === "admin";
 
   const filtroSituacao = paramString(searchParams?.situacao);
   const busca = paramString(searchParams?.q);
@@ -71,7 +83,8 @@ export default async function OrcamentosPage({
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Orçamentos</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Espelho do VHSYS — somente leitura nesta fase. {count ?? 0} orçamentos.
+          Espelho do VHSYS. {count ?? 0} orçamentos.
+          {isAdmin && " Administradores podem emitir pedido de orçamentos aprovados."}
         </p>
       </div>
 
@@ -153,7 +166,16 @@ export default async function OrcamentosPage({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">
-                    {o.pedido_emitido ? "Emitido" : "—"}
+                    {o.pedido_emitido ? (
+                      <span className="text-green-700 font-medium">Emitido</span>
+                    ) : isAdmin && o.situacao_id === SITUACAO_APROVADO ? (
+                      <BotaoEmitirPedido
+                        idOrcamentoVhsys={o.id_vhsys}
+                        numeroOrcamento={o.numero}
+                      />
+                    ) : (
+                      "—"
+                    )}
                   </td>
                 </tr>
               );

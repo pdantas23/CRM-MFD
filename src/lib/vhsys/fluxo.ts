@@ -1,6 +1,15 @@
 // Regras do fluxo de pedidos — DECISÕES FECHADAS (2026-06-11).
 // IDs de situação são da CONTA VHSYS (docs/vhsys/raw/exemplos/situacoes-atual.json).
 // Gate/colunas operam por id_situacao + ordem — NUNCA por tipo_status.
+//
+// RESULTADO DO TESTE CONTROLADO (2026-06-11, pedido TESTE-APAGAR id_ped=49342019):
+// POST /pedidos/{id}/status ACEITA o campo extra "situacao" (id numérico) no body.
+// Quando enviado, o VHSYS registra a situação personalizada corretamente.
+// O campo alternativo "id_situacao" foi testado e IGNORADO pela API.
+// Conclusão: sempre enviar tipo_status (obrigatório) + situacao (id personalizado).
+// Movimentos entre 858/1179/1180 são POSSÍVEIS via campo "situacao".
+// Mapeamento situacao_id → tipo_status: 858/1179/1180 → "Em Aberto";
+// 857/859 → "Em Andamento"; 777 → "Atendido"; 778 → "Cancelado".
 
 export const SITUACAO = {
   AGUARDANDO_PAGAMENTO: 858,
@@ -49,9 +58,43 @@ export function entregaHabilitada(situacaoId: number | null): boolean {
 }
 
 // Cadastrar entrega ⇒ situação do pedido vai para EM_SEPARACAO (859),
-// inclusive vindo de PAGAMENTO_PARCIAL (1179). A ESCRITA no VHSYS está
-// deferida até autorização + teste em pedido descartável — por ora o
-// gate só habilita/bloqueia a UI.
+// inclusive vindo de PAGAMENTO_PARCIAL (1179). Escrita habilitada via
+// registrarEntregaEmSeparacao() em src/lib/vhsys/acoes.ts.
+
+// ── Mapeamento situação personalizada → enum-base da API ──────────────────
+// Usado em POST /pedidos/{id}/status e POST /orcamentos/{id}/status.
+// As situações 858, 1179 e 1180 mapeiam para "Em Aberto" (ambíguo).
+// O teste controlado vai determinar se o campo "situacao" extra é aceito.
+type TipoStatus = "Em Aberto" | "Em Andamento" | "Atendido" | "Cancelado";
+
+const MAPA_TIPO_STATUS: Record<number, TipoStatus> = {
+  858: "Em Aberto",
+  1179: "Em Aberto",
+  1180: "Em Aberto",
+  857: "Em Andamento",
+  859: "Em Andamento",
+  777: "Atendido",
+  778: "Cancelado",
+};
+
+/** Mapeia id_situacao personalizado → tipo_status enum-base. */
+export function tipoStatusParaSituacao(situacaoId: number): TipoStatus | null {
+  return MAPA_TIPO_STATUS[situacaoId] ?? null;
+}
+
+/**
+ * Valida se uma transição de situação é permitida.
+ * Regra: qualquer coluna → qualquer coluna EXCETO sair de ou entrar em CANCELADO (778).
+ * Retrocessos (ex.: ENTREGUE → AGUARDANDO_PAGAMENTO) são INTENCIONAIS por design —
+ * admin pode corrigir erros operacionais movendo o pedido de volta a qualquer coluna.
+ */
+export function transicaoPermitida(de: number | null, para: number): boolean {
+  if (de === SITUACAO.CANCELADO) return false;
+  if (para === SITUACAO.CANCELADO) return false;
+  if (de === para) return false;
+  // Destino deve ser uma situação conhecida do Kanban (Cancelado já bloqueado acima)
+  return COLUNAS_KANBAN.includes(para);
+}
 
 /**
  * Fallback legado: pedidos anteriores às situações personalizadas

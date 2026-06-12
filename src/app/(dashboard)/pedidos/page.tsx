@@ -8,6 +8,7 @@ import type {
   PedidoRow,
   SituacaoRow,
 } from "@/lib/types/pedidos";
+import type { Profile } from "@/lib/types/database";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,13 @@ const LIMITE_ENTREGUES = 50;
 
 export default async function PedidosPage() {
   const supabase = await createClient();
+
+  // Determina se o usuário é admin para exibir controles de escrita
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: profile } = user
+    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+    : { data: null };
+  const isAdmin = (profile as Profile | null)?.role === "admin";
 
   const { data: situacoes } = await supabase
     .from("vhsys_situacoes")
@@ -100,12 +108,16 @@ export default async function PedidosPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Espelho do VHSYS — situações e valores sincronizados. Mover cards
-          (escrita) será habilitado em fase futura.
+          Espelho do VHSYS — situações e valores sincronizados.
+          {isAdmin && " Abra um pedido para mover sua situação."}
         </p>
       </div>
 
-      <PedidosView situacoes={(situacoes ?? []) as SituacaoRow[]} pedidos={kanban} />
+      <PedidosView
+        situacoes={(situacoes ?? []) as SituacaoRow[]}
+        pedidos={kanban}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 }

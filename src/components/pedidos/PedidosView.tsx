@@ -8,9 +8,11 @@ import type { PedidoKanban, SituacaoRow } from "@/lib/types/pedidos";
 interface PedidosViewProps {
   situacoes: SituacaoRow[];
   pedidos: PedidoKanban[];
+  /** Passado pelo Server Component pai após checar profiles.role. */
+  isAdmin?: boolean;
 }
 
-export function PedidosView({ situacoes, pedidos }: PedidosViewProps) {
+export function PedidosView({ situacoes, pedidos, isAdmin }: PedidosViewProps) {
   const [selecionado, setSelecionado] = useState<PedidoKanban | null>(null);
 
   return (
@@ -25,6 +27,7 @@ export function PedidosView({ situacoes, pedidos }: PedidosViewProps) {
           pedido={selecionado}
           situacoes={situacoes}
           onClose={() => setSelecionado(null)}
+          isAdmin={isAdmin}
         />
       )}
     </>
