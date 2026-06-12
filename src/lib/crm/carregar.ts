@@ -29,6 +29,7 @@ import type {
   PedidoRow,
   SituacaoRow,
 } from "@/lib/types/pedidos";
+import { traced } from "@/lib/perf/trace";
 
 type DB = Awaited<ReturnType<typeof createClient>>;
 
@@ -63,9 +64,13 @@ export interface PedidosOnda0 {
 export async function pedidosOnda0(
   supabase: DB,
   filtros: FiltrosCrm,
-  escopo: Escopo
+  escopo: Escopo,
+  /** Tag de trace opcional (no-op quando ausente). Mantém compat. com tests/perf. */
+  traceTag?: string
 ): Promise<PedidosOnda0> {
-  const dadosPedidos = await buscarDadosPedidos(supabase, filtros, escopo);
+  // buscarDadosPedidos já instrumenta internamente a varredura de saldo
+  // (lotes de pedidos) e os chunks de financeiro quando traceTag está presente.
+  const dadosPedidos = await buscarDadosPedidos(supabase, filtros, escopo, traceTag);
   const todos = numerosComSaldoDeDados(dadosPedidos);
   const numerosSaldo = todos.slice(0, MAX_NUMEROS_IN);
   return { dadosPedidos, numerosSaldo };
@@ -95,7 +100,9 @@ export async function pedidosOnda1(
   filtros: FiltrosCrm,
   escopo: Escopo,
   precarregados?: DadosPedidosPrecarregados | null,
-  numerosSaldo?: number[] | null
+  numerosSaldo?: number[] | null,
+  /** Tag de trace opcional (no-op quando ausente). Mantém compat. com tests/perf. */
+  traceTag?: string
 ): Promise<PedidosOnda1> {
   const role = escopo.role;
 
@@ -116,41 +123,58 @@ export async function pedidosOnda1(
     return q;
   }
 
-  const consultasColunas = colunasAtivas.map((situacaoId) =>
-    comFiltros(
-      supabase
-        .from("vhsys_pedidos")
-        .select(COLS_PEDIDO)
-        .eq("lixeira", false)
-        .eq("situacao_id", situacaoId)
-        .order("data_pedido", { ascending: false })
-        .limit(LIMITE_POR_COLUNA)
-    )
-  );
+  /** Envolve uma promise/query com `traced` apenas quando há traceTag. */
+  function trace<T>(label: string, fn: () => PromiseLike<T>): Promise<T> {
+    return traceTag ? traced(traceTag, label, fn) : Promise.resolve(fn());
+  }
 
-  const consultaEntregues = incluiEntregue
-    ? comFiltros(
+  const consultasColunas = colunasAtivas.map((situacaoId) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    trace<any>(`kanban:situacao=${situacaoId}`, () =>
+      comFiltros(
         supabase
           .from("vhsys_pedidos")
           .select(COLS_PEDIDO)
           .eq("lixeira", false)
-          .eq("situacao_id", SITUACAO.ENTREGUE)
-          .order("data_mod_vhsys", { ascending: false })
+          .eq("situacao_id", situacaoId)
+          .order("data_pedido", { ascending: false })
           .limit(LIMITE_POR_COLUNA)
+      )
+    )
+  );
+
+  const consultaEntregues = incluiEntregue
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      trace<any>(`kanban:situacao=${SITUACAO.ENTREGUE}`, () =>
+        comFiltros(
+          supabase
+            .from("vhsys_pedidos")
+            .select(COLS_PEDIDO)
+            .eq("lixeira", false)
+            .eq("situacao_id", SITUACAO.ENTREGUE)
+            .order("data_mod_vhsys", { ascending: false })
+            .limit(LIMITE_POR_COLUNA)
+        )
       )
     : Promise.resolve({ data: [] as PedidoRow[] });
 
   const [situacoesRes, vendedoresRes, metricas, resultados] = await Promise.all([
-    supabase
-      .from("vhsys_situacoes")
-      .select("id_vhsys, entidade, nome, tipo_status, ordem, lixeira")
-      .eq("entidade", "pedidos")
-      .eq("lixeira", false)
-      .order("ordem"),
+    trace("situacoes", () =>
+      supabase
+        .from("vhsys_situacoes")
+        .select("id_vhsys, entidade, nome, tipo_status, ordem, lixeira")
+        .eq("entidade", "pedidos")
+        .eq("lixeira", false)
+        .order("ordem")
+    ),
     role !== "vendedor"
-      ? supabase.from("vhsys_vendedores").select("id_vhsys, nome").order("nome")
+      ? trace("vendedores", () =>
+          supabase.from("vhsys_vendedores").select("id_vhsys, nome").order("nome")
+        )
       : Promise.resolve({ data: [] as { id_vhsys: number; nome: string }[] }),
-    metricasPedidos(supabase, filtros, escopo, precarregados ?? undefined),
+    trace("metricas", () =>
+      metricasPedidos(supabase, filtros, escopo, precarregados ?? undefined, traceTag)
+    ),
     Promise.all([...consultasColunas, consultaEntregues]),
   ]);
 
@@ -187,26 +211,39 @@ export interface PedidosOnda2 {
  */
 export async function pedidosOnda2(
   supabase: DB,
-  pedidos: PedidoRow[]
+  pedidos: PedidoRow[],
+  /** Tag de trace opcional (no-op quando ausente). Mantém compat. com tests/perf. */
+  traceTag?: string
 ): Promise<PedidosOnda2> {
   const pedidoIds = pedidos.map((p) => p.id);
   const clienteIds = Array.from(
     new Set(pedidos.map((p) => p.cliente_id_vhsys).filter((x): x is number => !!x))
   );
 
+  /** Envolve uma promise/query com `traced` apenas quando há traceTag. */
+  function trace<T>(label: string, fn: () => PromiseLike<T>): Promise<T> {
+    return traceTag ? traced(traceTag, label, fn) : Promise.resolve(fn());
+  }
+
   const [{ data: financeiro }, { data: clientes }, { data: entregasVinculadas }] =
     await Promise.all([
       pedidoIds.length
-        ? supabase.from("vhsys_pedidos_financeiro").select("*").in("pedido_id", pedidoIds)
+        ? trace("financeiro", () =>
+            supabase.from("vhsys_pedidos_financeiro").select("*").in("pedido_id", pedidoIds)
+          )
         : Promise.resolve({ data: [] as FinanceiroPedidoRow[] }),
       clienteIds.length
-        ? supabase
-            .from("vhsys_clientes")
-            .select("id_vhsys, cnpj_cpf, bairro, endereco, numero")
-            .in("id_vhsys", clienteIds)
+        ? trace("clientes", () =>
+            supabase
+              .from("vhsys_clientes")
+              .select("id_vhsys, cnpj_cpf, bairro, endereco, numero")
+              .in("id_vhsys", clienteIds)
+          )
         : Promise.resolve({ data: [] as ClientePrefillRow[] }),
       pedidoIds.length
-        ? supabase.from("entregas").select("pedido_id").in("pedido_id", pedidoIds)
+        ? trace("entregas", () =>
+            supabase.from("entregas").select("pedido_id").in("pedido_id", pedidoIds)
+          )
         : Promise.resolve({ data: [] as { pedido_id: string | null }[] }),
     ]);
 
@@ -264,7 +301,9 @@ export async function orcamentosOnda(
   filtros: FiltrosCrm,
   escopo: Escopo,
   pagina: number,
-  ehAdmin: boolean
+  ehAdmin: boolean,
+  /** Tag de trace opcional (no-op quando ausente). Mantém compat. com tests/perf. */
+  traceTag?: string
 ): Promise<OrcamentosOnda> {
   /** Aplica todos os filtros de orçamento a uma query encadeada. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -309,6 +348,11 @@ export async function orcamentosOnda(
       .eq("lixeira", false)
   );
 
+  /** Envolve uma promise/query com `traced` apenas quando há traceTag. */
+  function trace<T>(label: string, fn: () => PromiseLike<T>): Promise<T> {
+    return traceTag ? traced(traceTag, label, fn) : Promise.resolve(fn());
+  }
+
   const [
     { count: totalContagem },
     { data: orcamentos },
@@ -316,21 +360,27 @@ export async function orcamentosOnda(
     situacoesRes,
     vendedoresRes,
   ] = await Promise.all([
-    countQuery,
-    queryDados,
-    metricasOrcamentos(supabase, filtros, escopo),
-    supabase
-      .from("vhsys_situacoes")
-      .select("id_vhsys, entidade, nome, tipo_status, ordem, lixeira")
-      .eq("entidade", "orcamentos")
-      .eq("lixeira", false)
-      .order("ordem"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    trace<any>("count", () => countQuery),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    trace<any>("lista", () => queryDados),
+    trace("metricas", () => metricasOrcamentos(supabase, filtros, escopo, traceTag)),
+    trace("situacoes", () =>
+      supabase
+        .from("vhsys_situacoes")
+        .select("id_vhsys, entidade, nome, tipo_status, ordem, lixeira")
+        .eq("entidade", "orcamentos")
+        .eq("lixeira", false)
+        .order("ordem")
+    ),
     ehAdmin
-      ? supabase
-          .from("vhsys_vendedores")
-          .select("id_vhsys, nome")
-          .eq("lixeira", false)
-          .order("nome")
+      ? trace("vendedores", () =>
+          supabase
+            .from("vhsys_vendedores")
+            .select("id_vhsys, nome")
+            .eq("lixeira", false)
+            .order("nome")
+        )
       : Promise.resolve({ data: [] as { id_vhsys: number; nome: string }[] }),
   ]);
 

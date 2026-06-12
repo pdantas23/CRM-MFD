@@ -5,8 +5,16 @@ import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
 import { orcamentosOnda, POR_PAGINA } from "@/lib/crm/carregar";
 import { comCache } from "@/lib/crm/cache";
+import { traced, mark } from "@/lib/perf/trace";
 
 export const dynamic = "force-dynamic";
+
+// ── Observabilidade ─────────────────────────────────────────────────────────
+// Um Server Component do App Router não consegue escrever o header Server-Timing
+// (a página já está sendo renderizada/streamed quando os dados chegam) e o
+// middleware roda ANTES da página, sem conhecer as durações. A observabilidade
+// por-passo vem dos logs `[perf-trace /orcamentos]` no terminal do servidor
+// (ver src/lib/perf/trace.ts). Caminho limpo futuro: um route handler dedicado.
 
 function paramStr(v: string | string[] | undefined): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
@@ -17,9 +25,14 @@ export default async function OrcamentosPage({
 }: {
   searchParams?: SearchParamsLike;
 }) {
+  const traceTag = "/orcamentos";
+  mark(traceTag, "rsc-entry");
+
   const supabase = await createClient();
 
-  const { profile } = await getSessaoComProfile();
+  const { profile } = await traced(traceTag, "auth:getSessaoComProfile", () =>
+    getSessaoComProfile()
+  );
 
   // Filtros unificados (mesmo predicado para lista, contagem e métricas).
   const filtros = parseFiltros(searchParams, "orcamentos");
@@ -37,7 +50,7 @@ export default async function OrcamentosPage({
   // Onda única (núcleo cru extraído em carregar.ts): lista + count + métricas +
   // situações + vendedores em paralelo. Cacheada por 30s para navegações rápidas.
   const resultado = await comCache(chaveCache, 30_000, () =>
-    orcamentosOnda(supabase, filtros, escopo, pagina, profile?.role === "admin")
+    orcamentosOnda(supabase, filtros, escopo, pagina, profile?.role === "admin", traceTag)
   );
 
   const { situacoes, vendedores } = resultado;
@@ -46,6 +59,9 @@ export default async function OrcamentosPage({
   const totalPaginas = Math.max(1, Math.ceil(totalRegistros / POR_PAGINA));
   const metricas = resultado.metricas;
   const usarPlanned = resultado.countAproximado;
+
+  // Instante em que TODOS os dados estão prontos (antes do render/serialização).
+  mark(traceTag, "data-ready (antes do return)");
 
   if (!profile) {
     return (

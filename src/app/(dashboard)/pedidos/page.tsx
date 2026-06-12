@@ -6,6 +6,7 @@ import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
 import { pedidosOnda0, pedidosOnda1, pedidosOnda2 } from "@/lib/crm/carregar";
 import { cacheGet, comCache } from "@/lib/crm/cache";
+import { traced, mark } from "@/lib/perf/trace";
 import type {
   PedidoKanban,
   SituacaoRow,
@@ -27,10 +28,17 @@ export default async function PedidosPage({
 }: {
   searchParams?: SearchParamsLike;
 }) {
+  // Tag de trace por-passo (ver src/lib/perf/trace.ts). Os logs [perf-trace
+  // /pedidos] expõem a duração de CADA query/marco no terminal do servidor.
+  const traceTag = "/pedidos";
+  mark(traceTag, "rsc-entry");
+
   const t0 = performance.now();
   const supabase = await createClient();
 
-  const { profile } = await getSessaoComProfile();
+  const { profile } = await traced(traceTag, "auth:getSessaoComProfile", () =>
+    getSessaoComProfile()
+  );
   const tAuthProfile = performance.now();
 
   const role = profile?.role;
@@ -45,7 +53,7 @@ export default async function PedidosPage({
   // o .in() das colunas), então essa varredura é inevitável nesse cenário.
   // Com o toggle desligado, NENHUM lote de 1000 roda — a RPC cobre as métricas.
   const onda0 = filtros.soComSaldo
-    ? await pedidosOnda0(supabase, filtros, escopo)
+    ? await pedidosOnda0(supabase, filtros, escopo, traceTag)
     : null;
   const numerosSaldo = onda0?.numerosSaldo ?? null;
   const dadosPedidos = onda0?.dadosPedidos ?? null;
@@ -64,7 +72,7 @@ export default async function PedidosPage({
   // natural) ANTES da chamada. Se já há valor válido, comCache devolverá ele.
   const cacheHit = cacheGet(chavePedidos) !== null;
   const onda1 = await comCache(chavePedidos, 30_000, () =>
-    pedidosOnda1(supabase, filtros, escopo, dadosPedidos, numerosSaldo)
+    pedidosOnda1(supabase, filtros, escopo, dadosPedidos, numerosSaldo, traceTag)
   );
   const tOnda1 = performance.now();
 
@@ -77,7 +85,8 @@ export default async function PedidosPage({
   // ── Onda 2: financeiro + clientes + entregas dos cards visíveis ───────────
   const { financeiro, clientes, entregasVinculadas } = await pedidosOnda2(
     supabase,
-    pedidos
+    pedidos,
+    traceTag
   );
   const tOnda2 = performance.now();
 
@@ -93,6 +102,7 @@ export default async function PedidosPage({
     cliente: p.cliente_id_vhsys ? clientePorId.get(p.cliente_id_vhsys) ?? null : null,
     entregaRegistrada: comEntrega.has(p.id),
   }));
+  mark(traceTag, "kanban-montado");
 
   // ── Timings server-side (wall clock) ────────────────────────────────────────
   // Custo desprezível, sempre ligado. Logs de função são invisíveis ao usuário.
@@ -112,6 +122,10 @@ export default async function PedidosPage({
       `onda1=${perf.onda1}ms onda2=${perf.onda2}ms server_total=${perf.serverTotal}ms ` +
       `cache=${perf.cache} role=${role ?? "none"} soSaldo=${filtros.soComSaldo}`
   );
+
+  // Instante em que TODOS os dados estão prontos. O gap entre este marco e o fim
+  // do Download medido no browser indica custo de RENDER/serialização do RSC.
+  mark(traceTag, "data-ready (antes do return)");
 
   return (
     <div className="p-8">
