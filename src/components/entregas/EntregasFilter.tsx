@@ -69,27 +69,31 @@ export function EntregasFilter() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {/* Linha 2: selects à esquerda, data à direita */}
+      <div className="flex w-full flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Select
+            options={periodoOptions}
+            value={searchParams.get("periodo") ?? ""}
+            onChange={(v) => update("periodo", v)}
+            ariaLabel="Filtrar por período"
+          />
+
+          <Select
+            options={statusOptions}
+            value={searchParams.get("status") ?? ""}
+            onChange={(v) => update("status", v)}
+            ariaLabel="Filtrar por status"
+          />
+        </div>
+
+        {/* Data — na extrema direita */}
         <input
           type="date"
           defaultValue={searchParams.get("data") ?? ""}
           onChange={(e) => update("data", e.target.value)}
           aria-label="Filtrar por data"
-          className="input-base"
-        />
-
-        <Select
-          options={periodoOptions}
-          value={searchParams.get("periodo") ?? ""}
-          onChange={(v) => update("periodo", v)}
-          ariaLabel="Filtrar por período"
-        />
-
-        <Select
-          options={statusOptions}
-          value={searchParams.get("status") ?? ""}
-          onChange={(v) => update("status", v)}
-          ariaLabel="Filtrar por status"
+          className="input-base ml-auto"
         />
       </div>
     </div>

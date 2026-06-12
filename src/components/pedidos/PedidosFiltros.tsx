@@ -64,97 +64,96 @@ export function PedidosFiltros({ vendedores, mostrarFiltroVendedor }: PedidosFil
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-end gap-3">
-      {/* Busca por nome/número/vendedor */}
-      <div className="relative">
-        <input
-          type="search"
-          value={q}
-          onChange={(e) => setParam("q", e.target.value)}
-          placeholder="Cliente, número ou vendedor…"
-          className="w-56 rounded-lg border border-gray-300 bg-white px-3 py-2 pl-8 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
+    <div className="mb-4 space-y-3">
+      {/* Linha 1: busca full-width */}
+      <div className="relative flex w-full items-center">
         <svg
-          className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-gray-400"
+          className="pointer-events-none absolute left-3 h-4 w-4 text-gray-400"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
         </svg>
-      </div>
-
-      {/* Dropdown de vendedor — só admin/entregador */}
-      {mostrarFiltroVendedor && (
-        <DropdownFiltro
-          label="Vendedor"
-          opcoes={opcoesVendedor}
-          valorAtual={vendedor}
-          onChange={(v) => setParam("vendedor", v)}
-          placeholder="Todos"
-        />
-      )}
-
-      {/* Período: data de */}
-      <div className="flex items-center gap-1.5">
-        <label className="text-xs text-gray-500">De</label>
         <input
-          type="date"
-          value={dataDe}
-          onChange={(e) => setParam("data_de", e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          type="search"
+          value={q}
+          onChange={(e) => setParam("q", e.target.value)}
+          placeholder="Cliente, número ou vendedor…"
+          className="input-base w-full pl-9"
         />
+        {temFiltroAtivo && (
+          <button
+            type="button"
+            onClick={limparTodos}
+            className="ml-2 shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            Limpar
+          </button>
+        )}
       </div>
 
-      {/* Período: data até */}
-      <div className="flex items-center gap-1.5">
-        <label className="text-xs text-gray-500">Até</label>
-        <input
-          type="date"
-          value={dataAte}
-          onChange={(e) => setParam("data_ate", e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-      </div>
+      {/* Linha 2: filtros à esquerda, período à direita */}
+      <div className="flex w-full flex-wrap items-center justify-between gap-2">
+        {/* Dropdowns e valores — à esquerda */}
+        <div className="flex flex-wrap items-center gap-2">
+          {mostrarFiltroVendedor && (
+            <DropdownFiltro
+              label="Vendedor"
+              opcoes={opcoesVendedor}
+              valorAtual={vendedor}
+              onChange={(v) => setParam("vendedor", v)}
+              placeholder="Todos"
+            />
+          )}
 
-      {/* Valor mínimo */}
-      <div className="flex items-center gap-1.5">
-        <label className="text-xs text-gray-500">Valor mín.</label>
-        <input
-          type="number"
-          min={0}
-          step="0.01"
-          value={valorMin}
-          onChange={(e) => setParam("valor_min", e.target.value)}
-          placeholder="0,00"
-          className="w-24 rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-      </div>
+          {/* Valor mínimo */}
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-gray-500">Mín.</label>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={valorMin}
+              onChange={(e) => setParam("valor_min", e.target.value)}
+              placeholder="0,00"
+              className="w-24 rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
 
-      {/* Valor máximo */}
-      <div className="flex items-center gap-1.5">
-        <label className="text-xs text-gray-500">Valor máx.</label>
-        <input
-          type="number"
-          min={0}
-          step="0.01"
-          value={valorMax}
-          onChange={(e) => setParam("valor_max", e.target.value)}
-          placeholder="∞"
-          className="w-24 rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-      </div>
+          {/* Valor máximo */}
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-gray-500">Máx.</label>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={valorMax}
+              onChange={(e) => setParam("valor_max", e.target.value)}
+              placeholder="∞"
+              className="w-24 rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+        </div>
 
-      {/* Botão limpar filtros */}
-      {temFiltroAtivo && (
-        <button
-          type="button"
-          onClick={limparTodos}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
-        >
-          Limpar filtros
-        </button>
-      )}
+        {/* Período — à direita */}
+        <div className="ml-auto flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+          <span className="text-xs text-gray-400">De:</span>
+          <input
+            type="date"
+            value={dataDe}
+            onChange={(e) => setParam("data_de", e.target.value)}
+            className="border-none bg-transparent text-sm outline-none"
+          />
+          <span className="text-xs text-gray-400">Até:</span>
+          <input
+            type="date"
+            value={dataAte}
+            onChange={(e) => setParam("data_ate", e.target.value)}
+            className="border-none bg-transparent text-sm outline-none"
+          />
+        </div>
+      </div>
     </div>
   );
 }

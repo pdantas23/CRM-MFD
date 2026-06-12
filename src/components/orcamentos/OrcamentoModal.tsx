@@ -375,23 +375,16 @@ export function OrcamentoModal({ orcamento, situacaoNome, profile, onClose }: Pr
 
         {/* Rodapé com ações */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-4">
+          {/* Badge "Pedido emitido" — lado esquerdo, apenas informativo */}
           <div className="flex gap-2">
-            {podeEmitir && !modoEdicao && (
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={handleEmitir}
-                className="rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-50"
-              >
-                {isPending ? "Emitindo…" : "Emitir Pedido"}
-              </button>
-            )}
             {orcamento.pedido_emitido && (
               <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800">
                 Pedido emitido
               </span>
             )}
           </div>
+
+          {/* Botões de ação — lado direito */}
           <div className="flex gap-2">
             {podeEditar && !modoEdicao && !orcamento.pedido_emitido && (
               <button
@@ -421,7 +414,19 @@ export function OrcamentoModal({ orcamento, situacaoNome, profile, onClose }: Pr
                 </button>
               </>
             )}
-            {!modoEdicao && (
+            {/* Botão "Emitir Pedido" substitui "Fechar" quando emissão disponível */}
+            {!modoEdicao && podeEmitir && (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={handleEmitir}
+                className="rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-50"
+              >
+                {isPending ? "Emitindo…" : "Emitir Pedido"}
+              </button>
+            )}
+            {/* "Fechar" aparece apenas quando o botão Emitir Pedido NÃO está visível */}
+            {!modoEdicao && !podeEmitir && (
               <button type="button" onClick={onClose} className="btn-secondary">
                 Fechar
               </button>

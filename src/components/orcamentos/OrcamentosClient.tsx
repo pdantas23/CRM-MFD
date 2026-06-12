@@ -97,15 +97,15 @@ export function OrcamentosClient({
 
   return (
     <>
-      {/* Barra de busca */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      {/* Linha 1: busca full-width + botão Novo Orçamento */}
+      <div className="mb-3 flex w-full items-center gap-2">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             const fd = new FormData(e.currentTarget);
             navegarCom({ q: fd.get("q")?.toString() ?? "" });
           }}
-          className="flex items-center gap-2"
+          className="flex flex-1 items-center gap-2"
         >
           <input
             type="text"
@@ -113,7 +113,7 @@ export function OrcamentosClient({
             defaultValue={busca}
             placeholder="Buscar cliente, nº, vendedor..."
             maxLength={100}
-            className="input-base !w-64"
+            className="input-base flex-1"
           />
           <button type="submit" className="btn-secondary !px-3 !py-2 text-sm">
             Buscar
@@ -133,24 +133,44 @@ export function OrcamentosClient({
           <button
             type="button"
             onClick={() => setMostrarNovoModal(true)}
-            className="btn-primary ml-auto"
+            className="btn-primary shrink-0"
           >
             + Novo Orçamento
           </button>
         )}
       </div>
 
-      {/* Linha de dropdowns de filtro */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <DropdownFiltro
-          label="Situação"
-          opcoes={opcoesSituacao}
-          valorAtual={filtroSituacao}
-          onChange={(v) => navegarCom({ situacao: v })}
-        />
+      {/* Linha 2: dropdowns à esquerda, período à direita */}
+      <div className="mb-4 flex w-full flex-wrap items-center justify-between gap-2">
+        {/* Dropdowns de filtro — à esquerda */}
+        <div className="flex flex-wrap items-center gap-2">
+          <DropdownFiltro
+            label="Situação"
+            opcoes={opcoesSituacao}
+            valorAtual={filtroSituacao}
+            onChange={(v) => navegarCom({ situacao: v })}
+          />
 
-        {/* Período */}
-        <div className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+          {profile.role === "admin" && (
+            <DropdownFiltro
+              label="Vendedor"
+              opcoes={opcoesVendedor}
+              valorAtual={filtroVendedor}
+              onChange={(v) => navegarCom({ vendedor: v })}
+            />
+          )}
+
+          <DropdownFiltro
+            label="Pedido"
+            opcoes={opcoesPedidoEmitido}
+            valorAtual={filtroPedidoEmitido}
+            onChange={(v) => navegarCom({ pedido_emitido: v })}
+            placeholder="Qualquer"
+          />
+        </div>
+
+        {/* Período — à direita */}
+        <div className="ml-auto flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
           <span className="text-xs text-gray-400">De:</span>
           <input
             type="date"
@@ -166,28 +186,11 @@ export function OrcamentosClient({
             className="border-none bg-transparent text-sm outline-none"
           />
         </div>
-
-        {profile.role === "admin" && (
-          <DropdownFiltro
-            label="Vendedor"
-            opcoes={opcoesVendedor}
-            valorAtual={filtroVendedor}
-            onChange={(v) => navegarCom({ vendedor: v })}
-          />
-        )}
-
-        <DropdownFiltro
-          label="Pedido"
-          opcoes={opcoesPedidoEmitido}
-          valorAtual={filtroPedidoEmitido}
-          onChange={(v) => navegarCom({ pedido_emitido: v })}
-          placeholder="Qualquer"
-        />
       </div>
 
       {/* Contador */}
       <p className="mb-2 text-xs text-gray-400">
-        ~{totalAproximado} orçamentos
+        {totalAproximado} orçamentos
       </p>
 
       {/* Tabela */}
@@ -199,7 +202,6 @@ export function OrcamentosClient({
               <th className="px-4 py-3">Cliente</th>
               <th className="px-4 py-3">Vendedor</th>
               <th className="px-4 py-3">Data</th>
-              <th className="px-4 py-3">Validade</th>
               <th className="px-4 py-3 text-right">Valor</th>
               <th className="px-4 py-3">Situação</th>
               <th className="px-4 py-3">Pedido</th>
@@ -219,9 +221,6 @@ export function OrcamentosClient({
                   <td className="px-4 py-3 text-gray-500">{o.vendedor_nome ?? "—"}</td>
                   <td className="px-4 py-3 text-gray-500">
                     {o.data_orcamento ? formatarData(o.data_orcamento) : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">
-                    {o.validade ? formatarData(o.validade) : "—"}
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-gray-900">
                     {formatBRL(o.valor_total ?? 0)}
@@ -248,7 +247,7 @@ export function OrcamentosClient({
             })}
             {orcamentos.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
                   Nenhum orçamento encontrado com estes filtros.
                 </td>
               </tr>
