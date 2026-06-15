@@ -5,6 +5,7 @@ import type {
   VhsysProduto,
   VhsysCliente,
   VhsysVendedor,
+  VhsysTransportadora,
   VhsysSituacao,
   VhsysSituacoesPorEntidade,
 } from "./types";
@@ -40,6 +41,26 @@ export function listarVendedores(opcoes: OpcoesListagem = {}): Promise<VhsysVend
 /** Busca de produtos por descrição (autocomplete da Fase 2). */
 export function buscarProdutos(termo: string, limite = 20): Promise<VhsysProduto[]> {
   return vhsysGet<VhsysProduto>("/produtos", { desc_produto: termo, limit: limite }).then(
+    (r) => r.data
+  );
+}
+
+/**
+ * Lista todas as transportadoras via GET /transportadoras.
+ * ATENÇÃO: o endpoint /transportadoras não está documentado publicamente —
+ * nome dos campos inferido pelo padrão VHSYS; confirmar contra a resposta real.
+ */
+export function listarTransportadoras(opcoes: OpcoesListagem = {}): Promise<VhsysTransportadora[]> {
+  return vhsysGetTodos<VhsysTransportadora>("/transportadoras", paramsDe(opcoes));
+}
+
+/**
+ * Busca de transportadoras por nome (autocomplete).
+ * ATENÇÃO: parâmetro de filtro inferido — confirmar o nome correto do campo
+ * de busca textual contra a resposta real da API /transportadoras.
+ */
+export function buscarTransportadoras(termo: string, limite = 20): Promise<VhsysTransportadora[]> {
+  return vhsysGet<VhsysTransportadora>("/transportadoras", { razao_transportadora: termo, limit: limite }).then(
     (r) => r.data
   );
 }

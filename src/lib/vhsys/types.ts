@@ -161,6 +161,23 @@ export interface VhsysNotaFiscal {
   [key: string]: unknown;
 }
 
+/**
+ * Transportadora retornada pelo GET /transportadoras.
+ * ATENÇÃO: nomes dos campos inferidos — confirmar contra a resposta real da API.
+ * Campos prováveis baseados no padrão dos demais cadastros VHSYS.
+ */
+export interface VhsysTransportadora {
+  id_transportadora: number;
+  id_registro: number;
+  /** Nome/razão social da transportadora. Nome do campo a confirmar. */
+  razao_transportadora: string;
+  /** Nome fantasia. Nome do campo a confirmar. */
+  fantasia_transportadora?: string;
+  situacao_transportadora?: string;
+  lixeira: "Sim" | "Nao";
+  [key: string]: unknown;
+}
+
 // GET /situacoes — endpoint não documentado publicamente (ver API_NOTES.md).
 // tipo_pedido: 1 = Pedidos, 2 = Orçamentos.
 export interface VhsysSituacao {
@@ -197,6 +214,14 @@ export interface PayloadStatusOrcamento {
   data_status: string;
   tipo_status: "Em Aberto" | "Em Andamento" | "Atendido" | "Cancelado";
   obs_status?: string;
+  /**
+   * Campo extra VALIDADO em teste controlado (2026-06-15, orçamento descartável
+   * id 11525812): /orcamentos/status aceita "situacao" e o registra (a resposta
+   * ecoa o id enviado). Em orçamentos o tipo_status já é 1:1 com a situação
+   * (860=Em Aberto, 768=Atendido, 769=Cancelado), mas enviar situacao é inócuo
+   * e mantém o padrão de /pedidos/status.
+   */
+  situacao?: number;
 }
 
 /** POST /pedidos — campos mínimos para criar pedido de teste ou emitir de orçamento. */
@@ -231,15 +256,39 @@ export interface PayloadAtualizarOrcamento {
 
 /** POST /orcamentos — campos aceitos pela API (somente nome_cliente obrigatório). */
 export interface PayloadCriarOrcamento {
-  nome_cliente: string;
+  // Identificação
+  nome_cliente: string;          // obrigatório
   id_cliente?: number;
   vendedor_pedido?: string;
   vendedor_pedido_id?: number;
   data_pedido?: string;          // YYYY-MM-DD
   validade_orcamento?: string;   // YYYY-MM-DD
   obs_pedido?: string;
-  referencia_pedido?: string;
   status_pedido?: string;        // "Em Aberto" padrão
+
+  // Comercial
+  desconto_pedido?: string;       // valor decimal ≤12 chars, ex: "10.00"
+  desconto_pedido_porc?: string;  // percentual decimal ≤100 chars, ex: "5.00"
+  prazo_orcamento?: number;       // prazo de entrega em dias (inteiro ≥0)
+  referencia_pedido?: string;     // ≤100 chars
+  valor_total_produtos?: number;  // valor total dos produtos
+  valor_total_nota?: string;      // valor total da nota ≤13 chars
+  obs_interno_pedido?: string;    // observação interna
+
+  // Frete
+  frete_pedido?: string;          // valor do frete ≤12 chars
+  frete_por_pedido?: 0 | 1 | 9;  // 0=Remetente, 1=Destinatário, 9=Sem frete
+  peso_total_nota?: string;       // peso total ≤12 chars
+  peso_total_nota_liq?: string;   // peso líquido ≤12 chars
+  id_transportadora?: number;
+  transportadora_pedido?: string; // ≤255 chars
+
+  // Fiscais (ICMS / ST / IPI)
+  valor_baseICMS?: string;        // base de ICMS ≤12 chars
+  valor_ICMS?: string;            // valor do ICMS ≤12 chars
+  valor_baseST?: string;          // base de ST ≤12 chars
+  valor_ST?: string;              // valor do ST ≤12 chars
+  valor_IPI?: string;             // valor do IPI ≤12 chars
 }
 
 /** POST /orcamentos/{id}/produtos — item de orçamento. */
@@ -249,6 +298,52 @@ export interface PayloadItemOrcamento {
   qtde_produto: number;
   valor_unit_produto: number;
   desconto_produto?: number;
+  // Fiscais / custo / peso (opcionais conforme spec orcamentos-produto-cadastrar.md)
+  ipi_produto?: number;
+  icms_produto?: number;
+  valor_custo_produto?: number;
+  peso_produto?: number;
+  peso_liq_produto?: number;
+}
+
+/**
+ * POST /orcamentos/{id}/parcelas — parcela de orçamento.
+ * Ao cadastrar novas parcelas, as anteriores são removidas (a API substitui).
+ * data_parcela e valor_parcela são obrigatórios.
+ */
+export interface PayloadParcelaOrcamento {
+  data_parcela: string;   // YYYY-MM-DD
+  valor_parcela: number;
+  forma_pagamento?: (
+    | "Dinheiro"
+    | "PIX"
+    | "Cheque"
+    | "Permuta"
+    | "Cartão de Crédito"
+    | "Cartão de Débito"
+    | "Boleto"
+    | "Transferência"
+    | "Ted"
+    | "Depósito Identificado"
+    | "Depósito em C/C"
+    | "Duplicata Mercantil"
+    | "Faturado"
+    | "Faturar"
+    | "Débito Automático"
+    | "Lotérica"
+    | "Banco"
+    | "DDA"
+    | "Pagamento online"
+    | "BNDES"
+    | "Outros"
+    | "DP Descontada"
+    | "CH Descontado"
+    | "Vale Alimentação"
+    | "Vale Refeição"
+    | "Vale Presente"
+    | "Vale Combustível"
+  );
+  observacoes_parcela?: string;  // ≤255 chars
 }
 
 /** Diferença de itens para edição: itens a deletar (id_ped_produto) e itens a inserir. */

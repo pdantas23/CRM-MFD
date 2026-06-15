@@ -4,16 +4,19 @@
 // Fluxo: POST /orcamentos → POST /orcamentos/{id}/produtos → upsert no espelho.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { vhsysPost, vhsysPut, vhsysDelete, vhsysGet } from "./client";
 import { exigirAdminOuVendedor } from "./acoes";
 import type {
   PayloadCriarOrcamento,
   PayloadItemOrcamento,
+  PayloadParcelaOrcamento,
   ItensDiff,
   RespostaCriarOrcamento,
   VhsysOrcamento,
 } from "./types";
-import { SITUACAO } from "./fluxo";
+import { situacaoEfetivaOrcamento } from "./fluxo-orcamentos";
+import type { OrcamentoRow } from "@/lib/types/pedidos";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -28,21 +31,9 @@ function numeroOuNull(s: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function situacaoEfetiva(situacaoId: number | null, statusBase: string | null) {
-  if (situacaoId) return { situacaoId, origem: "vhsys" as const };
-  const map: Record<string, number> = {
-    "Em Aberto": SITUACAO.AGUARDANDO_PAGAMENTO,
-    "Em Andamento": SITUACAO.PAGAMENTO_APROVADO,
-    "Atendido": SITUACAO.ENTREGUE,
-    "Cancelado": SITUACAO.CANCELADO,
-  };
-  const id = statusBase ? (map[statusBase] ?? null) : null;
-  return { situacaoId: id, origem: "legado" as const };
-}
-
 async function upsertOrcamento(orc: VhsysOrcamento): Promise<void> {
   const admin = createAdminClient();
-  const efetiva = situacaoEfetiva(orc.situacao || null, orc.status_pedido || null);
+  const efetiva = situacaoEfetivaOrcamento(orc.situacao || null, orc.status_pedido || null);
   const linha = {
     id_vhsys: orc.id_orcamento,
     numero: orc.id_pedido,
@@ -51,7 +42,7 @@ async function upsertOrcamento(orc: VhsysOrcamento): Promise<void> {
     vendedor_id_vhsys: orc.vendedor_pedido_id || null,
     vendedor_nome: orc.vendedor_pedido || null,
     valor_total: numeroOuNull(orc.valor_total_nota),
-    situacao_id: orc.situacao || null,
+    situacao_id: efetiva.situacaoId,
     status_base: orc.status_pedido || null,
     origem_situacao: efetiva.origem,
     pedido_emitido: orc.pedido_emitido === 1,
@@ -87,6 +78,28 @@ function validarItens(itens: PayloadItemOrcamento[]): void {
     if (!Number.isFinite(item.valor_unit_produto) || item.valor_unit_produto <= 0) {
       throw new Error(`valor_unit_produto deve ser > 0. Recebido: ${item.valor_unit_produto}`);
     }
+    // Campos opcionais — quando presentes, devem ser não-negativos
+    for (const campo of ["ipi_produto", "icms_produto", "valor_custo_produto", "peso_produto", "peso_liq_produto"] as const) {
+      const v = item[campo];
+      if (v !== undefined && (!Number.isFinite(v) || v < 0)) {
+        throw new Error(`${campo} deve ser número não-negativo. Recebido: ${v}`);
+      }
+    }
+  }
+}
+
+function validarParcelas(parcelas: PayloadParcelaOrcamento[]): void {
+  const dataRe = /^\d{4}-\d{2}-\d{2}$/;
+  for (const parcela of parcelas) {
+    if (!parcela.data_parcela || !dataRe.test(parcela.data_parcela)) {
+      throw new Error(`data_parcela inválida: ${parcela.data_parcela}. Use YYYY-MM-DD.`);
+    }
+    if (!Number.isFinite(parcela.valor_parcela) || parcela.valor_parcela <= 0) {
+      throw new Error(`valor_parcela deve ser > 0. Recebido: ${parcela.valor_parcela}`);
+    }
+    if (parcela.observacoes_parcela && parcela.observacoes_parcela.length > 255) {
+      throw new Error("observacoes_parcela excede 255 caracteres.");
+    }
   }
 }
 
@@ -95,10 +108,127 @@ function validarPayload(payload: PayloadCriarOrcamento): void {
     throw new Error("nome_cliente inválido (vazio ou >255 chars).");
   }
   if (payload.obs_pedido && payload.obs_pedido.length > 500) {
-    throw new Error("obs_pedido excede 1000 caracteres.");
+    throw new Error("obs_pedido excede 500 caracteres.");
   }
   if (payload.referencia_pedido && payload.referencia_pedido.length > 100) {
     throw new Error("referencia_pedido excede 100 caracteres.");
+  }
+  // Novos campos — validações de limites
+  if (payload.frete_por_pedido !== undefined && ![0, 1, 9].includes(payload.frete_por_pedido)) {
+    throw new Error("frete_por_pedido deve ser 0, 1 ou 9.");
+  }
+  if (
+    payload.prazo_orcamento !== undefined &&
+    (!Number.isInteger(payload.prazo_orcamento) || payload.prazo_orcamento < 0)
+  ) {
+    throw new Error("prazo_orcamento deve ser inteiro ≥ 0.");
+  }
+  if (payload.transportadora_pedido && payload.transportadora_pedido.length > 255) {
+    throw new Error("transportadora_pedido excede 255 caracteres.");
+  }
+  if (payload.obs_interno_pedido && payload.obs_interno_pedido.length > 500) {
+    throw new Error("obs_interno_pedido excede 500 caracteres.");
+  }
+  // Campos monetários/peso — strings decimais ≤12 chars
+  for (const campo of [
+    "desconto_pedido",
+    "frete_pedido",
+    "peso_total_nota",
+    "peso_total_nota_liq",
+    "valor_baseICMS",
+    "valor_ICMS",
+    "valor_baseST",
+    "valor_ST",
+    "valor_IPI",
+  ] as const) {
+    const v = payload[campo];
+    if (v !== undefined) {
+      if (v.length > 12) throw new Error(`${campo} excede 12 caracteres.`);
+      if (!/^\d+(\.\d+)?$/.test(v)) throw new Error(`${campo} não é decimal válido.`);
+    }
+  }
+  if (payload.desconto_pedido_porc !== undefined) {
+    if (payload.desconto_pedido_porc.length > 100) throw new Error("desconto_pedido_porc excede 100 caracteres.");
+    if (!/^\d+(\.\d+)?$/.test(payload.desconto_pedido_porc)) throw new Error("desconto_pedido_porc não é decimal válido.");
+  }
+  if (payload.valor_total_nota !== undefined) {
+    if (payload.valor_total_nota.length > 13) throw new Error("valor_total_nota excede 13 caracteres.");
+    if (!/^\d+(\.\d+)?$/.test(payload.valor_total_nota)) throw new Error("valor_total_nota não é decimal válido.");
+  }
+  if (payload.valor_total_produtos !== undefined && (!Number.isFinite(payload.valor_total_produtos) || payload.valor_total_produtos < 0)) {
+    throw new Error("valor_total_produtos deve ser número não-negativo.");
+  }
+}
+
+// ── Ação: carregar mais orçamentos (Kanban paginação) ────────────────────────
+
+/** Colunas mínimas para o Kanban (sem dados jsonb). */
+const COLS_ORCAMENTO =
+  "id, id_vhsys, numero, cliente_id_vhsys, nome_cliente, vendedor_id_vhsys, " +
+  "vendedor_nome, valor_total, situacao_id, status_base, origem_situacao, " +
+  "pedido_emitido, data_orcamento, validade, referencia, obs, lixeira";
+
+type ProfileLeanOrc = { role: string; vendedor_id: number | null };
+
+async function obterProfileOrc(): Promise<ProfileLeanOrc> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, vendedor_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile) throw new Error("Perfil não encontrado.");
+  return profile as ProfileLeanOrc;
+}
+
+/**
+ * Carrega mais orçamentos de uma coluna específica do Kanban (paginação).
+ * Vendedor vê apenas os próprios orçamentos (filtro vendedor_id_vhsys).
+ * Espelha buscarMaisPedidos de acoes-pedidos.ts.
+ */
+export async function buscarMaisOrcamentos(
+  situacaoId: number,
+  offset: number
+): Promise<{ orcamentos: OrcamentoRow[]; erro?: string }> {
+  try {
+    // situacaoId pode ser negativo (coluna virtual, ex.: -2 "Em andamento");
+    // só 0 é inválido.
+    if (!Number.isInteger(situacaoId) || situacaoId === 0) {
+      throw new Error("situacaoId inválido.");
+    }
+    if (!Number.isInteger(offset) || offset < 0) {
+      throw new Error("offset inválido.");
+    }
+
+    const profile = await obterProfileOrc();
+
+    if (profile.role === "vendedor" && !profile.vendedor_id) {
+      return { orcamentos: [] };
+    }
+
+    const supabase = await createClient();
+    const LIMITE = 50;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query: any = supabase
+      .from("vhsys_orcamentos")
+      .select(COLS_ORCAMENTO)
+      .eq("lixeira", false)
+      .eq("situacao_id", situacaoId)
+      .order("data_orcamento", { ascending: false })
+      .range(offset, offset + LIMITE - 1);
+
+    if (profile.role === "vendedor") {
+      query = query.eq("vendedor_id_vhsys", profile.vendedor_id);
+    }
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+
+    return { orcamentos: (data ?? []) as unknown as OrcamentoRow[] };
+  } catch (err) {
+    return { orcamentos: [], erro: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -114,16 +244,20 @@ export interface ResultadoCriarOrcamento {
  * Cria orçamento no VHSYS e faz upsert imediato no espelho.
  * Vendedor sempre cria em seu próprio nome (vendedor_id da sessão).
  * Admin pode especificar qualquer vendedor via payload.
+ * Se `parcelas` for fornecido, registra as parcelas após criar os itens
+ * (o VHSYS substitui as parcelas anteriores a cada POST).
  */
 export async function criarOrcamento(
   payload: PayloadCriarOrcamento,
-  itens: PayloadItemOrcamento[]
+  itens: PayloadItemOrcamento[],
+  parcelas?: PayloadParcelaOrcamento[]
 ): Promise<ResultadoCriarOrcamento> {
   try {
     const ctx = await exigirAdminOuVendedor();
 
     validarPayload(payload);
     validarItens(itens);
+    if (parcelas && parcelas.length > 0) validarParcelas(parcelas);
 
     // Vendedor sempre usa seu próprio id — ignora o que vier do form
     const payloadFinal: PayloadCriarOrcamento = { ...payload };
@@ -140,6 +274,11 @@ export async function criarOrcamento(
     // Adiciona itens sequencialmente (API não suporta batch real)
     for (const item of itens) {
       await vhsysPost(`/orcamentos/${idVhsys}/produtos`, item);
+    }
+
+    // Registra parcelas (substitui anteriores — POST único com array)
+    if (parcelas && parcelas.length > 0) {
+      await vhsysPost(`/orcamentos/${idVhsys}/parcelas`, parcelas);
     }
 
     // Refetch e upsert no espelho
@@ -162,11 +301,13 @@ export interface ResultadoAcao {
 /**
  * Edita orçamento via PUT e aplica diff de itens (deleta antigos, insere novos).
  * Exige admin ou autor (vendedor_id da sessão == vendedor do orçamento).
+ * Se `parcelas` for fornecido, registra as parcelas (o VHSYS substitui as anteriores).
  */
 export async function editarOrcamento(
   idVhsys: number,
   payload: Partial<PayloadCriarOrcamento>,
-  itensDiff: ItensDiff
+  itensDiff: ItensDiff,
+  parcelas?: PayloadParcelaOrcamento[]
 ): Promise<ResultadoAcao> {
   try {
     const ctx = await exigirAdminOuVendedor();
@@ -176,12 +317,13 @@ export async function editarOrcamento(
     }
 
     if (payload.obs_pedido && payload.obs_pedido.length > 500) {
-      throw new Error("obs_pedido excede 1000 caracteres.");
+      throw new Error("obs_pedido excede 500 caracteres.");
     }
     if (payload.referencia_pedido && payload.referencia_pedido.length > 100) {
       throw new Error("referencia_pedido excede 100 caracteres.");
     }
     validarItens(itensDiff.inserir);
+    if (parcelas && parcelas.length > 0) validarParcelas(parcelas);
 
     // Verifica autoria
     if (ctx.role === "vendedor") {
@@ -216,6 +358,11 @@ export async function editarOrcamento(
     // Inserir itens novos
     for (const item of itensDiff.inserir) {
       await vhsysPost(`/orcamentos/${idVhsys}/produtos`, item);
+    }
+
+    // Registra parcelas (substitui anteriores — POST único com array)
+    if (parcelas && parcelas.length > 0) {
+      await vhsysPost(`/orcamentos/${idVhsys}/parcelas`, parcelas);
     }
 
     // Refetch e upsert no espelho

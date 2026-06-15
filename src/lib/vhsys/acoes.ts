@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { vhsysPost, vhsysPut, vhsysGet } from "./client";
 import { tipoStatusParaSituacao, transicaoPermitida, SITUACAO } from "./fluxo";
+import { tipoStatusOrcamento, transicaoOrcamentoPermitida, situacaoEfetivaOrcamento } from "./fluxo-orcamentos";
 import type {
   PayloadStatusPedido,
   PayloadStatusOrcamento,
@@ -125,7 +126,7 @@ async function upsertPedidoNoEspelho(pedido: VhsysPedido): Promise<void> {
 
 async function upsertOrcamentoNoEspelho(orc: VhsysOrcamento): Promise<void> {
   const admin = createAdminClient();
-  const efetiva = situacaoEfetivaInline(orc.situacao || null, orc.status_pedido || null);
+  const efetiva = situacaoEfetivaOrcamento(orc.situacao || null, orc.status_pedido || null);
   const linha = {
     id_vhsys: orc.id_orcamento,
     numero: orc.id_pedido,
@@ -134,7 +135,7 @@ async function upsertOrcamentoNoEspelho(orc: VhsysOrcamento): Promise<void> {
     vendedor_id_vhsys: orc.vendedor_pedido_id || null,
     vendedor_nome: orc.vendedor_pedido || null,
     valor_total: numeroOuNull(orc.valor_total_nota),
-    situacao_id: orc.situacao || null,
+    situacao_id: efetiva.situacaoId,
     status_base: orc.status_pedido || null,
     origem_situacao: efetiva.origem,
     pedido_emitido: orc.pedido_emitido === 1,
@@ -222,11 +223,18 @@ export async function moverSituacaoPedido(
 
     await vhsysPost<RespostaStatusPedido>(`/pedidos/${idVhsys}/status`, payload);
 
-    // Refetch e upsert imediato no espelho
-    const { data: pedidoAtualizado } = await vhsysGet<VhsysPedido>(`/pedidos/${idVhsys}`);
-    if (pedidoAtualizado[0]) {
-      await upsertPedidoNoEspelho(pedidoAtualizado[0]);
-    }
+    // Atualiza o espelho DIRETO com a situação enviada — NÃO faz refetch (GET):
+    // evita a race em que o GET imediato retorna o estado antigo e grava um
+    // situacao_id defasado (causa erro de transição ao mover o card de volta).
+    await admin
+      .from("vhsys_pedidos")
+      .update({
+        situacao_id: novaSituacaoId,
+        status_base: tipoStatus,
+        origem_situacao: "vhsys",
+        sincronizado_em: new Date().toISOString(),
+      })
+      .eq("id_vhsys", idVhsys);
 
     return { ok: true };
   } catch (err) {
@@ -293,6 +301,92 @@ export async function registrarEntregaEmSeparacao(
     return { ok: true };
   } catch (err) {
     // Falha não reverte a entrega — retorna erro para aviso discreto
+    return { ok: false, erro: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Mover orçamento para nova situação no Kanban.
+ * Escopo: qualquer transição (de≠para, destino ∈ COLUNAS_KANBAN_ORCAMENTO).
+ * Vendedor só move orçamentos do próprio vendedor_id.
+ * Exige role='admin' ou role='vendedor' (autor).
+ */
+export async function moverSituacaoOrcamento(
+  idOrcamentoVhsys: number,
+  novaSituacaoId: number,
+  obs?: string
+): Promise<ResultadoAcao> {
+  try {
+    const ctx = await exigirAdminOuVendedor();
+
+    // Validação de entrada
+    if (!Number.isInteger(idOrcamentoVhsys) || idOrcamentoVhsys <= 0) {
+      throw new Error("idOrcamentoVhsys inválido.");
+    }
+    const tipoStatus = tipoStatusOrcamento(novaSituacaoId);
+    if (!tipoStatus) throw new Error(`Situação ${novaSituacaoId} desconhecida para orçamentos.`);
+
+    // Busca situação atual no espelho para validar transição e autoria
+    const admin = createAdminClient();
+    const { data: orcEspelho } = await admin
+      .from("vhsys_orcamentos")
+      .select("situacao_id, vendedor_id_vhsys, pedido_emitido")
+      .eq("id_vhsys", idOrcamentoVhsys)
+      .single();
+
+    // Orçamento com pedido já emitido não pode mudar de situação.
+    if ((orcEspelho as { pedido_emitido: boolean | null } | null)?.pedido_emitido) {
+      throw new Error("Orçamento com pedido emitido não pode mudar de situação.");
+    }
+
+    // Vendedor só pode mover orçamentos do próprio vendedor_id
+    if (ctx.role === "vendedor") {
+      const vendedorOrc = (orcEspelho as { vendedor_id_vhsys: number | null } | null)?.vendedor_id_vhsys ?? null;
+      if (vendedorOrc !== ctx.vendedorId) {
+        throw new Error("Permissão negada: este orçamento não pertence ao seu vendedor.");
+      }
+    }
+
+    const situacaoAtual = (orcEspelho as { situacao_id: number | null } | null)?.situacao_id ?? null;
+
+    if (!transicaoOrcamentoPermitida(situacaoAtual, novaSituacaoId)) {
+      throw new Error(
+        `Transição de ${situacaoAtual} para ${novaSituacaoId} não é permitida.`
+      );
+    }
+
+    if (obs && obs.length > 255) {
+      throw new Error("Observação excede 255 caracteres.");
+    }
+
+    // Monta payload. Para ids virtuais negativos (ex: -2 "Em andamento") não
+    // existe situação VHSYS correspondente — omite o campo "situacao" e envia
+    // apenas data_status + tipo_status (+ obs_status se houver).
+    const payload: PayloadStatusOrcamento = {
+      data_status: hojeISO(),
+      tipo_status: tipoStatus,
+      ...(obs ? { obs_status: obs } : {}),
+      ...(novaSituacaoId > 0 ? { situacao: novaSituacaoId } : {}),
+    };
+
+    await vhsysPost(`/orcamentos/${idOrcamentoVhsys}/status`, payload);
+
+    // Atualiza o espelho DIRETO com a situação enviada — NÃO faz refetch (GET):
+    // a API pode não ter propagado a mudança ainda, e o GET imediato retornaria
+    // o estado antigo, gravando um situacao_id defasado (causava o erro de
+    // transição ao mover o card de volta). A sync completa concilia o resto.
+    await admin
+      .from("vhsys_orcamentos")
+      .update({
+        situacao_id: novaSituacaoId,
+        status_base: tipoStatus,
+        origem_situacao: novaSituacaoId < 0 ? "legado" : "vhsys",
+        sincronizado_em: new Date().toISOString(),
+      })
+      .eq("id_vhsys", idOrcamentoVhsys);
+
+    return { ok: true };
+  } catch (err) {
     return { ok: false, erro: err instanceof Error ? err.message : String(err) };
   }
 }

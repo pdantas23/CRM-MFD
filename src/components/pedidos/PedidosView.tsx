@@ -7,11 +7,14 @@ import { PedidosCalendario } from "./PedidosCalendario";
 import { EntityToolbar } from "@/components/crm/EntityToolbar";
 import { EntityMetrics } from "@/components/crm/EntityMetrics";
 import { FiltrosPedido } from "@/components/crm/FiltrosPedido";
+import { ViewToggle } from "@/components/crm/ViewToggle";
+import { EntityTable, type ColunaTabela } from "@/components/crm/EntityTable";
+import { formatBRL, formatarData } from "@/lib/format";
 import type { Metrica } from "@/lib/crm/metricas";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import type { PedidoKanban, PedidoRow, SituacaoRow } from "@/lib/types/pedidos";
 
-type ViewAtual = "kanban" | "calendario";
+type ViewAtual = "kanban" | "lista" | "calendario";
 
 interface PedidosViewProps {
   situacoes: SituacaoRow[];
@@ -55,6 +58,68 @@ export function PedidosView({
   // Situações reais da entidade para o multi-select da toolbar.
   const opcoesSituacao = situacoes.map((s) => ({ id: s.id_vhsys, nome: s.nome }));
 
+  // Mapa de situação por id para o badge na visão Lista.
+  const situacaoPorId = new Map(situacoes.map((s) => [s.id_vhsys, s]));
+
+  // Colunas da visão Lista.
+  const colunasLista: ColunaTabela<PedidoKanban>[] = [
+    {
+      header: "Nº",
+      render: (p) => (
+        <span className="font-semibold text-gray-900">#{p.numero}</span>
+      ),
+      tdClassName: "text-gray-900",
+    },
+    {
+      header: "Cliente",
+      render: (p) => <span className="text-gray-900">{p.nome_cliente}</span>,
+    },
+    {
+      header: "Vendedor",
+      render: (p) => <span className="text-gray-500">{p.vendedor_nome ?? "—"}</span>,
+    },
+    {
+      header: "Data",
+      render: (p) => (
+        <span className="text-gray-500">
+          {p.data_pedido ? formatarData(p.data_pedido) : "—"}
+        </span>
+      ),
+    },
+    {
+      header: "Valor",
+      align: "right",
+      render: (p) => (
+        <span className="font-medium text-gray-900">{formatBRL(p.valor_total ?? 0)}</span>
+      ),
+    },
+    {
+      header: "Situação",
+      render: (p) => {
+        const situacao = p.situacao_id ? situacaoPorId.get(p.situacao_id) : null;
+        return (
+          <span className="inline-flex items-center rounded-full border bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700 border-gray-200">
+            {situacao?.nome ?? p.status_base ?? "—"}
+          </span>
+        );
+      },
+    },
+    {
+      header: "Saldo",
+      align: "right",
+      render: (p) => {
+        const saldo = p.financeiro?.saldo ?? null;
+        if (saldo === null) return <span className="text-gray-400">—</span>;
+        if (saldo > 0) {
+          return (
+            <span className="font-semibold text-amber-700">{formatBRL(saldo)}</span>
+          );
+        }
+        return <span className="text-green-700 font-medium">Quitado</span>;
+      },
+    },
+  ];
+
   return (
     <>
       <EntityToolbar
@@ -64,22 +129,15 @@ export function PedidosView({
         mostrarVendedor={mostrarFiltroVendedor}
         filtroEspecifico={<FiltrosPedido />}
         acaoPrimaria={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setViewAtual("kanban")}
-              className={viewAtual === "kanban" ? "btn-primary" : "btn-secondary"}
-            >
-              Kanban
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewAtual("calendario")}
-              className={viewAtual === "calendario" ? "btn-primary" : "btn-secondary"}
-            >
-              Calendário
-            </button>
-          </div>
+          <ViewToggle
+            opcoes={[
+              { valor: "kanban", label: "Kanban" },
+              { valor: "lista", label: "Lista" },
+              { valor: "calendario", label: "Calendário" },
+            ]}
+            valor={viewAtual}
+            onChange={(v) => setViewAtual(v as ViewAtual)}
+          />
         }
       />
 
@@ -91,6 +149,17 @@ export function PedidosView({
           pedidos={pedidos}
           onCardClick={setSelecionado}
           atingiuLimitePorSituacao={atingiuLimitePorSituacao}
+          podeEscrever={podeEscrever}
+        />
+      )}
+
+      {viewAtual === "lista" && (
+        <EntityTable<PedidoKanban>
+          colunas={colunasLista}
+          rows={pedidos}
+          getRowKey={(p) => p.id}
+          onRowClick={(p) => setSelecionado(p)}
+          emptyMessage="Nenhum pedido encontrado com estes filtros."
         />
       )}
 

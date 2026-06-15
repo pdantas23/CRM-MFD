@@ -11,6 +11,7 @@
 
 import type { createClient } from "@/lib/supabase/server";
 import { COLUNAS_KANBAN, SITUACAO } from "@/lib/vhsys/fluxo";
+import { COLUNAS_KANBAN_ORCAMENTO } from "@/lib/vhsys/fluxo-orcamentos";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import {
   aplicarPedidos,
@@ -344,6 +345,88 @@ export async function orcamentosOnda(
     vendedores: (vendedoresRes.data ?? []) as { id_vhsys: number; nome: string }[],
     countAproximado: usarPlanned,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORÇAMENTOS — KANBAN
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Resultado da onda Kanban de orçamentos. */
+export interface OrcamentosKanbanOnda {
+  orcamentos: OrcamentoRow[];
+  /** Flag de "atingiu limite" por situação_id. */
+  atingiuLimitePorSituacao: Record<number, boolean>;
+}
+
+/**
+ * Onda Kanban de orçamentos: para cada coluna de COLUNAS_KANBAN_ORCAMENTO
+ * traz até 50 itens e monta o flag atingiuLimitePorSituacao.
+ *
+ * Reutiliza a função `aplicar` de orcamentosOnda inline para respeitar
+ * os mesmos filtros (busca, situações, vendedor, período, pedido_emitido).
+ * Situações/vendedores/métricas NÃO são duplicados aqui — use orcamentosOnda
+ * para esses metadados; aqui só os cards do Kanban.
+ */
+export async function orcamentosKanbanOnda(
+  supabase: DB,
+  filtros: FiltrosCrm,
+  escopo: Escopo
+): Promise<OrcamentosKanbanOnda> {
+  /** Aplica os mesmos filtros de orcamentosOnda a uma query encadeada. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function aplicar(query: any): any {
+    let q = query;
+    if (filtros.busca) {
+      if (filtros.buscaNumero !== null) {
+        q = q.eq("numero", filtros.buscaNumero);
+      } else {
+        q = q.or(`nome_cliente.ilike.%${filtros.busca}%,vendedor_nome.ilike.%${filtros.busca}%`);
+      }
+    }
+    if (filtros.situacoes.length > 0) q = q.in("situacao_id", filtros.situacoes);
+    if (escopo.role === "vendedor") {
+      q = q.eq("vendedor_id_vhsys", escopo.vendedorId ?? -1);
+    } else if (filtros.vendedor !== null) {
+      q = q.eq("vendedor_id_vhsys", filtros.vendedor);
+    }
+    if (filtros.pedidoEmitido === true) q = q.eq("pedido_emitido", true);
+    if (filtros.pedidoEmitido === false) q = q.eq("pedido_emitido", false);
+    if (filtros.dataDe) q = q.gte("data_orcamento", filtros.dataDe);
+    if (filtros.dataAte) q = q.lte("data_orcamento", filtros.dataAte);
+    return q;
+  }
+
+  // Filtra as colunas que o multi-select de situação restringe
+  const colunasFiltradas =
+    filtros.situacoes.length > 0
+      ? COLUNAS_KANBAN_ORCAMENTO.filter((id) => filtros.situacoes.includes(id))
+      : COLUNAS_KANBAN_ORCAMENTO;
+
+  const consultasColunas = colunasFiltradas.map((situacaoId) =>
+    aplicar(
+      supabase
+        .from("vhsys_orcamentos")
+        .select(COLUNAS_ORCAMENTO)
+        .eq("lixeira", false)
+        .eq("situacao_id", situacaoId)
+        .order("data_orcamento", { ascending: false })
+        .limit(LIMITE_POR_COLUNA)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ) as unknown as Promise<{ data: any }>
+  );
+
+  const resultados = await Promise.all(consultasColunas);
+
+  const atingiuLimitePorSituacao: Record<number, boolean> = {};
+  colunasFiltradas.forEach((id, idx) => {
+    atingiuLimitePorSituacao[id] = (resultados[idx].data?.length ?? 0) >= LIMITE_POR_COLUNA;
+  });
+
+  const orcamentos: OrcamentoRow[] = resultados.flatMap(
+    (r) => (r.data ?? []) as unknown as OrcamentoRow[]
+  );
+
+  return { orcamentos, atingiuLimitePorSituacao };
 }
 
 export { LIMITE_POR_COLUNA, MAX_NUMEROS_IN, POR_PAGINA };

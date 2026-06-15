@@ -1,9 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
-import { OrcamentosClient } from "@/components/orcamentos/OrcamentosClient";
+import { OrcamentosView } from "@/components/orcamentos/OrcamentosView";
 import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
-import { orcamentosOnda, POR_PAGINA } from "@/lib/crm/carregar";
+import { orcamentosOnda, orcamentosKanbanOnda, POR_PAGINA } from "@/lib/crm/carregar";
 import { comCache } from "@/lib/crm/cache";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,6 @@ export default async function OrcamentosPage({
 
   const { profile } = await getSessaoComProfile();
 
-  // Filtros unificados (mesmo predicado para lista, contagem e métricas).
   const filtros = parseFiltros(searchParams, "orcamentos");
   const pagina = Math.max(1, Number(paramStr(searchParams?.pagina) ?? "1") || 1);
 
@@ -30,15 +29,20 @@ export default async function OrcamentosPage({
     vendedorId: profile?.vendedor_id ?? null,
   };
 
-  // Chave de cache inclui rota, filtros, página e escopo do usuário (obrigatório
-  // para não vazar dados entre usuários em instâncias quentes).
+  // Chave de cache inclui rota, filtros, página e escopo (evita vazamento entre usuários).
   const chaveCache = `orcamentos|${escopo.role}|${escopo.vendedorId ?? ""}|${JSON.stringify(filtros)}|p${pagina}`;
+  const chaveCacheKanban = `orcamentos-kanban|${escopo.role}|${escopo.vendedorId ?? ""}|${JSON.stringify(filtros)}`;
 
-  // Onda única (núcleo cru extraído em carregar.ts): lista + count + métricas +
-  // situações + vendedores em paralelo. Cacheada por 30s para navegações rápidas.
-  const resultado = await comCache(chaveCache, 30_000, () =>
-    orcamentosOnda(supabase, filtros, escopo, pagina, profile?.role === "admin")
-  );
+  // Onda lista (count + métricas + situações + vendedores) e onda Kanban em paralelo.
+  // Cada uma é cacheada por 30s para navegações rápidas.
+  const [resultado, kanban] = await Promise.all([
+    comCache(chaveCache, 30_000, () =>
+      orcamentosOnda(supabase, filtros, escopo, pagina, profile?.role === "admin")
+    ),
+    comCache(chaveCacheKanban, 30_000, () =>
+      orcamentosKanbanOnda(supabase, filtros, escopo)
+    ),
+  ]);
 
   const { situacoes, vendedores } = resultado;
   const lista = resultado.orcamentos;
@@ -46,6 +50,10 @@ export default async function OrcamentosPage({
   const totalPaginas = Math.max(1, Math.ceil(totalRegistros / POR_PAGINA));
   const metricas = resultado.metricas;
   const usarPlanned = resultado.countAproximado;
+
+  const podeEscrever =
+    profile?.role === "admin" ||
+    profile?.role === "vendedor";
 
   if (!profile) {
     return (
@@ -62,16 +70,19 @@ export default async function OrcamentosPage({
         <p className="mt-1 text-sm text-gray-500">Espelho VHSYS</p>
       </div>
 
-      <OrcamentosClient
+      <OrcamentosView
         orcamentos={lista}
+        pagina={pagina}
+        totalPaginas={totalPaginas}
+        countAproximado={usarPlanned}
+        orcamentosKanban={kanban.orcamentos}
+        atingiuLimitePorSituacao={kanban.atingiuLimitePorSituacao}
         situacoes={situacoes}
         vendedores={vendedores}
         profile={profile}
         filtros={filtros}
         metricas={metricas}
-        pagina={pagina}
-        totalPaginas={totalPaginas}
-        countAproximado={usarPlanned}
+        podeEscrever={podeEscrever}
       />
     </div>
   );

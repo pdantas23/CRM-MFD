@@ -14,6 +14,7 @@ import {
   listarNotasFiscais,
 } from "./vendas";
 import { situacaoEfetiva } from "./fluxo";
+import { situacaoEfetivaOrcamento } from "./fluxo-orcamentos";
 import type {
   VhsysProduto,
   VhsysCliente,
@@ -147,7 +148,7 @@ function paraLinhaPedido(registro: unknown) {
 
 function paraLinhaOrcamento(registro: unknown) {
   const o = registro as VhsysOrcamento;
-  const efetiva = situacaoEfetiva(o.situacao || null, o.status_pedido || null);
+  const efetiva = situacaoEfetivaOrcamento(o.situacao || null, o.status_pedido || null);
   return {
     id_vhsys: o.id_orcamento,
     numero: o.id_pedido,
@@ -156,7 +157,7 @@ function paraLinhaOrcamento(registro: unknown) {
     vendedor_id_vhsys: o.vendedor_pedido_id || null,
     vendedor_nome: o.vendedor_pedido || null,
     valor_total: numeroOuNull(o.valor_total_nota),
-    situacao_id: o.situacao || null,
+    situacao_id: efetiva.situacaoId,
     status_base: o.status_pedido || null,
     origem_situacao: efetiva.origem,
     pedido_emitido: o.pedido_emitido === 1,
