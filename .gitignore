@@ -39,3 +39,8 @@ next-env.d.ts
 ruvector.db
 agentdb.rvf
 agentdb.rvf.lock
+
+# claude local tooling / instructions (não versionar)
+.claude/
+.mcp.json
+CLAUDE.md
