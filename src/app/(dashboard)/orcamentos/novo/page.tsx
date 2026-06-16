@@ -32,7 +32,7 @@ export default async function NovoOrcamentoPage() {
 
   // Estimativa do próximo número de orçamento (espelho local).
   // O número DEFINITIVO é atribuído pelo VHSYS no momento do salvamento.
-  const [ultimoOrcResult, msUltimoOrc] = await medir(() =>
+  const [ultimoOrcResult, msUltimoOrc] = await medir(async () =>
     supabase
       .from("vhsys_orcamentos")
       .select("numero")
