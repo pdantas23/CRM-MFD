@@ -19,27 +19,28 @@ export default async function NovoOrcamentoPage() {
     redirect("/orcamentos");
   }
 
-  // Carrega vendedores (somente para admin; vendedor usa o próprio id)
-  const [vendedores, msVendedores] = await medir(async () => {
-    if (profile.role !== "admin") return [];
-    const result = await supabase
-      .from("vhsys_vendedores")
-      .select("id_vhsys, nome")
-      .eq("lixeira", false)
-      .order("nome");
-    return (result.data ?? []) as { id_vhsys: number; nome: string }[];
-  });
-
-  // Estimativa do próximo número de orçamento (espelho local).
-  // O número DEFINITIVO é atribuído pelo VHSYS no momento do salvamento.
-  const [ultimoOrcResult, msUltimoOrc] = await medir(async () =>
-    supabase
-      .from("vhsys_orcamentos")
-      .select("numero")
-      .order("numero", { ascending: false })
-      .limit(1)
-      .single()
-  );
+  // Vendedores (só admin) e estimativa do próximo número rodam em paralelo —
+  // são independentes; o número DEFINITIVO é atribuído pelo VHSYS ao salvar.
+  const [[vendedores, msVendedores], [ultimoOrcResult, msUltimoOrc]] =
+    await Promise.all([
+      medir(async () => {
+        if (profile.role !== "admin") return [];
+        const result = await supabase
+          .from("vhsys_vendedores")
+          .select("id_vhsys, nome")
+          .eq("lixeira", false)
+          .order("nome");
+        return (result.data ?? []) as { id_vhsys: number; nome: string }[];
+      }),
+      medir(async () =>
+        supabase
+          .from("vhsys_orcamentos")
+          .select("numero")
+          .order("numero", { ascending: false })
+          .limit(1)
+          .single()
+      ),
+    ]);
   const { data: ultimoOrc } = ultimoOrcResult;
   const proximoNumero = (ultimoOrc?.numero ?? 0) + 1;
 

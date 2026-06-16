@@ -37,6 +37,11 @@ CREATE INDEX IF NOT EXISTS vhsys_orcamentos_pedido_emitido_idx
 CREATE INDEX IF NOT EXISTS vhsys_orcamentos_validade_idx
   ON public.vhsys_orcamentos (validade DESC);
 
+-- Próximo número (ORDER BY numero DESC LIMIT 1 na tela de novo orçamento).
+-- Sem índice, esse "último número" era ~490ms (scan + sort da tabela inteira).
+CREATE INDEX IF NOT EXISTS vhsys_orcamentos_numero_idx
+  ON public.vhsys_orcamentos (numero DESC);
+
 -- ── vhsys_pedidos ───────────────────────────────────────────────────────────
 
 -- Filtro composto situação + data (Kanban por coluna ordenado por data)
