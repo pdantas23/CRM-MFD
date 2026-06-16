@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 function Spinner({ className }: { className?: string }) {
   return (
@@ -11,38 +11,28 @@ function Spinner({ className }: { className?: string }) {
   );
 }
 
+// Mensagens dos códigos de erro devolvidos pelo endpoint (?erro=...).
+const MENSAGENS_ERRO: Record<string, string> = {
+  campos: "Preencha nome e senha.",
+  nome: "Nome não encontrado. Verifique e tente novamente.",
+  config: "Usuário sem e-mail configurado.",
+  senha: "Senha incorreta. Tente novamente.",
+};
+
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const formData = new FormData(e.currentTarget);
-
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      body: formData,
-    });
-
-    const data = await res.json() as { error?: string; success?: boolean };
-
-    if (!res.ok || data.error) {
-      setError(data.error ?? "Erro ao entrar.");
-      setLoading(false);
-      return;
-    }
-
-    // Cookies injetados pelo servidor na resposta do fetch.
-    // O browser já os tem antes de navegar.
-    window.location.href = "/";
-  }
+  // Erro vindo do redirect do endpoint. Lido via window.location para não
+  // exigir <Suspense> de useSearchParams.
+  useEffect(() => {
+    const codigo = new URLSearchParams(window.location.search).get("erro");
+    if (codigo) setError(MENSAGENS_ERRO[codigo] ?? "Erro ao entrar.");
+  }, []);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-900 to-blue-700 px-4">
-      {loading && !error && (
+      {loading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-700">
           <Spinner className="h-8 w-8 text-white" />
         </div>
@@ -60,7 +50,15 @@ export default function LoginPage() {
         </div>
 
         <div className="card p-8">
-          <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Submit NATIVO (sem preventDefault): navegação real para o endpoint,
+              que redireciona em sucesso/erro. É o que faz o iCloud Keychain /
+              gerenciadores de senha reconhecerem o login e oferecerem salvar. */}
+          <form
+            method="post"
+            action="/api/auth/login"
+            onSubmit={() => setLoading(true)}
+            className="space-y-5"
+          >
             <div>
               <label htmlFor="nome" className="mb-1.5 block text-sm font-medium text-gray-700">
                 Nome

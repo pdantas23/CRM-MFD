@@ -3,6 +3,13 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { iniciarRequest, medir, emitirLog } from "@/lib/perf/boot";
 
+/** Volta ao login com um código de erro legível pelo client (?erro=...). */
+function erroLogin(request: NextRequest, codigo: string) {
+  return NextResponse.redirect(new URL(`/login?erro=${codigo}`, request.url), {
+    status: 303,
+  });
+}
+
 export async function POST(request: NextRequest) {
   const perfCtx = iniciarRequest("/api/auth/login");
 
@@ -11,7 +18,7 @@ export async function POST(request: NextRequest) {
   const password = formData.get("password") as string;
 
   if (!nome || !password) {
-    return NextResponse.json({ error: "Preencha nome e senha." }, { status: 400 });
+    return erroLogin(request, "campos");
   }
 
   // 1. Busca e-mail pelo nome (service role, ignora RLS)
@@ -27,26 +34,26 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (!profile) {
-    return NextResponse.json(
-      { error: "Nome não encontrado. Verifique e tente novamente." },
-      { status: 400 }
-    );
+    return erroLogin(request, "nome");
   }
 
   const { data: userData } = await admin.auth.admin.getUserById(profile.id);
   const email = userData?.user?.email;
 
   if (!email) {
-    return NextResponse.json(
-      { error: "Usuário sem e-mail configurado." },
-      { status: 400 }
-    );
+    return erroLogin(request, "config");
   }
 
-  // 2. Autentica via @supabase/ssr: ao disparar SIGNED_IN, o cliente persiste
-  //    os cookies no response via setAll() — formato exato esperado pelo
-  //    middleware e Server Components.
-  const response = NextResponse.json({ success: true });
+  // 2. Autentica via @supabase/ssr. Os cookies de sessão são acumulados em
+  //    setAll() e aplicados no response de REDIRECT. O login é um submit
+  //    nativo do <form> (navegação real) — assim o Safari/iCloud Keychain
+  //    detecta o envio de credenciais e oferece salvar a senha; nas próximas
+  //    visitas o AutoFill passa a aparecer.
+  const cookiesParaSetar: {
+    name: string;
+    value: string;
+    options: CookieOptions;
+  }[] = [];
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -57,11 +64,9 @@ export async function POST(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(
-          cookiesToSet: { name: string; value: string; options: CookieOptions }[]
+          toSet: { name: string; value: string; options: CookieOptions }[]
         ) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
+          cookiesParaSetar.push(...toSet);
         },
       },
     }
@@ -73,12 +78,16 @@ export async function POST(request: NextRequest) {
 
   if (signInResult.error) {
     emitirLog(perfCtx, { signIn: msSignIn }, { source: "login", result: "erro" });
-    return NextResponse.json(
-      { error: "Senha incorreta. Tente novamente." },
-      { status: 401 }
-    );
+    return erroLogin(request, "senha");
   }
 
   emitirLog(perfCtx, { signIn: msSignIn }, { source: "login", result: "ok" });
+
+  const response = NextResponse.redirect(new URL("/", request.url), {
+    status: 303,
+  });
+  cookiesParaSetar.forEach(({ name, value, options }) =>
+    response.cookies.set(name, value, options)
+  );
   return response;
 }
