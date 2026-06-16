@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { DashboardEntregas } from "@/components/dashboard/DashboardEntregas";
 import type { Entrega } from "@/lib/types/database";
@@ -22,14 +22,18 @@ function getTodayISO() {
 }
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
   const today = getTodayISO();
+
+  // O dashboard mostra TODAS as entregas do dia a todos os roles (visão
+  // operacional). Usa o client de serviço para ignorar o recorte de RLS por
+  // vendedor — apenas nesta leitura; a página /entregas segue escopada.
+  const admin = createAdminClient();
 
   // Profile vem do helper memoizado (já resolvido no layout — zero roundtrip
   // novo). Entregas de hoje seguem sendo carregadas aqui, em paralelo.
   const [{ profile }, { data: entregasData }] = await Promise.all([
     getSessaoComProfile(),
-    supabase
+    admin
       .from("entregas")
       .select("*")
       .eq("data", today)

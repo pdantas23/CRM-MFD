@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { PedidosView } from "@/components/pedidos/PedidosView";
@@ -20,6 +21,11 @@ export default async function PedidosPage({
   const supabase = await createClient();
 
   const { profile } = await getSessaoComProfile();
+
+  // Entregador não tem acesso a pedidos; apenas admin e vendedor.
+  if (profile && profile.role !== "admin" && profile.role !== "vendedor") {
+    redirect("/entregas");
+  }
 
   const role = profile?.role;
   const podeEscrever = role === "admin" || role === "vendedor";

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { OrcamentosView } from "@/components/orcamentos/OrcamentosView";
@@ -20,6 +21,11 @@ export default async function OrcamentosPage({
   const supabase = await createClient();
 
   const { profile } = await getSessaoComProfile();
+
+  // Entregador não tem acesso a orçamentos; apenas admin e vendedor.
+  if (profile && profile.role !== "admin" && profile.role !== "vendedor") {
+    redirect("/entregas");
+  }
 
   const filtros = parseFiltros(searchParams, "orcamentos");
   const pagina = Math.max(1, Number(paramStr(searchParams?.pagina) ?? "1") || 1);
