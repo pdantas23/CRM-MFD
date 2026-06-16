@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Spinner } from "@/components/ui/Spinner";
 import type { Profile } from "@/lib/types/database";
 
 interface SidebarProps {
@@ -53,6 +53,20 @@ export function Sidebar({ profile }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [isNavPending, startNavTransition] = useTransition();
+
+  function navegar(href: string) {
+    setPendingHref(href);
+    startNavTransition(() => {
+      router.push(href);
+    });
+  }
+
+  // Limpa pendingHref quando a rota efetivamente muda
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
 
   useEffect(() => {
     setOpen(false);
@@ -142,44 +156,58 @@ export function Sidebar({ profile }: SidebarProps) {
           {navItems.map((item) => {
             const isActive =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            const isPendingThis = isNavPending && pendingHref === item.href;
             return (
-              <Link
+              <button
                 key={item.href}
-                href={item.href}
-                // Rotas do dashboard são force-dynamic: o prefetch default
-                // executaria o RSC inteiro (auth + ondas) de cada item visível
-                // no viewport, disparando ~4 pipelines Supabase em paralelo no
-                // load. Desligado — navega no clique (loading.tsx dá feedback).
-                prefetch={false}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                type="button"
+                // Rotas do dashboard são force-dynamic — navega no clique;
+                // useTransition + loading.tsx dão o feedback visual.
+                onClick={() => navegar(item.href)}
+                disabled={isNavPending}
+                aria-current={isActive ? "page" : undefined}
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors disabled:pointer-events-none ${
                   isActive
                     ? "bg-blue-700 text-white"
                     : "text-blue-200 hover:bg-blue-800 hover:text-white"
-                }`}
+                } ${isPendingThis ? "opacity-70" : ""}`}
               >
-                {item.icon}
+                {isPendingThis ? (
+                  <Spinner className="h-5 w-5 shrink-0" />
+                ) : (
+                  item.icon
+                )}
                 {item.label}
-              </Link>
+              </button>
             );
           })}
 
           {/* Link rápido "Nova Entrega" — visível apenas para admin e vendedor */}
-          {(profile.role === "admin" || profile.role === "vendedor") && (
-            <Link
-              href="/entregas/nova"
-              prefetch={false}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                pathname === "/entregas/nova"
-                  ? "bg-blue-700 text-white"
-                  : "text-blue-200 hover:bg-blue-800 hover:text-white"
-              }`}
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Nova Entrega
-            </Link>
-          )}
+          {(profile.role === "admin" || profile.role === "vendedor") && (() => {
+            const isPendingNova = isNavPending && pendingHref === "/entregas/nova";
+            return (
+              <button
+                type="button"
+                onClick={() => navegar("/entregas/nova")}
+                disabled={isNavPending}
+                aria-current={pathname === "/entregas/nova" ? "page" : undefined}
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors disabled:pointer-events-none ${
+                  pathname === "/entregas/nova"
+                    ? "bg-blue-700 text-white"
+                    : "text-blue-200 hover:bg-blue-800 hover:text-white"
+                } ${isPendingNova ? "opacity-70" : ""}`}
+              >
+                {isPendingNova ? (
+                  <Spinner className="h-5 w-5 shrink-0" />
+                ) : (
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                )}
+                Nova Entrega
+              </button>
+            );
+          })()}
         </nav>
 
         <div className="shrink-0 border-t border-blue-800 p-3">

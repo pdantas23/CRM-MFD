@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { criarOrcamento, editarOrcamento } from "@/lib/vhsys/acoes-orcamentos";
+import { BotaoNavegacao } from "@/components/ui/BotaoNavegacao";
 import type {
   PayloadCriarOrcamento,
   PayloadItemOrcamento,
@@ -1087,13 +1088,13 @@ export function NovoOrcamentoPageForm({
 
       {/* ── Rodapé ────────────────────────────────────────────────────────── */}
       <div className="flex justify-end gap-3 border-t border-gray-200 pt-6">
-        <button
-          type="button"
-          onClick={() => router.push("/orcamentos")}
+        <BotaoNavegacao
+          href="/orcamentos"
           className="btn-secondary"
+          labelPending="Cancelando…"
         >
           Cancelar
-        </button>
+        </BotaoNavegacao>
         <button
           type="submit"
           disabled={isPending}

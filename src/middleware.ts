@@ -1,7 +1,10 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { iniciarRequest, medir, emitirLog } from "@/lib/perf/boot";
 
 export async function middleware(request: NextRequest) {
+  const perfCtx = iniciarRequest(request.nextUrl.pathname);
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -29,9 +32,11 @@ export async function middleware(request: NextRequest) {
 
   // getUser() valida o token no servidor de Auth (em vez de confiar no
   // cookie) e limpa cookies órfãos quando o refresh token é inválido.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [{ data: { user } }, msGetUser] = await medir(() =>
+    supabase.auth.getUser()
+  );
+
+  emitirLog(perfCtx, { getUser: msGetUser }, { source: "middleware" });
 
   const { pathname } = request.nextUrl;
 

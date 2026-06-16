@@ -1,8 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import { iniciarRequest, medir, emitirLog } from "@/lib/perf/boot";
 
 export async function POST(request: NextRequest) {
+  const perfCtx = iniciarRequest("/api/auth/login");
+
   const formData = await request.formData();
   const nome = (formData.get("nome") as string)?.trim();
   const password = formData.get("password") as string;
@@ -64,14 +67,18 @@ export async function POST(request: NextRequest) {
     }
   );
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const [signInResult, msSignIn] = await medir(() =>
+    supabase.auth.signInWithPassword({ email, password })
+  );
 
-  if (error) {
+  if (signInResult.error) {
+    emitirLog(perfCtx, { signIn: msSignIn }, { source: "login", result: "erro" });
     return NextResponse.json(
       { error: "Senha incorreta. Tente novamente." },
       { status: 401 }
     );
   }
 
+  emitirLog(perfCtx, { signIn: msSignIn }, { source: "login", result: "ok" });
   return response;
 }

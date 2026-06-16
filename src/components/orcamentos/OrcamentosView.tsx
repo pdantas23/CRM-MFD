@@ -4,8 +4,8 @@
 // e adicionando a visão Kanban com carregamento agrupado por situação.
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { BotaoNavegacao } from "@/components/ui/BotaoNavegacao";
 import { formatBRL, formatarData } from "@/lib/format";
 import { EntityToolbar } from "@/components/crm/EntityToolbar";
 import { EntityMetrics } from "@/components/crm/EntityMetrics";
@@ -195,12 +195,13 @@ export function OrcamentosView({
               onChange={(v) => setViewAtual(v as ViewAtual)}
             />
             {podeNovo && (
-              <Link
+              <BotaoNavegacao
                 href="/orcamentos/novo"
                 className="btn-primary w-full sm:w-auto"
+                labelPending="Abrindo…"
               >
                 + Novo Orçamento
-              </Link>
+              </BotaoNavegacao>
             )}
           </div>
         }

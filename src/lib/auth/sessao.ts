@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types/database";
+import { medir } from "@/lib/perf/boot";
 
 // Memoização por-request via `cache()` do React: deduplica chamadas DENTRO do
 // mesmo request (não atravessa requests nem o runtime do middleware). É
@@ -92,6 +93,7 @@ export async function getSessaoComProfile(): Promise<{
   const entrada = sessaoCache.get(cookieHash);
   if (entrada) {
     if (Date.now() <= entrada.expira) {
+      console.log("[perf-boot] sessao=HIT cacheMs=0ms source=sessao");
       return entrada.value;
     }
     // Entrada expirada — remove e continua para o Supabase.
@@ -99,7 +101,7 @@ export async function getSessaoComProfile(): Promise<{
   }
 
   // 2. MISS: chama a camada interna (React.cache + Supabase).
-  const value = await getSessaoComProfileInternal();
+  const [value, msSupabase] = await medir(() => getSessaoComProfileInternal());
 
   // 3. Popula o process-cache com descarte do mais antigo quando cap atingido.
   if (sessaoCache.size >= SESSAO_CAP && !sessaoCache.has(cookieHash)) {
@@ -107,6 +109,8 @@ export async function getSessaoComProfile(): Promise<{
     if (primeiraChave !== undefined) sessaoCache.delete(primeiraChave);
   }
   sessaoCache.set(cookieHash, { value, expira: Date.now() + SESSAO_TTL_MS });
+
+  console.log(`[perf-boot] sessao=MISS supabaseMs=${msSupabase}ms source=sessao`);
 
   return value;
 }

@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { EntityToolbar } from "@/components/crm/EntityToolbar";
+import { BotaoNavegacao } from "@/components/ui/BotaoNavegacao";
 import { EntityMetrics } from "@/components/crm/EntityMetrics";
 import { FiltrosEntrega } from "@/components/crm/FiltrosEntrega";
 import { PeriodoBadge, StatusBadge } from "@/components/ui/Badge";
@@ -120,12 +121,16 @@ export function EntregasClient({
         placeholderBusca="Buscar cliente, bairro, endereço, orçamento…"
         acaoPrimaria={
           podeNovaEntrega ? (
-            <Link href="/entregas/nova" className="btn-primary w-full sm:w-auto">
+            <BotaoNavegacao
+              href="/entregas/nova"
+              className="btn-primary w-full sm:w-auto"
+              labelPending="Abrindo…"
+            >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Nova Entrega
-            </Link>
+            </BotaoNavegacao>
           ) : undefined
         }
         filtroEspecifico={

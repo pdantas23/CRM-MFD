@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Spinner } from "@/components/ui/Spinner";
 import { Select } from "@/components/ui/Select";
 import { registrarEntregaEmSeparacao } from "@/lib/vhsys/acoes";
 import type { Entrega, EntregaFormData, Periodo, StatusEntrega } from "@/lib/types/database";
@@ -78,6 +79,7 @@ function cpfCnpjDigits(value: string): number {
 export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [isCanceling, startCancelTransition] = useTransition();
 
   const [form, setForm] = useState<EntregaFormData>({
     data: entrega?.data ?? getTodayISO(),
@@ -283,10 +285,12 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
           <p>{avisoVhsys}</p>
           <button
             type="button"
-            onClick={() => router.push("/entregas")}
-            className="mt-2 text-xs font-medium underline hover:no-underline"
+            onClick={() => startCancelTransition(() => { router.push("/entregas"); })}
+            disabled={isCanceling}
+            className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium underline hover:no-underline disabled:opacity-60"
           >
-            Ir para entregas
+            {isCanceling && <Spinner className="h-3 w-3" />}
+            {isCanceling ? "Indo…" : "Ir para entregas"}
           </button>
         </div>
       )}
@@ -558,10 +562,18 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
         </button>
         <button
           type="button"
-          onClick={() => router.back()}
-          className="btn-secondary w-full"
+          onClick={() => startCancelTransition(() => { router.back(); })}
+          disabled={loading || isCanceling}
+          className="btn-secondary inline-flex w-full items-center justify-center gap-2 disabled:opacity-60"
         >
-          Cancelar
+          {isCanceling ? (
+            <>
+              <Spinner />
+              Cancelando…
+            </>
+          ) : (
+            "Cancelar"
+          )}
         </button>
       </div>
     </form>

@@ -5,6 +5,7 @@
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { emitirPedidoDeOrcamento, moverSituacaoOrcamento } from "@/lib/vhsys/acoes";
+import { BotaoNavegacao } from "@/components/ui/BotaoNavegacao";
 import { formatBRL, formatarData } from "@/lib/format";
 import { COLUNAS_KANBAN_ORCAMENTO, NOME_COLUNA_ORC } from "@/lib/vhsys/fluxo-orcamentos";
 import type { OrcamentoRow, SituacaoRow } from "@/lib/types/pedidos";
@@ -291,13 +292,13 @@ export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profil
 
           <div className="flex gap-2">
             {podeEditar && !orcamento.pedido_emitido && (
-              <button
-                type="button"
-                onClick={() => router.push(`/orcamentos/${orcamento.id_vhsys}/editar`)}
+              <BotaoNavegacao
+                href={`/orcamentos/${orcamento.id_vhsys}/editar`}
                 className="btn-secondary"
+                labelPending="Abrindo…"
               >
                 Editar
-              </button>
+              </BotaoNavegacao>
             )}
             {podeEmitir && (
               <button
