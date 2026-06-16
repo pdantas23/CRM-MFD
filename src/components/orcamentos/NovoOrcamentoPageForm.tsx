@@ -124,7 +124,7 @@ function itemVazio(key: number): ItemLinha {
     descProduto: "",
     codProduto: "",
     produtoQuery: "",
-    qtde: 1,
+    qtde: 0,
     ipi: 0,
     icms: 0,
     valorUnit: 0,
@@ -267,11 +267,14 @@ export function NovoOrcamentoPageForm({
   const [transportadoraNome, setTransportadoraNome] = useState(iniciais?.transportadoraNome ?? "");
 
   const semFrete = fretePor === "9";
+  // Transportadora só é selecionável após escolher uma modalidade com frete
+  // (Remetente/Destinatário). Bloqueada sem modalidade ou com "Sem frete".
+  const transportadoraBloqueada = fretePor === "" || semFrete;
 
   function handleFretePorChange(valor: "" | "0" | "1" | "9") {
     setFretePor(valor);
-    if (valor === "9") {
-      // Sem frete: limpa transportadora
+    if (valor === "" || valor === "9") {
+      // Sem modalidade ou sem frete: limpa transportadora
       setTransportadoraQuery("");
       setTransportadoraId(undefined);
       setTransportadoraNome("");
@@ -690,6 +693,7 @@ export function NovoOrcamentoPageForm({
                         value={item.qtde}
                         onChange={(n) => atualizarItem(item.key, "qtde", n)}
                         min={1}
+                        placeholder="Qtde"
                         className="w-20 text-right"
                       />
                     </td>
@@ -960,10 +964,16 @@ export function NovoOrcamentoPageForm({
             </label>
             <AutocompleteVhsys<TransportadoraOpcao>
               endpoint="/api/buscar-transportadoras"
-              placeholder="Buscar transportadora..."
+              placeholder={
+                fretePor === ""
+                  ? "Selecione a modalidade de frete primeiro"
+                  : semFrete
+                    ? "Sem frete — transportadora não se aplica"
+                    : "Buscar transportadora..."
+              }
               minChars={0}
               value={transportadoraQuery}
-              disabled={semFrete}
+              disabled={transportadoraBloqueada}
               onChange={(texto) => {
                 setTransportadoraQuery(texto);
                 setTransportadoraNome(texto);

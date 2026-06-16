@@ -11,6 +11,8 @@ interface InputValorProps {
   disabled?: boolean;
   /** Casas decimais (padrão: 2) */
   casas?: number;
+  /** Exibe o "0,00" em cinza (estado vazio) enquanto o valor for zero. */
+  cinzaSeZero?: boolean;
 }
 
 export function InputValor({
@@ -20,11 +22,13 @@ export function InputValor({
   className,
   disabled,
   casas = 2,
+  cinzaSeZero,
 }: InputValorProps) {
   const formatted = value.toLocaleString("pt-BR", {
     minimumFractionDigits: casas,
     maximumFractionDigits: casas,
   });
+  const corZero = cinzaSeZero && value === 0 ? "text-gray-400" : "";
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const digits = e.target.value.replace(/\D/g, "");
@@ -40,7 +44,7 @@ export function InputValor({
       onChange={handleChange}
       placeholder={placeholder}
       disabled={disabled}
-      className={`input-base ${className ?? ""}`}
+      className={`input-base ${corZero} ${className ?? ""}`}
     />
   );
 }

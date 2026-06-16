@@ -163,16 +163,15 @@ export interface VhsysNotaFiscal {
 
 /**
  * Transportadora retornada pelo GET /transportadoras.
- * ATENÇÃO: nomes dos campos inferidos — confirmar contra a resposta real da API.
- * Campos prováveis baseados no padrão dos demais cadastros VHSYS.
+ * Campos confirmados contra a resposta real da API VHSYS.
  */
 export interface VhsysTransportadora {
   id_transportadora: number;
   id_registro: number;
-  /** Nome/razão social da transportadora. Nome do campo a confirmar. */
-  razao_transportadora: string;
-  /** Nome fantasia. Nome do campo a confirmar. */
-  fantasia_transportadora?: string;
+  /** Nome/razão social da transportadora. */
+  desc_transportadora: string;
+  /** Nome fantasia (pode vir null). */
+  fantasia_transportadora?: string | null;
   situacao_transportadora?: string;
   lixeira: "Sim" | "Nao";
   [key: string]: unknown;

@@ -106,6 +106,7 @@ export function ParcelasEditor({ parcelas, onChange, nextKey, totalOrcamento, po
                   value={p.valor}
                   onChange={(n) => atualizar(p.key, "valor", n)}
                   placeholder="0,00"
+                  cinzaSeZero
                   className="w-full text-xs"
                 />
               </div>

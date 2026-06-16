@@ -56,11 +56,10 @@ export function listarTransportadoras(opcoes: OpcoesListagem = {}): Promise<Vhsy
 
 /**
  * Busca de transportadoras por nome (autocomplete).
- * ATENÇÃO: parâmetro de filtro inferido — confirmar o nome correto do campo
- * de busca textual contra a resposta real da API /transportadoras.
+ * Filtra pelo campo desc_transportadora (confirmado contra a API real).
  */
 export function buscarTransportadoras(termo: string, limite = 20): Promise<VhsysTransportadora[]> {
-  return vhsysGet<VhsysTransportadora>("/transportadoras", { razao_transportadora: termo, limit: limite }).then(
+  return vhsysGet<VhsysTransportadora>("/transportadoras", { desc_transportadora: termo, limit: limite }).then(
     (r) => r.data
   );
 }

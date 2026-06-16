@@ -74,7 +74,12 @@ export function FreteTransportadoraOrcamento({ value, onChange }: Props) {
         <label className="mb-1 block text-sm font-medium text-gray-700">Transportadora</label>
         <AutocompleteVhsys<TransportadoraOpcao>
           endpoint="/api/buscar-transportadoras"
-          placeholder="Buscar transportadora..."
+          placeholder={
+            value.fretePor === ""
+              ? "Selecione a modalidade de frete primeiro"
+              : "Buscar transportadora..."
+          }
+          disabled={value.fretePor === ""}
           value={value.transportadoraNome}
           onChange={(texto) =>
             onChange({ ...value, transportadoraNome: texto, transportadoraId: undefined })
