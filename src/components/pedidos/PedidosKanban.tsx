@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { PedidoCard } from "./PedidoCard";
-import { COLUNAS_KANBAN, SEGMENTO_PAGAMENTO } from "@/lib/vhsys/fluxo";
+import { COLUNAS_KANBAN, SEGMENTO_PAGAMENTO, SITUACAO } from "@/lib/vhsys/fluxo";
 import { buscarMaisPedidos } from "@/lib/vhsys/acoes-pedidos";
 import { moverSituacaoPedido } from "@/lib/vhsys/acoes";
 import { KanbanBoard, type KanbanColuna } from "@/components/crm/KanbanBoard";
@@ -53,6 +53,8 @@ export function PedidosKanban({
       financeiro: null,
       cliente: null,
       entregaRegistrada: false,
+      cobrancaNaEntrega: false,
+      parcelas: [],
     }));
     return { itens };
   }
@@ -68,6 +70,8 @@ export function PedidosKanban({
       atingiuLimitePorColuna={atingiuLimitePorSituacao}
       carregarMais={handleCarregarMais}
       mensagemVazio="Nenhum pedido nesta situação"
+      // Pedido entregue é situação final — não pode ser arrastado para outra coluna.
+      podeMoverItem={(p) => p.situacao_id !== SITUACAO.ENTREGUE}
       onMoverCard={
         podeEscrever
           ? async (pedido, novaSituacaoId) => {

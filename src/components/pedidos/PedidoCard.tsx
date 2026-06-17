@@ -30,6 +30,9 @@ export function PedidoCard({ pedido, onClick }: PedidoCardProps) {
   const saldo = pedido.financeiro?.saldo ?? 0;
   const emEntrega =
     pedido.situacao_id !== null && SEGMENTO_ENTREGA.has(pedido.situacao_id);
+  // Só é cobrança na entrega quando está em entrega E o saldo é à vista.
+  // Vendas a prazo (boleto/faturado) em entrega são apenas saldo a prazo.
+  const cobrarNaEntrega = emEntrega && pedido.cobrancaNaEntrega;
 
   return (
     <div
@@ -58,16 +61,22 @@ export function PedidoCard({ pedido, onClick }: PedidoCardProps) {
         )}
       </div>
 
-      {/* Saldo em TODAS as colunas; >0 destacado; em entrega = alerta forte */}
+      {/* Saldo em TODAS as colunas; >0 destacado.
+          Alerta forte (vermelho) só quando é cobrança à vista na entrega;
+          a prazo (boleto/faturado) fica em âmbar, sem implicar pagar na entrega. */}
       {saldo > 0 ? (
         <p
           className={`mt-2 rounded-md px-2 py-1 text-xs font-semibold ${
-            emEntrega
+            cobrarNaEntrega
               ? "bg-red-50 text-red-700 border border-red-200"
               : "bg-amber-50 text-amber-700 border border-amber-200"
           }`}
         >
-          {emEntrega ? "Saldo a receber na entrega: " : "Saldo: "}
+          {cobrarNaEntrega
+            ? "Saldo a receber na entrega: "
+            : emEntrega
+              ? "Saldo (a prazo): "
+              : "Saldo: "}
           {formatBRL(saldo)}
         </p>
       ) : (

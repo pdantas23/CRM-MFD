@@ -238,6 +238,7 @@ function aplicarOrcamentos(
 
 interface PedAgg {
   numero: number;
+  id_vhsys: number;
   valor_total: number | null;
 }
 
@@ -308,7 +309,7 @@ export async function buscarDadosPedidos(
     aplicarPedidos(
       supabase
         .from("vhsys_pedidos")
-        .select("numero, valor_total")
+        .select("numero, id_vhsys, valor_total")
         .eq("lixeira", false),
       filtros,
       escopo
@@ -391,8 +392,10 @@ export async function metricasPedidos(
   supabase: DB,
   filtros: FiltrosCrm,
   escopo: Escopo,
-  /** Dados já carregados pela página — evita varredura dupla quando soComSaldo=true. */
-  precarregados?: DadosPedidosPrecarregados
+  /** Dados já carregados pela página — evita varredura dupla quando há recorte de saldo. */
+  precarregados?: DadosPedidosPrecarregados,
+  /** id_vhsys com saldo à vista na entrega — necessário p/ recortar por saldoTipo. */
+  naEntregaIds?: Set<number>
 ): Promise<Metrica[]> {
   // Com dados já pré-carregados (toggle "só com saldo" ligado): agrega em
   // memória, sem nova ida ao banco. Sem pré-carregados: tenta a RPC (um
@@ -412,9 +415,14 @@ export async function metricasPedidos(
   const { pedidos: todosPedidos, fin } =
     precarregados ?? (await buscarDadosPedidos(supabase, filtros, escopo));
 
-  // Toggle "só com saldo a receber": recorta o conjunto.
-  const pedidos = filtros.soComSaldo
-    ? todosPedidos.filter((p) => (fin.get(p.numero)?.saldo ?? 0) > 0)
+  // Recorte por tipo de saldo: a prazo vs a receber na entrega (forma de pagto).
+  const naEntrega = naEntregaIds ?? new Set<number>();
+  const pedidos = filtros.saldoTipo
+    ? todosPedidos.filter((p) => {
+        if ((fin.get(p.numero)?.saldo ?? 0) <= 0) return false;
+        const ehEntrega = naEntrega.has(p.id_vhsys);
+        return filtros.saldoTipo === "entrega" ? ehEntrega : !ehEntrega;
+      })
     : todosPedidos;
 
   const n = pedidos.length;

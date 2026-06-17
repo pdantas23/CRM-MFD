@@ -30,7 +30,14 @@ export interface FiltrosCrm {
   /** "true" | "false" | null — filtra pedido_emitido. */
   pedidoEmitido: boolean | null;
   // ── Específicos de Pedidos ──
-  /** Só pedidos com saldo a receber (> 0). */
+  /**
+   * Recorte por tipo de saldo em aberto:
+   * "prazo"   → saldo a prazo (boleto/faturado/etc.);
+   * "entrega" → saldo a receber na entrega (à vista/Dinheiro);
+   * null      → sem recorte de saldo.
+   */
+  saldoTipo: "prazo" | "entrega" | null;
+  /** Conveniência: true quando há qualquer recorte de saldo (saldoTipo != null). */
   soComSaldo: boolean;
   /** Ocultar registros legado (origem_situacao = 'legado'). Default ON. */
   ocultarLegado: boolean;
@@ -173,7 +180,12 @@ export function parseFiltros(
   const pedidoEmitido = pe === "true" ? true : pe === "false" ? false : null;
 
   // Específicos de pedidos
-  const soComSaldo = str(sp.com_saldo) === "true";
+  const saldoRaw = str(sp.saldo);
+  const saldoTipo: FiltrosCrm["saldoTipo"] =
+    entidade === "pedidos" && (saldoRaw === "prazo" || saldoRaw === "entrega")
+      ? saldoRaw
+      : null;
+  const soComSaldo = saldoTipo !== null;
   // Ocultar legado: default LIGADO. Só fica OFF se o param vier explicitamente "false".
   const ocultarLegado = entidade === "pedidos" ? str(sp.legado) !== "false" : false;
 
@@ -205,6 +217,7 @@ export function parseFiltros(
     dataAte,
     periodoPreset,
     pedidoEmitido,
+    saldoTipo,
     soComSaldo,
     ocultarLegado,
     situacoesStr,

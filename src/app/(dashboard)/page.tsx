@@ -1,72 +1,25 @@
-import Link from "next/link";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { redirect } from "next/navigation";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
-import { DashboardEntregas } from "@/components/dashboard/DashboardEntregas";
-import type { Entrega } from "@/lib/types/database";
-
-function formatDate(dateStr: string) {
-  const [year, month, day] = dateStr.split("-");
-  return `${day}/${month}/${year}`;
-}
-
-// Retorna YYYY-MM-DD no fuso de São Paulo, independente de onde o código
-// está rodando (server em UTC ou browser local). Garante que "hoje" no
-// dashboard bata com o "hoje" gravado pelo form.
-function getTodayISO() {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
 
 export default async function DashboardPage() {
-  const today = getTodayISO();
+  const { profile } = await getSessaoComProfile();
 
-  // O dashboard mostra TODAS as entregas do dia a todos os roles (visão
-  // operacional). Usa o client de serviço para ignorar o recorte de RLS por
-  // vendedor — apenas nesta leitura; a página /entregas segue escopada.
-  const admin = createAdminClient();
-
-  // Profile vem do helper memoizado (já resolvido no layout — zero roundtrip
-  // novo). Entregas de hoje seguem sendo carregadas aqui, em paralelo.
-  const [{ profile }, { data: entregasData }] = await Promise.all([
-    getSessaoComProfile(),
-    admin
-      .from("entregas")
-      .select("*")
-      .eq("data", today)
-      .order("ordem", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: true }),
-  ]);
-
-  const entregas = (entregasData ?? []) as Entrega[];
-  const isAdmin = profile?.role === "admin";
-
-  const manha = entregas.filter((e) => e.periodo === "manha");
-  const tarde = entregas.filter((e) => e.periodo === "tarde");
+  // Dashboard é exclusivo do admin (métricas do sistema — implementação futura).
+  // Demais roles caem direto na operação de entregas.
+  if (profile && profile.role !== "admin") {
+    redirect("/entregas");
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Entregas de hoje · {formatDate(today)}
-          </p>
-        </div>
-        {isAdmin && (
-          <Link href="/entregas/nova" className="btn-primary w-full sm:w-auto">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Nova Entrega
-          </Link>
-        )}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="mt-1 text-sm text-gray-500">Métricas do sistema</p>
       </div>
 
-      <DashboardEntregas manha={manha} tarde={tarde} isAdmin={isAdmin} />
+      <div className="card px-6 py-16 text-center text-sm text-gray-500">
+        Métricas do sistema em breve.
+      </div>
     </div>
   );
 }

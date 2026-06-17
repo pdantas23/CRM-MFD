@@ -46,7 +46,9 @@ export function FiltrosPedido() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const comSaldo = searchParams.get("com_saldo") === "true";
+  const saldo = searchParams.get("saldo"); // "prazo" | "entrega" | null
+  const saldoPrazo = saldo === "prazo";
+  const saldoEntrega = saldo === "entrega";
   // Ocultar legado é default ON: ligado a menos que legado=false na URL.
   const ocultarLegado = searchParams.get("legado") !== "false";
 
@@ -64,10 +66,16 @@ export function FiltrosPedido() {
   return (
     <>
       <Toggle
-        ligado={comSaldo}
-        onToggle={() => aplicar({ com_saldo: comSaldo ? undefined : "true" })}
+        ligado={saldoPrazo}
+        onToggle={() => aplicar({ saldo: saldoPrazo ? undefined : "prazo" })}
       >
-        Só com saldo a receber
+        Saldo a prazo
+      </Toggle>
+      <Toggle
+        ligado={saldoEntrega}
+        onToggle={() => aplicar({ saldo: saldoEntrega ? undefined : "entrega" })}
+      >
+        A receber na entrega
       </Toggle>
       <Toggle
         ligado={ocultarLegado}

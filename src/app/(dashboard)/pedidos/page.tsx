@@ -43,6 +43,7 @@ export default async function PedidosPage({
     : null;
   const numerosSaldo = onda0?.numerosSaldo ?? null;
   const dadosPedidos = onda0?.dadosPedidos ?? null;
+  const naEntregaIds = onda0?.naEntregaIds ?? null;
 
   // Chave de cache inclui rota, filtros, página-kanban e escopo do usuário
   // (obrigatório para não vazar dados entre usuários em instâncias quentes).
@@ -54,7 +55,7 @@ export default async function PedidosPage({
   // com desligado, a RPC agrega num único roundtrip (fallback de lotes se a
   // function não existir). dadosPedidos === null → RPC; senão → in-memory.
   const { onda1, onda2 } = await comCache(chavePedidos, 30_000, async () => {
-    const onda1 = await pedidosOnda1(supabase, filtros, escopo, dadosPedidos, numerosSaldo);
+    const onda1 = await pedidosOnda1(supabase, filtros, escopo, dadosPedidos, numerosSaldo, naEntregaIds);
     const onda2 = await pedidosOnda2(supabase, onda1.pedidos);
     return { onda1, onda2 };
   });
@@ -66,7 +67,13 @@ export default async function PedidosPage({
   const atingiuLimitePorSituacao = onda1.atingiuLimitePorSituacao;
 
   // ── Onda 2: financeiro + clientes + entregas (resultado do cache) ─────────
-  const { financeiro, clientes, entregasVinculadas } = onda2;
+  const {
+    financeiro,
+    clientes,
+    entregasVinculadas,
+    cobrancaNaEntregaIds,
+    parcelasPorPedido,
+  } = onda2;
 
   const financeiroPorPedido = new Map(financeiro.map((f) => [f.pedido_id, f]));
   const clientePorId = new Map(clientes.map((c) => [c.id_vhsys, c]));
@@ -79,6 +86,10 @@ export default async function PedidosPage({
     financeiro: financeiroPorPedido.get(p.id) ?? null,
     cliente: p.cliente_id_vhsys ? clientePorId.get(p.cliente_id_vhsys) ?? null : null,
     entregaRegistrada: comEntrega.has(p.id),
+    cobrancaNaEntrega:
+      p.id_vhsys != null && cobrancaNaEntregaIds.has(p.id_vhsys),
+    parcelas:
+      p.id_vhsys != null ? parcelasPorPedido.get(p.id_vhsys) ?? [] : [],
   }));
 
   return (

@@ -133,7 +133,7 @@ export function EntityToolbar({
     // Zera APENAS as chaves de filtro conhecidas; preserva params extra (ex.: perf=1).
     const CHAVES_FILTRO = [
       "q", "situacao", "vendedor", "periodo", "data_de", "data_ate",
-      "pedido_emitido", "com_saldo", "ocultar_legado", "pagina", "periodo_entrega",
+      "pedido_emitido", "com_saldo", "saldo", "ocultar_legado", "pagina", "periodo_entrega",
     ];
     const params = new URLSearchParams(searchParams.toString());
     for (const k of CHAVES_FILTRO) params.delete(k);

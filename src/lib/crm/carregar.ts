@@ -18,7 +18,6 @@ import {
   buscarDadosPedidos,
   metricasPedidos,
   metricasOrcamentos,
-  numerosComSaldoDeDados,
   type DadosPedidosPrecarregados,
   type Escopo,
   type Metrica,
@@ -27,6 +26,7 @@ import type {
   ClientePrefillRow,
   FinanceiroPedidoRow,
   OrcamentoRow,
+  ParcelaPedido,
   PedidoRow,
   SituacaoRow,
 } from "@/lib/types/pedidos";
@@ -48,17 +48,19 @@ const COLS_PEDIDO =
   "vendedor_nome, valor_total, situacao_id, status_base, origem_situacao, " +
   "data_pedido, prazo_entrega, referencia, obs, data_mod_vhsys, lixeira";
 
-/** Resultado da onda 0 de pedidos (só roda quando `soComSaldo` ligado). */
+/** Resultado da onda 0 de pedidos (só roda quando há recorte de saldo). */
 export interface PedidosOnda0 {
   dadosPedidos: DadosPedidosPrecarregados;
-  /** Números com saldo>0, já recortados a MAX_NUMEROS_IN. */
+  /** Números do tipo de saldo selecionado, recortados a MAX_NUMEROS_IN (p/ kanban). */
   numerosSaldo: number[];
+  /** id_vhsys dos pedidos cujo saldo em aberto é cobrança à vista na entrega. */
+  naEntregaIds: Set<number>;
 }
 
 /**
- * Onda 0 (apenas quando "só com saldo" ligado): resolve os números com
- * saldo>0 ANTES do kanban, para alimentar o `.in()` das colunas.
- * Espelha o bloco `if (filtros.soComSaldo)` de pedidos/page.tsx.
+ * Onda 0 (apenas quando há recorte de saldo): resolve os números do pedido com
+ * saldo>0 ANTES do kanban (para o `.in()` das colunas), já recortados pelo
+ * TIPO de saldo (a prazo vs a receber na entrega) via forma de pagamento.
  */
 export async function pedidosOnda0(
   supabase: DB,
@@ -66,9 +68,51 @@ export async function pedidosOnda0(
   escopo: Escopo
 ): Promise<PedidosOnda0> {
   const dadosPedidos = await buscarDadosPedidos(supabase, filtros, escopo);
-  const todos = numerosComSaldoDeDados(dadosPedidos);
-  const numerosSaldo = todos.slice(0, MAX_NUMEROS_IN);
-  return { dadosPedidos, numerosSaldo };
+
+  // Pedidos com saldo > 0 (numero + id_vhsys para ligar às contas).
+  const comSaldo = dadosPedidos.pedidos.filter(
+    (p) => (dadosPedidos.fin.get(p.numero)?.saldo ?? 0) > 0
+  );
+  const idVhsysComSaldo = comSaldo
+    .map((p) => p.id_vhsys)
+    .filter((x): x is number => !!x);
+
+  // Classifica por forma de pagamento (mesma regra do card).
+  const contas = await buscarContasForma(supabase, idVhsysComSaldo);
+  const naEntregaIds = classificarCobrancaNaEntrega(contas);
+
+  // Recorta pelo tipo escolhido.
+  const ehEntrega = (p: { id_vhsys: number }) =>
+    p.id_vhsys != null && naEntregaIds.has(p.id_vhsys);
+  const filtrados = comSaldo.filter((p) =>
+    filtros.saldoTipo === "entrega"
+      ? ehEntrega(p)
+      : filtros.saldoTipo === "prazo"
+        ? !ehEntrega(p)
+        : true
+  );
+
+  const numerosSaldo = filtrados.map((p) => p.numero).slice(0, MAX_NUMEROS_IN);
+  return { dadosPedidos, numerosSaldo, naEntregaIds };
+}
+
+/** Busca contas a receber (com forma de pagamento) por pedido_resolvido, em chunks. */
+async function buscarContasForma(
+  supabase: DB,
+  idVhsysList: number[]
+): Promise<ContaForma[]> {
+  const out: ContaForma[] = [];
+  for (let i = 0; i < idVhsysList.length; i += 200) {
+    const chunk = idVhsysList.slice(i, i + 200);
+    if (!chunk.length) continue;
+    const { data } = await supabase
+      .from("vhsys_contas_receber")
+      .select("pedido_resolvido, valor, valor_pago, vencimento, forma_pagamento:dados->>forma_pagamento")
+      .in("pedido_resolvido", chunk)
+      .eq("lixeira", false);
+    if (data) out.push(...((data as unknown as ContaForma[]) ?? []));
+  }
+  return out;
 }
 
 /** Resultado bruto da onda 1 de pedidos (antes do mapeamento para kanban). */
@@ -95,7 +139,8 @@ export async function pedidosOnda1(
   filtros: FiltrosCrm,
   escopo: Escopo,
   precarregados?: DadosPedidosPrecarregados | null,
-  numerosSaldo?: number[] | null
+  numerosSaldo?: number[] | null,
+  naEntregaIds?: Set<number> | null
 ): Promise<PedidosOnda1> {
   const role = escopo.role;
 
@@ -153,7 +198,7 @@ export async function pedidosOnda1(
     role !== "vendedor"
       ? supabase.from("vhsys_vendedores").select("id_vhsys, nome").order("nome")
       : Promise.resolve({ data: [] as { id_vhsys: number; nome: string }[] }),
-    metricasPedidos(supabase, filtros, escopo, precarregados ?? undefined),
+    metricasPedidos(supabase, filtros, escopo, precarregados ?? undefined, naEntregaIds ?? undefined),
     Promise.all([...consultasColunas, consultaEntregues]),
   ]);
 
@@ -182,6 +227,74 @@ export interface PedidosOnda2 {
   financeiro: FinanceiroPedidoRow[];
   clientes: ClientePrefillRow[];
   entregasVinculadas: { pedido_id: string | null }[];
+  /** id_vhsys dos pedidos cujo saldo em aberto é cobrança à vista na entrega. */
+  cobrancaNaEntregaIds: Set<number>;
+  /** Parcelas (contas a receber) por id_vhsys do pedido, ordenadas por vencimento. */
+  parcelasPorPedido: Map<number, ParcelaPedido[]>;
+}
+
+/** Formas de pagamento consideradas "à vista" (cobrança na entrega). */
+const FORMAS_A_VISTA = new Set<string>(["Dinheiro"]);
+
+/** Conta a receber (espelho) com a forma de pagamento extraída do jsonb. */
+interface ContaForma {
+  pedido_resolvido: number | null;
+  valor: number | null;
+  valor_pago: number | null;
+  vencimento: string | null;
+  forma_pagamento: string | null;
+}
+
+/** Agrupa as contas em parcelas por pedido (id_vhsys), ordenadas por vencimento. */
+function montarParcelasPorPedido(
+  contas: ContaForma[]
+): Map<number, ParcelaPedido[]> {
+  const mapa = new Map<number, ParcelaPedido[]>();
+  for (const c of contas) {
+    if (c.pedido_resolvido == null) continue;
+    const arr = mapa.get(c.pedido_resolvido) ?? [];
+    arr.push({
+      vencimento: c.vencimento,
+      valor: Number(c.valor ?? 0),
+      valor_pago: Number(c.valor_pago ?? 0),
+      forma_pagamento: c.forma_pagamento,
+    });
+    mapa.set(c.pedido_resolvido, arr);
+  }
+  for (const arr of Array.from(mapa.values())) {
+    arr.sort((a: ParcelaPedido, b: ParcelaPedido) =>
+      (a.vencimento ?? "").localeCompare(b.vencimento ?? "")
+    );
+  }
+  return mapa;
+}
+
+/**
+ * Classifica os pedidos cujo SALDO EM ABERTO é cobrança à vista na entrega.
+ * Regra: o pedido entra no conjunto se tem contas em aberto e TODAS elas são
+ * "à vista" (Dinheiro). Boleto/faturado/etc. (ou misto/forma desconhecida) ⇒
+ * a prazo, fora do conjunto — evita marcar como "a receber na entrega".
+ */
+function classificarCobrancaNaEntrega(contas: ContaForma[]): Set<number> {
+  const abertasPorPedido = new Map<number, ContaForma[]>();
+  for (const c of contas) {
+    if (c.pedido_resolvido == null) continue;
+    const aberto = (Number(c.valor ?? 0) - Number(c.valor_pago ?? 0)) > 0.01;
+    if (!aberto) continue;
+    const arr = abertasPorPedido.get(c.pedido_resolvido) ?? [];
+    arr.push(c);
+    abertasPorPedido.set(c.pedido_resolvido, arr);
+  }
+
+  const ids = new Set<number>();
+  for (const [idVhsys, abertas] of Array.from(abertasPorPedido.entries())) {
+    const todasAVista = abertas.every(
+      (c: ContaForma) =>
+        c.forma_pagamento != null && FORMAS_A_VISTA.has(c.forma_pagamento)
+    );
+    if (todasAVista) ids.add(idVhsys);
+  }
+  return ids;
 }
 
 /**
@@ -193,30 +306,50 @@ export async function pedidosOnda2(
   pedidos: PedidoRow[]
 ): Promise<PedidosOnda2> {
   const pedidoIds = pedidos.map((p) => p.id);
+  const idVhsysList = pedidos
+    .map((p) => p.id_vhsys)
+    .filter((x): x is number => !!x);
   const clienteIds = Array.from(
     new Set(pedidos.map((p) => p.cliente_id_vhsys).filter((x): x is number => !!x))
   );
 
-  const [{ data: financeiro }, { data: clientes }, { data: entregasVinculadas }] =
-    await Promise.all([
-      pedidoIds.length
-        ? supabase.from("vhsys_pedidos_financeiro").select("*").in("pedido_id", pedidoIds)
-        : Promise.resolve({ data: [] as FinanceiroPedidoRow[] }),
-      clienteIds.length
-        ? supabase
-            .from("vhsys_clientes")
-            .select("id_vhsys, cnpj_cpf, bairro, endereco, numero")
-            .in("id_vhsys", clienteIds)
-        : Promise.resolve({ data: [] as ClientePrefillRow[] }),
-      pedidoIds.length
-        ? supabase.from("entregas").select("pedido_id").in("pedido_id", pedidoIds)
-        : Promise.resolve({ data: [] as { pedido_id: string | null }[] }),
-    ]);
+  const [
+    { data: financeiro },
+    { data: clientes },
+    { data: entregasVinculadas },
+    { data: contas },
+  ] = await Promise.all([
+    pedidoIds.length
+      ? supabase.from("vhsys_pedidos_financeiro").select("*").in("pedido_id", pedidoIds)
+      : Promise.resolve({ data: [] as FinanceiroPedidoRow[] }),
+    clienteIds.length
+      ? supabase
+          .from("vhsys_clientes")
+          .select("id_vhsys, cnpj_cpf, bairro, endereco, numero")
+          .in("id_vhsys", clienteIds)
+      : Promise.resolve({ data: [] as ClientePrefillRow[] }),
+    pedidoIds.length
+      ? supabase.from("entregas").select("pedido_id").in("pedido_id", pedidoIds)
+      : Promise.resolve({ data: [] as { pedido_id: string | null }[] }),
+    // Contas em aberto dos cards visíveis, com a forma de pagamento (jsonb).
+    // Vínculo conta↔pedido é por pedido_resolvido = pedidos.id_vhsys.
+    idVhsysList.length
+      ? supabase
+          .from("vhsys_contas_receber")
+          .select("pedido_resolvido, valor, valor_pago, vencimento, forma_pagamento:dados->>forma_pagamento")
+          .in("pedido_resolvido", idVhsysList)
+          .eq("lixeira", false)
+      : Promise.resolve({ data: [] as ContaForma[] }),
+  ]);
+
+  const contasArr = (contas ?? []) as ContaForma[];
 
   return {
     financeiro: (financeiro ?? []) as FinanceiroPedidoRow[],
     clientes: (clientes ?? []) as ClientePrefillRow[],
     entregasVinculadas: (entregasVinculadas ?? []) as { pedido_id: string | null }[],
+    cobrancaNaEntregaIds: classificarCobrancaNaEntrega(contasArr),
+    parcelasPorPedido: montarParcelasPorPedido(contasArr),
   };
 }
 

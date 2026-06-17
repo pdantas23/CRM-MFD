@@ -67,8 +67,24 @@ export interface OrcamentoRow {
   lixeira: boolean;
 }
 
+/** Parcela (conta a receber) de um pedido, para exibição no detalhe. */
+export interface ParcelaPedido {
+  vencimento: string | null;
+  valor: number;
+  valor_pago: number;
+  forma_pagamento: string | null;
+}
+
 export interface PedidoKanban extends PedidoRow {
   financeiro: FinanceiroPedidoRow | null;
   cliente: ClientePrefillRow | null;
   entregaRegistrada: boolean;
+  /**
+   * true só quando o saldo em aberto é cobrança à vista NA ENTREGA
+   * (contas em "Dinheiro"). Vendas a prazo (boleto/faturado/etc.) ficam false —
+   * o saldo é devido depois, não na entrega.
+   */
+  cobrancaNaEntrega: boolean;
+  /** Parcelas (contas a receber) do pedido, ordenadas por vencimento. */
+  parcelas: ParcelaPedido[];
 }

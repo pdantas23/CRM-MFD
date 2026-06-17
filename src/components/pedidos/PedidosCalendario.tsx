@@ -128,7 +128,14 @@ export function PedidosCalendario({
 
   // Converte PedidoRow para PedidoKanban (sem financeiro/cliente/entregaRegistrada)
   function toKanban(p: PedidoRow): PedidoKanban {
-    return { ...p, financeiro: null, cliente: null, entregaRegistrada: false };
+    return {
+      ...p,
+      financeiro: null,
+      cliente: null,
+      entregaRegistrada: false,
+      cobrancaNaEntrega: false,
+      parcelas: [],
+    };
   }
 
   return (
