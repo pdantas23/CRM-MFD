@@ -422,9 +422,11 @@ export function NovoOrcamentoPageForm({
       ...(pesoLiq > 0
         ? { peso_total_nota_liq: pesoLiq.toFixed(3) }
         : {}),
-      // Totais calculados
-      ...(valorProdutos > 0 ? { valor_total_produtos: valorProdutos } : {}),
-      ...(valorTotal > 0 ? { valor_total_nota: valorTotal.toFixed(2) } : {}),
+      // Totais: NÃO enviar valor_total_produtos/valor_total_nota na criação.
+      // O VHSYS grava o total enviado e depois SOMA cada produto postado em
+      // /orcamentos/{id}/produtos, dobrando o valor. Omitindo os totais, a API
+      // os recalcula a partir dos produtos + frete (frete_pedido) - desconto
+      // (desconto_pedido), que vão no payload acima.
     };
 
     // Vendedor (admin escolhe; vendedor usa o próprio via server action)
