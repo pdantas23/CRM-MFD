@@ -20,6 +20,8 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
   const router = useRouter();
   const situacao = situacoes.find((s) => s.id_vhsys === pedido.situacao_id);
   const fin = pedido.financeiro;
+  // Entregue é situação final — não pode mais mover.
+  const entregue = pedido.situacao_id === SITUACAO.ENTREGUE;
 
   // Controle de mover situação — só visível para admin
   const [erroMover, setErroMover] = useState<string | null>(null);
@@ -131,6 +133,36 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
                 </dd>
               </div>
             </dl>
+
+            {pedido.parcelas.length > 0 && (
+              <div className="mt-3 border-t border-gray-200 pt-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Parcelas
+                </p>
+                <ul className="space-y-1 text-sm">
+                  {pedido.parcelas.map((parc, i) => {
+                    const pago = parc.valor_pago >= parc.valor - 0.01;
+                    return (
+                      <li key={i} className="flex items-center justify-between gap-2">
+                        <span className="text-gray-600">
+                          {parc.vencimento ? formatarData(parc.vencimento) : "sem vencimento"}
+                          {parc.forma_pagamento && (
+                            <span className="ml-1 text-xs text-gray-400">
+                              · {parc.forma_pagamento}
+                            </span>
+                          )}
+                        </span>
+                        <span className={`font-medium ${pago ? "text-green-700" : "text-gray-900"}`}>
+                          {formatBRL(parc.valor)}
+                          {pago && <span className="ml-1 text-xs font-normal">(pago)</span>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
             {fin?.divergente && (
               <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 As contas a receber ({formatBRL(fin.total_contas)}) não batem com o
@@ -152,8 +184,15 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
             </div>
           )}
 
+          {/* Pedido entregue: situação final, sem mover */}
+          {podeEscrever && entregue && (
+            <p className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500">
+              Pedido entregue — situação final. Não é possível mover.
+            </p>
+          )}
+
           {/* Painel de mover situação — admin ou vendedor, sem drag-and-drop */}
-          {podeEscrever && opcoesDestino.length > 0 && (
+          {podeEscrever && !entregue && opcoesDestino.length > 0 && (
             <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-700">
                 Mover situação
@@ -199,7 +238,9 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
             </button>
           ) : (
             <span className="inline-flex flex-1 items-center justify-center rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
-              Entrega bloqueada — aguardando pagamento
+              {pedido.situacao_id === SITUACAO.ENTREGUE
+                ? "Entrega bloqueada — pedido já entregue"
+                : "Entrega disponível apenas em separação ou entrega parcial"}
             </span>
           )}
           <button type="button" onClick={onClose} className="btn-secondary">

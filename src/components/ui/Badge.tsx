@@ -10,6 +10,13 @@ const statusConfig: Record<StatusEntrega, { label: string; class: string }> = {
   entrega_parcial: { label: "Entrega Parcial", class: "bg-blue-100 text-blue-800 border-blue-200" },
 };
 
+// Cor de fundo + borda-esquerda das linhas de entrega, por status.
+// Usado nas listagens (dashboard do dia e tabela completa).
+export const statusRowClass: Record<StatusEntrega, string> = {
+  entrega_final: "bg-green-50 hover:bg-green-100 border-l-4 border-green-400",
+  entrega_parcial: "bg-blue-50 hover:bg-blue-100 border-l-4 border-blue-400",
+};
+
 export function PeriodoBadge({ periodo }: { periodo: Periodo }) {
   const config = periodoConfig[periodo];
   return (

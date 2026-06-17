@@ -24,6 +24,17 @@ export interface Entrega {
   anexo_nome: string | null;
   ordem: number | null;
   pedido_id: string | null;
+  orcamento_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** Anexo de uma entrega (múltiplos por entrega; tabela entrega_anexos). */
+export interface EntregaAnexo {
+  id: string;
+  entrega_id: string;
+  url: string;
+  nome: string;
   created_by: string | null;
   created_at: string;
 }
@@ -83,6 +94,7 @@ export type Database = {
           anexo_url: string | null;
           anexo_nome: string | null;
           pedido_id: string | null;
+          orcamento_id: string | null;
           created_by: string | null;
           created_at: string;
         };
@@ -99,6 +111,7 @@ export type Database = {
           anexo_url?: string | null;
           anexo_nome?: string | null;
           pedido_id?: string | null;
+          orcamento_id?: string | null;
           created_by?: string | null;
           created_at?: string;
         };
@@ -115,6 +128,34 @@ export type Database = {
           anexo_url?: string | null;
           anexo_nome?: string | null;
           pedido_id?: string | null;
+          orcamento_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      entrega_anexos: {
+        Row: {
+          id: string;
+          entrega_id: string;
+          url: string;
+          nome: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          entrega_id: string;
+          url: string;
+          nome: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          entrega_id?: string;
+          url?: string;
+          nome?: string;
           created_by?: string | null;
           created_at?: string;
         };

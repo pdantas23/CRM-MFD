@@ -1,16 +1,28 @@
 "use client";
 
-import { useState, useRef, useTransition } from "react";
+import { useState, useRef, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Spinner } from "@/components/ui/Spinner";
 import { Select } from "@/components/ui/Select";
-import { registrarEntregaEmSeparacao } from "@/lib/vhsys/acoes";
+import { buscarOrcamentoParaEntrega, criarEntregaDeOrcamento } from "@/lib/entregas/acoes";
+import { formatBRL } from "@/lib/format";
 import type { Entrega, EntregaFormData, Periodo, StatusEntrega } from "@/lib/types/database";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function validarUuid(v: string | undefined): string | null {
-  return v && UUID_RE.test(v) ? v : null;
+interface ItemApi {
+  id_ped_produto: number;
+  desc_produto: string;
+  qtde_produto: string;
+  valor_unit_produto: string;
+  desconto_produto?: number;
+}
+
+interface ItemPreview {
+  id_ped_produto: number;
+  desc_produto: string;
+  qtde: number;
+  valor_unit: number;
+  desconto: number;
 }
 
 // Pré-preenchimento opcional dos dados do cliente (ex.: vindo da aba Pedidos
@@ -25,6 +37,9 @@ export interface EntregaPrefill {
   pedido_id?: string;
   /** id_vhsys (número inteiro) do pedido — usado para chamar a API VHSYS. */
   pedido_id_vhsys?: number;
+  /** Número do orçamento de origem, resolvido a partir do pedido (card → entrega).
+   *  Quando presente, o form busca/vincula o orçamento automaticamente. */
+  orcamento_numero?: number;
 }
 
 interface EntregaFormProps {
@@ -107,6 +122,95 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
   // Aviso discreto: falha ao mover situação VHSYS não reverte a entrega
   const [avisoVhsys, setAvisoVhsys] = useState<string | null>(null);
 
+  // Vínculo obrigatório com ORÇAMENTO (fluxo "puxar de um orçamento"), só no
+  // create. O orçamento precisa já ter virado pedido (pedido_emitido).
+  const [orcamentoVinc, setOrcamentoVinc] = useState<{ numero: number } | null>(null);
+  const [termoOrc, setTermoOrc] = useState("");
+  const [buscandoOrc, setBuscandoOrc] = useState(false);
+  const [avisoOrc, setAvisoOrc] = useState<
+    { tipo: "ok" | "erro"; msg: string } | null
+  >(null);
+  const [itensOrc, setItensOrc] = useState<ItemPreview[] | null>(null);
+  const [carregandoItens, setCarregandoItens] = useState(false);
+
+  function carregarItensOrcamento(idVhsys: number) {
+    setCarregandoItens(true);
+    setItensOrc(null);
+    fetch(`/api/orcamento-itens/${idVhsys}`)
+      .then((r) => r.json())
+      .then((linhas: ItemApi[]) => {
+        setItensOrc(
+          (Array.isArray(linhas) ? linhas : []).map((i) => ({
+            id_ped_produto: i.id_ped_produto,
+            desc_produto: i.desc_produto,
+            qtde: Number(i.qtde_produto),
+            valor_unit: Number(i.valor_unit_produto),
+            desconto: Number(i.desconto_produto ?? 0),
+          }))
+        );
+      })
+      .catch(() => setItensOrc([]))
+      .finally(() => setCarregandoItens(false));
+  }
+
+  async function buscarOrcamento(numeroArg?: number) {
+    const numero = numeroArg ?? Number(termoOrc.trim());
+    if (!Number.isInteger(numero) || numero <= 0) {
+      setAvisoOrc({ tipo: "erro", msg: "Informe um número de orçamento válido." });
+      return;
+    }
+
+    setBuscandoOrc(true);
+    setAvisoOrc(null);
+    setOrcamentoVinc(null);
+    setItensOrc(null);
+    try {
+      const res = await buscarOrcamentoParaEntrega(numero);
+      if (!res.ok) {
+        setAvisoOrc({ tipo: "erro", msg: res.erro });
+        return;
+      }
+      const { orcamento } = res;
+      if (!orcamento.emitido) {
+        setAvisoOrc({
+          tipo: "erro",
+          msg: `Orçamento #${orcamento.numero} ainda não virou pedido — não permite cadastrar entrega.`,
+        });
+        return;
+      }
+
+      setOrcamentoVinc({ numero: orcamento.numero });
+      setForm((prev) => ({
+        ...prev,
+        nome_cliente: orcamento.nome_cliente ?? prev.nome_cliente,
+        numero_orcamento: String(orcamento.numero),
+        cpf_cnpj: orcamento.cpf_cnpj ? formatCpfCnpj(orcamento.cpf_cnpj) : prev.cpf_cnpj,
+        bairro: orcamento.bairro ?? prev.bairro,
+        endereco: orcamento.endereco ?? prev.endereco,
+      }));
+      setAvisoOrc({
+        tipo: "ok",
+        msg: `Orçamento #${orcamento.numero} vinculado e dados preenchidos.`,
+      });
+      carregarItensOrcamento(orcamento.idVhsys);
+    } catch {
+      setAvisoOrc({ tipo: "erro", msg: "Erro ao buscar orçamento." });
+    } finally {
+      setBuscandoOrc(false);
+    }
+  }
+
+  // Fluxo card → entrega: o orçamento de origem já vem resolvido do pedido;
+  // busca e vincula automaticamente ao abrir.
+  useEffect(() => {
+    const num = prefill?.orcamento_numero;
+    if (mode === "create" && num) {
+      setTermoOrc(String(num));
+      buscarOrcamento(num);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) {
@@ -184,53 +288,40 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
       const supabase = createClient();
 
       if (mode === "create") {
-        // C1: created_by é obrigatório pela policy de INSERT do vendedor
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
-        if (!currentUser) throw new Error("Sessão expirada. Faça login novamente.");
+        if (!orcamentoVinc) {
+          setError("Vincule um orçamento (já emitido como pedido) antes de cadastrar.");
+          setLoading(false);
+          return;
+        }
 
-        const payload = {
-          data: form.data,
-          periodo: form.periodo as Periodo,
-          status: form.status as StatusEntrega,
-          nome_cliente: form.nome_cliente,
-          cpf_cnpj: form.cpf_cnpj,
-          numero_orcamento: form.numero_orcamento,
-          bairro: form.bairro,
-          endereco: form.endereco,
-          anexo_url: null as string | null,
-          anexo_nome: null as string | null,
-          pedido_id: validarUuid(prefill?.pedido_id),
-          created_by: currentUser.id,
-        };
+        // Server Action valida admin + orçamento emitido, insere a entrega
+        // vinculada (orcamento_id) e invalida o cache da lista.
+        const res = await criarEntregaDeOrcamento(
+          {
+            data: form.data,
+            periodo: form.periodo as Periodo,
+            status: form.status as StatusEntrega,
+            nome_cliente: form.nome_cliente,
+            cpf_cnpj: form.cpf_cnpj,
+            numero_orcamento: form.numero_orcamento,
+            bairro: form.bairro,
+            endereco: form.endereco,
+          },
+          orcamentoVinc.numero
+        );
 
-        const { data: newEntrega, error: insertError } = await supabase
-          .from("entregas")
-          .insert(payload)
-          .select()
-          .single();
+        if (!res.ok) {
+          setError(res.erro);
+          setLoading(false);
+          return;
+        }
 
-        if (insertError) throw insertError;
-
-        if (form.anexo && newEntrega) {
-          const typed = newEntrega as Entrega;
-          const { url, nome } = await uploadAnexo(form.anexo, typed.id);
+        if (form.anexo) {
+          const { url, nome } = await uploadAnexo(form.anexo, res.entregaId);
           await supabase
             .from("entregas")
             .update({ anexo_url: url, anexo_nome: nome })
-            .eq("id", typed.id);
-        }
-
-        // Tenta mover pedido para EM_SEPARACAO no VHSYS (falha não reverte entrega)
-        if (prefill?.pedido_id_vhsys) {
-          const resultadoVhsys = await registrarEntregaEmSeparacao(prefill.pedido_id_vhsys);
-          if (!resultadoVhsys.ok) {
-            // Permanecer na página para o aviso ser exibido; o usuário navega manualmente
-            setAvisoVhsys(
-              `Entrega salva, mas não foi possível atualizar o pedido no VHSYS: ${resultadoVhsys.erro}`
-            );
-            setLoading(false);
-            return;
-          }
+            .eq("id", res.entregaId);
         }
 
         router.push("/entregas");
@@ -345,6 +436,98 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
           Dados do Cliente
         </h2>
         <div className="space-y-5">
+          {mode === "create" && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+              <label className="mb-1.5 block text-sm font-medium text-blue-900">
+                Puxar de um orçamento <span className="text-red-500">*</span>
+              </label>
+              <p className="mb-2 text-xs text-blue-800/80">
+                Informe o número do orçamento. Ele precisa já ter virado pedido
+                para gerar a entrega.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={termoOrc}
+                  onChange={(e) => {
+                    setTermoOrc(e.target.value);
+                    setOrcamentoVinc(null);
+                    setItensOrc(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      buscarOrcamento();
+                    }
+                  }}
+                  className="input-base flex-1"
+                  placeholder="Número do orçamento"
+                />
+                <button
+                  type="button"
+                  onClick={() => buscarOrcamento()}
+                  disabled={buscandoOrc || !termoOrc.trim()}
+                  className="btn-secondary shrink-0 disabled:opacity-60"
+                >
+                  {buscandoOrc ? "Buscando…" : "Buscar"}
+                </button>
+              </div>
+              {avisoOrc && (
+                <p
+                  className={`mt-2 text-xs ${
+                    avisoOrc.tipo === "ok" ? "text-green-700" : "text-red-600"
+                  }`}
+                >
+                  {avisoOrc.msg}
+                </p>
+              )}
+
+              {/* Preview dos produtos do orçamento. */}
+              {orcamentoVinc && (carregandoItens || itensOrc) && (
+                <div className="mt-3 rounded-md border border-blue-200 bg-white p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Produtos do orçamento
+                  </p>
+                  {carregandoItens ? (
+                    <div className="space-y-2">
+                      {[...Array(2)].map((_, i) => (
+                        <div key={i} className="h-4 animate-pulse rounded bg-gray-100" />
+                      ))}
+                    </div>
+                  ) : (itensOrc?.length ?? 0) === 0 ? (
+                    <p className="text-xs text-gray-400">
+                      Nenhum produto encontrado para este orçamento.
+                    </p>
+                  ) : (
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b text-gray-400">
+                          <th className="pb-1 text-left font-medium">Produto</th>
+                          <th className="w-10 pb-1 text-right font-medium">Qtd</th>
+                          <th className="w-20 pb-1 text-right font-medium">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {itensOrc!.map((item) => (
+                          <tr key={item.id_ped_produto} className="border-b last:border-0">
+                            <td className="py-1 pr-2 text-gray-800">{item.desc_produto}</td>
+                            <td className="py-1 text-right text-gray-700">{item.qtde}</td>
+                            <td className="py-1 text-right font-medium text-gray-900">
+                              {formatBRL(
+                                item.qtde * item.valor_unit * (1 - item.desconto / 100)
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
               Nome do Cliente <span className="text-red-500">*</span>
@@ -410,7 +593,7 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
               value={form.numero_orcamento}
               onChange={handleChange}
               className="input-base"
-              placeholder="ORC-0001"
+              placeholder="Preenchido ao puxar o orçamento"
             />
           </div>
         </div>
@@ -530,7 +713,16 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
       </div>
 
       <div className="flex flex-col gap-3 pb-8">
-        <button type="submit" disabled={loading} className="btn-primary w-full">
+        {mode === "create" && !orcamentoVinc && (
+          <p className="text-xs text-gray-500">
+            Vincule um orçamento acima para habilitar o cadastro.
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={loading || (mode === "create" && !orcamentoVinc)}
+          className="btn-primary w-full"
+        >
           {loading ? (
             <>
               <svg

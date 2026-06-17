@@ -32,15 +32,36 @@ export default async function NovaEntregaPage({
   // Pré-preenchimento opcional vindo da aba Pedidos (query params)
   const pedidoUuid = paramUuid(searchParams?.pedido_id);
 
-  // Busca id_vhsys do pedido para chamar a API VHSYS ao criar a entrega
+  // A partir do pedido: id_vhsys (para a API) e o ORÇAMENTO de origem, resolvido
+  // pela referência que o VHSYS grava no pedido (referencia "ORC-{id}" ou a obs
+  // "Referência: Orçamento #N"). Assim a entrega criada via card já nasce com o
+  // orçamento vinculado.
   let pedidoIdVhsys: number | undefined;
+  let orcamentoNumero: number | undefined;
   if (pedidoUuid) {
     const { data: pedidoRow } = await supabase
       .from("vhsys_pedidos")
-      .select("id_vhsys")
+      .select("id_vhsys, obs, referencia")
       .eq("id", pedidoUuid)
       .single();
-    pedidoIdVhsys = (pedidoRow as { id_vhsys: number } | null)?.id_vhsys;
+    const ped = pedidoRow as
+      | { id_vhsys: number; obs: string | null; referencia: string | null }
+      | null;
+    pedidoIdVhsys = ped?.id_vhsys;
+
+    const refMatch = ped?.referencia?.match(/^ORC-(\d+)$/i);
+    const obsMatch = ped?.obs?.match(/or[çc]amento\s*#\s*(\d+)/i);
+    if (refMatch) {
+      // referencia guarda o id_vhsys do orçamento → buscar o número.
+      const { data: orcRow } = await supabase
+        .from("vhsys_orcamentos")
+        .select("numero")
+        .eq("id_vhsys", Number(refMatch[1]))
+        .maybeSingle();
+      orcamentoNumero = (orcRow as { numero: number } | null)?.numero;
+    } else if (obsMatch) {
+      orcamentoNumero = Number(obsMatch[1]);
+    }
   }
 
   const prefill: EntregaPrefill = {
@@ -51,6 +72,7 @@ export default async function NovaEntregaPage({
     endereco: paramString(searchParams?.endereco),
     pedido_id: pedidoUuid,
     pedido_id_vhsys: pedidoIdVhsys,
+    orcamento_numero: orcamentoNumero,
   };
 
   return (

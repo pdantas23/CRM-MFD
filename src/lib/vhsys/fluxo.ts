@@ -44,22 +44,18 @@ export const SEGMENTO_ENTREGA = new Set<number>([
   SITUACAO.ENTREGUE,
 ]);
 
-/** Gate: cadastro de entrega habilitado nestas situações. */
+/** Gate: cadastro de entrega habilitado apenas em separação e entrega parcial. */
 const GATE_ENTREGA = new Set<number>([
-  SITUACAO.PAGAMENTO_PARCIAL,
-  SITUACAO.PAGAMENTO_APROVADO,
   SITUACAO.EM_SEPARACAO,
   SITUACAO.ENTREGA_PARCIAL,
-  SITUACAO.ENTREGUE,
 ]);
 
 export function entregaHabilitada(situacaoId: number | null): boolean {
   return situacaoId !== null && GATE_ENTREGA.has(situacaoId);
 }
 
-// Cadastrar entrega ⇒ situação do pedido vai para EM_SEPARACAO (859),
-// inclusive vindo de PAGAMENTO_PARCIAL (1179). Escrita habilitada via
-// registrarEntregaEmSeparacao() em src/lib/vhsys/acoes.ts.
+// Cadastrar entrega ⇒ situação do pedido vai para EM_SEPARACAO (859).
+// Escrita habilitada via registrarEntregaEmSeparacao() em src/lib/vhsys/acoes.ts.
 
 // ── Mapeamento situação personalizada → enum-base da API ──────────────────
 // Usado em POST /pedidos/{id}/status e POST /orcamentos/{id}/status.

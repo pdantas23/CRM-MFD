@@ -3,12 +3,14 @@
 // Recebe dados já buscados pelo server component.
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
+import { useRouter } from "next/navigation";
 import { EntityToolbar } from "@/components/crm/EntityToolbar";
 import { BotaoNavegacao } from "@/components/ui/BotaoNavegacao";
 import { EntityMetrics } from "@/components/crm/EntityMetrics";
 import { FiltrosEntrega } from "@/components/crm/FiltrosEntrega";
-import { PeriodoBadge, StatusBadge } from "@/components/ui/Badge";
+import { PeriodoBadge, StatusBadge, statusRowClass } from "@/components/ui/Badge";
+import { EntregaModal } from "@/components/entregas/EntregaModal";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import type { Metrica } from "@/lib/crm/metricas";
 import type { Entrega } from "@/lib/types/database";
@@ -38,6 +40,9 @@ function TabelaInterna({
   entregas: Entrega[];
   isAdmin: boolean;
 }) {
+  const router = useRouter();
+  const [modalEntrega, setModalEntrega] = useState<Entrega | null>(null);
+
   if (entregas.length === 0) {
     return (
       <div className="px-6 py-16 text-center">
@@ -66,7 +71,11 @@ function TabelaInterna({
         </thead>
         <tbody className="divide-y divide-gray-100">
           {entregas.map((entrega) => (
-            <tr key={entrega.id} className="transition-colors hover:bg-gray-50">
+            <tr
+              key={entrega.id}
+              onClick={() => setModalEntrega(entrega)}
+              className={`cursor-pointer transition-colors ${statusRowClass[entrega.status]}`}
+            >
               <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">
                 {formatDate(entrega.data)}
               </td>
@@ -86,11 +95,12 @@ function TabelaInterna({
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
-                  <Link href={`/entregas/${entrega.id}`} className="text-sm font-medium text-blue-600 hover:text-blue-700">
-                    Ver
-                  </Link>
                   {isAdmin && (
-                    <Link href={`/entregas/${entrega.id}/editar`} className="text-sm font-medium text-gray-500 hover:text-gray-700">
+                    <Link
+                      href={`/entregas/${entrega.id}/editar`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-sm font-medium text-gray-500 hover:text-gray-700"
+                    >
                       Editar
                     </Link>
                   )}
@@ -100,6 +110,15 @@ function TabelaInterna({
           ))}
         </tbody>
       </table>
+
+      {modalEntrega && (
+        <EntregaModal
+          entrega={modalEntrega}
+          isAdmin={isAdmin}
+          onClose={() => setModalEntrega(null)}
+          onChanged={() => router.refresh()}
+        />
+      )}
     </div>
   );
 }
