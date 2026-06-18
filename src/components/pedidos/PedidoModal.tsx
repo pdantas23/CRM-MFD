@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatBRL, formatarData } from "@/lib/format";
-import { entregaHabilitada, COLUNAS_KANBAN, SITUACAO } from "@/lib/vhsys/fluxo";
+import { entregaHabilitada, COLUNAS_KANBAN, SITUACAO, SEGMENTO_ENTREGA } from "@/lib/vhsys/fluxo";
 import { moverSituacaoPedido } from "@/lib/vhsys/acoes";
 import { hrefNovaEntrega } from "./PedidoCard";
 import type { PedidoKanban, SituacaoRow } from "@/lib/types/pedidos";
@@ -20,6 +20,20 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
   const router = useRouter();
   const situacao = situacoes.find((s) => s.id_vhsys === pedido.situacao_id);
   const fin = pedido.financeiro;
+  // Cor do saldo: a prazo (boleto/faturado) = laranja; vermelho só quando é
+  // cobrança à vista pendente na entrega (deveria receber agora e não recebeu).
+  // Verde = quitado. (A regra de "não conciliado" depende do Open Finance, ainda
+  // não implementado — por ora o proxy é a cobrança à vista pendente.)
+  const saldoPedido = fin?.saldo ?? 0;
+  const emEntrega =
+    pedido.situacao_id !== null && SEGMENTO_ENTREGA.has(pedido.situacao_id);
+  const cobrarNaEntrega = emEntrega && pedido.cobrancaNaEntrega;
+  const saldoCor =
+    saldoPedido <= 0
+      ? "text-green-700"
+      : cobrarNaEntrega
+        ? "text-red-700"
+        : "text-amber-700";
   // Entregue é situação final — não pode mais mover.
   const entregue = pedido.situacao_id === SITUACAO.ENTREGUE;
 
@@ -124,12 +138,8 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
               </div>
               <div className="flex justify-between border-t border-gray-200 pt-2">
                 <dt className="font-medium text-gray-700">Saldo</dt>
-                <dd
-                  className={`font-bold ${
-                    (fin?.saldo ?? 0) > 0 ? "text-red-700" : "text-green-700"
-                  }`}
-                >
-                  {formatBRL(fin?.saldo ?? 0)}
+                <dd className={`font-bold ${saldoCor}`}>
+                  {formatBRL(saldoPedido)}
                 </dd>
               </div>
             </dl>
