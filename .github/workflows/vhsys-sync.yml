@@ -1,0 +1,44 @@
+name: VHSYS sync (incremental)
+
+# Dispara o sync incremental VHSYS → espelho Supabase a cada 5 minutos, batendo
+# no endpoint protegido por CRON_SECRET. Complementa o cron diário da Vercel
+# (que roda o modo "completo" às 03:00 BRT como reconciliação/rede de segurança).
+#
+# Pré-requisitos (configurar em Settings → Secrets and variables → Actions → Secrets):
+#   - APP_BASE_URL : URL pública do deploy, sem barra final (ex.: https://crm-mfd.vercel.app)
+#   - CRON_SECRET  : mesmo valor da env var CRON_SECRET no deploy
+#
+# Observações:
+#   - O agendamento do GitHub Actions é "best-effort": em horários de pico pode
+#     atrasar alguns minutos. Para o caso de uso (espelho) isso é aceitável.
+#   - Workflows agendados são desativados automaticamente após 60 dias sem
+#     atividade no repositório — basta reabilitar na aba Actions se isso ocorrer.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # permite disparo manual pela aba Actions
+
+# Evita execuções sobrepostas (uma rodada não inicia enquanto a anterior corre).
+concurrency:
+  group: vhsys-sync-incremental
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Disparar sync incremental
+        run: |
+          code=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+            --max-time 300 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_BASE_URL }}/api/cron/vhsys-sync?modo=incremental")
+          echo "HTTP $code"
+          cat /tmp/resp.json 2>/dev/null || true
+          echo
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            echo "::error::Sync incremental falhou (HTTP $code)"
+            exit 1
+          fi
