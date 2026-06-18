@@ -4,7 +4,7 @@
 
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { emitirPedidoDeOrcamento, moverSituacaoOrcamento } from "@/lib/vhsys/acoes";
+import { moverSituacaoOrcamento } from "@/lib/vhsys/acoes";
 import { BotaoNavegacao } from "@/components/ui/BotaoNavegacao";
 import { formatBRL, formatarData } from "@/lib/format";
 import { COLUNAS_KANBAN_ORCAMENTO, NOME_COLUNA_ORC } from "@/lib/vhsys/fluxo-orcamentos";
@@ -40,13 +40,14 @@ interface Props {
   podeEscrever?: boolean;
   /** Só exibe o painel de mover situação no modo Lista (no Kanban é por drag). */
   mostrarMoverSituacao?: boolean;
+  /** Abre o formulário de emissão de pedido (em vez de emitir direto). */
+  onEmitir?: (orcamento: OrcamentoRow) => void;
   onClose: () => void;
 }
 
-export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profile, podeEscrever, mostrarMoverSituacao, onClose }: Props) {
+export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profile, podeEscrever, mostrarMoverSituacao, onEmitir, onClose }: Props) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [erro, setErro] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
 
   // Controle do painel "Mover situação"
   const [erroMover, setErroMover] = useState<string | null>(null);
@@ -108,16 +109,6 @@ export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profil
       .catch(() => setItens([]))
       .finally(() => setCarregandoItens(false));
   }, [orcamento.id_vhsys]);
-
-  function handleEmitir() {
-    setErro(null);
-    startTransition(async () => {
-      const res = await emitirPedidoDeOrcamento(orcamento.id_vhsys);
-      if (!res.ok) { setErro(res.erro ?? "Erro ao emitir pedido."); return; }
-      router.refresh();
-      onClose();
-    });
-  }
 
   const itensFiltrados = itens ?? [];
   const totalItens = itensFiltrados.reduce(
@@ -275,9 +266,6 @@ export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profil
             )}
           </div>
 
-          {erro && (
-            <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{erro}</p>
-          )}
         </div>
 
         {/* Rodapé com ações */}
@@ -300,14 +288,13 @@ export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profil
                 Editar
               </BotaoNavegacao>
             )}
-            {podeEmitir && (
+            {podeEmitir && onEmitir && (
               <button
                 type="button"
-                disabled={isPending}
-                onClick={handleEmitir}
-                className="rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-50"
+                onClick={() => onEmitir(orcamento)}
+                className="rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800"
               >
-                {isPending ? "Emitindo…" : "Emitir Pedido"}
+                Emitir Pedido
               </button>
             )}
             {!podeEmitir && (

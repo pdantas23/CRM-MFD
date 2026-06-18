@@ -6,7 +6,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { vhsysPost, vhsysPut, vhsysGet } from "./client";
+import { vhsysPost, vhsysPut, vhsysGet, vhsysDelete } from "./client";
 import { tipoStatusParaSituacao, transicaoPermitida, SITUACAO } from "./fluxo";
 import { tipoStatusOrcamento, transicaoOrcamentoPermitida, situacaoEfetivaOrcamento } from "./fluxo-orcamentos";
 import type {
@@ -14,6 +14,7 @@ import type {
   PayloadStatusOrcamento,
   PayloadCriarPedido,
   PayloadItemPedido,
+  PayloadParcelaPedido,
   RespostaCriarPedido,
   RespostaStatusPedido,
   VhsysPedido,
@@ -529,6 +530,259 @@ export async function emitirPedidoDeOrcamento(
     if (pedidoCriado[0]) await upsertPedidoNoEspelho(pedidoCriado[0]);
 
     // Atualizar espelho do orçamento com pedido_emitido=true
+    await admin
+      .from("vhsys_orcamentos")
+      .update({ pedido_emitido: true, sincronizado_em: new Date().toISOString() })
+      .eq("id_vhsys", idOrcamentoVhsys);
+
+    return { ok: true, idPedidoVhsys: idPedido };
+  } catch (err) {
+    return { ok: false, erro: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Cria pedido a partir de orçamento aprovado (situacao 768) usando os dados
+ * EDITADOS de um formulário (cabeçalho, itens e parcelas), diferente de
+ * emitirPedidoDeOrcamento que copia o orçamento tal como está.
+ *
+ * Estratégia (espelha emitirPedidoDeOrcamento): marca o orçamento como Atendido
+ * (PUT + POST status). Se a VHSYS auto-gerar o pedido (pedido_emitido=1), não
+ * cria manualmente — retorna aviso. Caso contrário, POST /pedidos +
+ * POST /pedidos/{id}/produtos (loop) + POST /pedidos/{id}/parcelas (array).
+ * Idempotente via referencia ORC-{id}. Exige admin ou vendedor (autor).
+ */
+export async function criarPedidoDeOrcamento(
+  idOrcamentoVhsys: number,
+  payload: PayloadCriarPedido,
+  itens: PayloadItemPedido[],
+  parcelas?: PayloadParcelaPedido[]
+): Promise<ResultadoAcao & { idPedidoVhsys?: number; aviso?: string }> {
+  try {
+    const ctx = await exigirAdminOuVendedor();
+
+    if (!Number.isInteger(idOrcamentoVhsys) || idOrcamentoVhsys <= 0) {
+      throw new Error("idOrcamentoVhsys inválido.");
+    }
+
+    const admin = createAdminClient();
+
+    // Busca no espelho — valida existência, situação e autoria
+    const { data: orcEspelho } = await admin
+      .from("vhsys_orcamentos")
+      .select("pedido_emitido, situacao_id, vendedor_id_vhsys, numero")
+      .eq("id_vhsys", idOrcamentoVhsys)
+      .single();
+
+    if (!orcEspelho) throw new Error("Orçamento não encontrado no espelho.");
+
+    // Vendedor só pode emitir orçamentos do próprio vendedor_id
+    if (ctx.role === "vendedor") {
+      const vendedorOrc = (orcEspelho as { vendedor_id_vhsys: number | null }).vendedor_id_vhsys ?? null;
+      if (vendedorOrc !== ctx.vendedorId) {
+        throw new Error("Permissão negada: este orçamento não pertence ao seu vendedor.");
+      }
+    }
+
+    // Idempotência: já emitido → erro visível
+    if ((orcEspelho as { pedido_emitido: boolean }).pedido_emitido) {
+      return { ok: false, erro: "Pedido já emitido para este orçamento." };
+    }
+
+    // Só orçamentos com situacao_id=768 (Aprovado) podem ser emitidos
+    const situacaoOrc = (orcEspelho as { situacao_id: number | null }).situacao_id;
+    if (situacaoOrc !== 768) {
+      throw new Error(
+        `Orçamento não está na situação Aprovado (situacao_id=${situacaoOrc}). Emissão bloqueada.`
+      );
+    }
+
+    // ── Validação do cabeçalho ────────────────────────────────────────────
+    if (!payload.nome_cliente || payload.nome_cliente.length > 255) {
+      throw new Error("nome_cliente inválido (vazio ou >255 chars).");
+    }
+    if (payload.referencia_pedido && payload.referencia_pedido.length > 100) {
+      throw new Error("referencia_pedido excede 100 caracteres.");
+    }
+    if (payload.prazo_entrega && payload.prazo_entrega.length > 20) {
+      throw new Error("prazo_entrega excede 20 caracteres.");
+    }
+    if (payload.transportadora_pedido && payload.transportadora_pedido.length > 255) {
+      throw new Error("transportadora_pedido excede 255 caracteres.");
+    }
+    // Monetários/pesos — strings decimais quando presentes
+    for (const campo of [
+      "desconto_pedido",
+      "frete_pedido",
+      "peso_total_nota",
+      "peso_total_nota_liq",
+    ] as const) {
+      const v = payload[campo];
+      if (v !== undefined && !/^\d+(\.\d+)?$/.test(v)) {
+        throw new Error(`${campo} não é decimal válido.`);
+      }
+    }
+
+    // ── Validação dos itens ───────────────────────────────────────────────
+    if (!Array.isArray(itens) || itens.length === 0) {
+      throw new Error("Pedido sem itens.");
+    }
+    for (const item of itens) {
+      if (!Number.isInteger(item.id_produto) || item.id_produto <= 0) {
+        throw new Error(`id_produto inválido: ${item.id_produto}`);
+      }
+      if (!item.desc_produto || item.desc_produto.length > 255) {
+        throw new Error("desc_produto inválido (vazio ou >255 chars).");
+      }
+      if (!Number.isFinite(item.qtde_produto) || item.qtde_produto <= 0) {
+        throw new Error(`qtde_produto deve ser > 0. Recebido: ${item.qtde_produto}`);
+      }
+      if (!Number.isFinite(item.valor_unit_produto) || item.valor_unit_produto <= 0) {
+        throw new Error(`valor_unit_produto deve ser > 0. Recebido: ${item.valor_unit_produto}`);
+      }
+      for (const campo of ["desconto_produto", "ipi_produto", "icms_produto"] as const) {
+        const v = item[campo];
+        if (v !== undefined && (!Number.isFinite(v) || v < 0)) {
+          throw new Error(`${campo} deve ser número não-negativo. Recebido: ${v}`);
+        }
+      }
+    }
+
+    // ── Validação das parcelas (se houver) ────────────────────────────────
+    if (parcelas && parcelas.length > 0) {
+      const dataRe = /^\d{4}-\d{2}-\d{2}$/;
+      for (const parcela of parcelas) {
+        if (!parcela.data_parcela || !dataRe.test(parcela.data_parcela)) {
+          throw new Error(`data_parcela inválida: ${parcela.data_parcela}. Use YYYY-MM-DD.`);
+        }
+        if (!Number.isFinite(parcela.valor_parcela) || parcela.valor_parcela <= 0) {
+          throw new Error(`valor_parcela deve ser > 0. Recebido: ${parcela.valor_parcela}`);
+        }
+        if (parcela.observacoes_parcela && parcela.observacoes_parcela.length > 255) {
+          throw new Error("observacoes_parcela excede 255 caracteres.");
+        }
+      }
+    }
+
+    // ── Vínculo com o orçamento de origem ─────────────────────────────────
+    // NÃO usamos mais `referencia_pedido = "ORC-{id}"`: a VHSYS exibe esse campo
+    // no lugar do nome do cliente na lista de pedidos. Em vez disso, o vínculo
+    // vai na OBSERVAÇÃO como "Orçamento #N" — mesmo padrão do pedido emitido
+    // nativamente pela VHSYS, e é desse texto que /entregas/nova resolve o
+    // orçamento ao criar a entrega.
+    const numeroOrc = (orcEspelho as { numero: number | null }).numero;
+    const marcadorOrc = numeroOrc ? `Orçamento #${numeroOrc}` : null;
+
+    // ── Idempotência: pedido já emitido deste orçamento? ──────────────────
+    // Procura no espelho um pedido vivo cuja observação cite "Orçamento #N".
+    // Protege contra duplicar caso o flag pedido_emitido tenha sido revertido
+    // pelo sync (a emissão manual não marca pedido_emitido=1 na VHSYS).
+    if (marcadorOrc) {
+      const { data: existentes } = await admin
+        .from("vhsys_pedidos")
+        .select("id_vhsys")
+        .ilike("obs", `%${marcadorOrc}%`)
+        .eq("lixeira", false)
+        .limit(1);
+      const jaEmitido = existentes?.[0] as { id_vhsys: number } | undefined;
+      if (jaEmitido) {
+        await admin
+          .from("vhsys_orcamentos")
+          .update({ pedido_emitido: true, sincronizado_em: new Date().toISOString() })
+          .eq("id_vhsys", idOrcamentoVhsys);
+        return { ok: true, idPedidoVhsys: jaEmitido.id_vhsys };
+      }
+    }
+
+    // ── Monta payload final ───────────────────────────────────────────────
+    // Garante o marcador "Orçamento #N" na observação (sem duplicar se já vier).
+    const obsInformada = payload.obs_pedido?.trim();
+    const obsFinal = marcadorOrc
+      ? obsInformada && !obsInformada.includes(marcadorOrc)
+        ? `${marcadorOrc}\n${obsInformada}`
+        : obsInformada || marcadorOrc
+      : obsInformada;
+
+    const payloadFinal: PayloadCriarPedido = {
+      ...payload,
+      ...(obsFinal ? { obs_pedido: obsFinal } : {}),
+      status_pedido: "Em Aberto",
+      estoque_pedido: payload.estoque_pedido ?? 0,
+      contas_pedido: payload.contas_pedido ?? 0,
+    };
+    // NUNCA enviar referencia_pedido (ocuparia o lugar do nome do cliente).
+    delete payloadFinal.referencia_pedido;
+    // Vendedor não confia no que veio — força o próprio id
+    if (ctx.role === "vendedor") {
+      if (!ctx.vendedorId) throw new Error("Perfil de vendedor sem vendedor_id configurado.");
+      payloadFinal.vendedor_pedido_id = ctx.vendedorId;
+    }
+
+    // ── Cria o pedido COMPLETO de forma atômica ───────────────────────────
+    // Cria o pedido, depois adiciona produtos e parcelas. Se qualquer um falhar,
+    // EXCLUI o pedido recém-criado (rollback) para nunca deixar um pedido sem
+    // itens. Só após o sucesso total marcamos o orçamento como emitido.
+    const respostaPedido = await vhsysPost<RespostaCriarPedido[]>("/pedidos", payloadFinal);
+
+    const idPedido = Array.isArray(respostaPedido)
+      ? respostaPedido[0]?.id_ped
+      : (respostaPedido as RespostaCriarPedido).id_ped;
+
+    if (!idPedido) throw new Error("Pedido criado mas id_ped não retornado pela API.");
+
+    try {
+      // O endpoint de produtos do PEDIDO espera um ARRAY de itens (POST único),
+      // diferente do de orçamento que tolera um objeto por vez.
+      await vhsysPost(`/pedidos/${idPedido}/produtos`, itens);
+
+      // Parcelas (substitui anteriores — POST único com array)
+      if (parcelas && parcelas.length > 0) {
+        await vhsysPost(`/pedidos/${idPedido}/parcelas`, parcelas);
+      }
+    } catch (errItens) {
+      // Rollback: remove o pedido recém-criado (ainda não espelhado) para não
+      // deixar pedido órfão sem produtos. "Ou vai tudo, ou nada é emitido."
+      const detalhe = errItens instanceof Error ? errItens.message : String(errItens);
+      try {
+        await vhsysDelete(`/pedidos/${idPedido}`);
+        return {
+          ok: false,
+          erro: `Não foi possível adicionar os produtos ao pedido (${detalhe}). Nenhum pedido foi emitido; tente novamente.`,
+        };
+      } catch {
+        // Nem o rollback funcionou — há um pedido incompleto a limpar manualmente.
+        return {
+          ok: false,
+          idPedidoVhsys: idPedido,
+          erro:
+            `Falha ao adicionar os produtos (${detalhe}) e ao desfazer o pedido nº ` +
+            `interno ${idPedido}. Exclua esse pedido diretamente no VHSYS antes de tentar novamente.`,
+        };
+      }
+    }
+
+    // Tudo certo: espelha o pedido criado.
+    const { data: pedidoCriado } = await vhsysGet<VhsysPedido>(`/pedidos/${idPedido}`);
+    if (pedidoCriado[0]) await upsertPedidoNoEspelho(pedidoCriado[0]);
+
+    // Marca o orçamento como Atendido na VHSYS (best-effort: o pedido já está
+    // criado e espelhado; o status "Atendido" é cosmético e o sync reconcilia).
+    try {
+      await vhsysPut(`/orcamentos/${idOrcamentoVhsys}`, { status_pedido: "Atendido" });
+      const payloadStatusOrc: PayloadStatusOrcamento = {
+        data_status: hojeISO(),
+        tipo_status: "Atendido",
+        obs_status: "Pedido emitido via CRM.",
+      };
+      await vhsysPost(`/orcamentos/${idOrcamentoVhsys}/status`, payloadStatusOrc);
+      const { data: orcAtualizado } = await vhsysGet<VhsysOrcamento>(`/orcamentos/${idOrcamentoVhsys}`);
+      if (orcAtualizado[0]) await upsertOrcamentoNoEspelho(orcAtualizado[0]);
+    } catch {
+      // Status no VHSYS não pôde ser atualizado — não reverte o pedido (é válido).
+    }
+
+    // ÚLTIMA escrita no espelho do orçamento: pedido_emitido=true (precisa vir
+    // depois do upsert acima, que recalcularia o flag a partir do VHSYS).
     await admin
       .from("vhsys_orcamentos")
       .update({ pedido_emitido: true, sincronizado_em: new Date().toISOString() })

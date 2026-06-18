@@ -247,27 +247,48 @@ export interface PayloadStatusOrcamento {
   situacao?: number;
 }
 
-/** POST /pedidos — campos mínimos para criar pedido de teste ou emitir de orçamento. */
+/**
+ * POST /pedidos — campos aceitos pela API (somente nome_cliente obrigatório).
+ * Monetários/pesos como STRING decimal, espelhando PayloadCriarOrcamento.
+ * Não inclui frete_por_pedido nem fiscais do cabeçalho — não os enviamos.
+ */
 export interface PayloadCriarPedido {
-  nome_cliente: string;
+  // Identificação
+  nome_cliente: string;            // obrigatório, ≤255 chars
   id_cliente?: number;
-  vendedor_pedido?: string;
+  vendedor_pedido?: string;        // ≤255 chars
   vendedor_pedido_id?: number;
-  data_pedido?: string;
-  referencia_pedido?: string;
+  data_pedido?: string;            // YYYY-MM-DD
+  prazo_entrega?: string;          // prazo de entrega (dias) ≤20 chars
+  referencia_pedido?: string;      // ≤100 chars
   obs_pedido?: string;
-  status_pedido?: string;
-  estoque_pedido?: 0 | 1;
-  contas_pedido?: 0 | 1;
+  obs_interno_pedido?: string;     // observação interna
+  status_pedido?: "Em Aberto" | "Em Andamento" | "Atendido" | "Cancelado";
+
+  // Comercial
+  desconto_pedido?: string;        // valor decimal, ex: "10.00"
+
+  // Frete / peso
+  frete_pedido?: string;           // valor do frete (decimal)
+  peso_total_nota?: string;        // peso total (decimal)
+  peso_total_nota_liq?: string;    // peso líquido (decimal)
+  transportadora_pedido?: string;  // ≤255 chars
+  id_transportadora?: number;
+
+  // Flags de lançamento
+  estoque_pedido?: 0 | 1;          // 0=Não, 1=Sim (padrão 0)
+  contas_pedido?: 0 | 1;           // 0=Não, 1=Sim (padrão 0)
 }
 
-/** POST /pedidos/{id_ped}/produtos */
+/** POST /pedidos/{id_ped}/produtos — item de pedido. */
 export interface PayloadItemPedido {
   id_produto: number;
   desc_produto: string;
   qtde_produto: number;
   valor_unit_produto: number;
   desconto_produto?: number;
+  ipi_produto?: number;
+  icms_produto?: number;
 }
 
 /** PUT /orcamentos/{id_orcamento} — campos usados ao marcar Atendido */
@@ -335,6 +356,46 @@ export interface PayloadItemOrcamento {
  * data_parcela e valor_parcela são obrigatórios.
  */
 export interface PayloadParcelaOrcamento {
+  data_parcela: string;   // YYYY-MM-DD
+  valor_parcela: number;
+  forma_pagamento?: (
+    | "Dinheiro"
+    | "PIX"
+    | "Cheque"
+    | "Permuta"
+    | "Cartão de Crédito"
+    | "Cartão de Débito"
+    | "Boleto"
+    | "Transferência"
+    | "Ted"
+    | "Depósito Identificado"
+    | "Depósito em C/C"
+    | "Duplicata Mercantil"
+    | "Faturado"
+    | "Faturar"
+    | "Débito Automático"
+    | "Lotérica"
+    | "Banco"
+    | "DDA"
+    | "Pagamento online"
+    | "BNDES"
+    | "Outros"
+    | "DP Descontada"
+    | "CH Descontado"
+    | "Vale Alimentação"
+    | "Vale Refeição"
+    | "Vale Presente"
+    | "Vale Combustível"
+  );
+  observacoes_parcela?: string;  // ≤255 chars
+}
+
+/**
+ * POST /pedidos/{id}/parcelas — parcela de pedido.
+ * Espelha PayloadParcelaOrcamento: ao cadastrar novas parcelas, as anteriores
+ * são removidas (a API substitui). data_parcela e valor_parcela são obrigatórios.
+ */
+export interface PayloadParcelaPedido {
   data_parcela: string;   // YYYY-MM-DD
   valor_parcela: number;
   forma_pagamento?: (

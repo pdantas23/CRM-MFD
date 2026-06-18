@@ -16,7 +16,9 @@ interface KanbanBoardProps<T> {
   getColunaId: (item: T) => number | null;
   getId: (item: T) => string | number;
   getValor: (item: T) => number;
-  renderCard: (item: T) => ReactNode;
+  /** Recebe a coluna EFETIVA do item (respeita override otimista do DnD), para
+   *  o card refletir a nova situação imediatamente após arrastar. */
+  renderCard: (item: T, colunaId: number) => ReactNode;
   atingiuLimitePorColuna?: Record<number, boolean>;
   carregarMais?: (
     colunaId: number,
@@ -222,7 +224,7 @@ export function KanbanBoard<T>({
                       }
                       className={arrastavel ? `cursor-grab active:cursor-grabbing${esteArrastando ? " opacity-50" : ""}` : undefined}
                     >
-                      {renderCard(item)}
+                      {renderCard(item, coluna.id)}
                     </div>
                   );
                 })}

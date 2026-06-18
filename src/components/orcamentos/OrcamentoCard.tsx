@@ -1,14 +1,22 @@
 "use client";
 
 import { formatBRL, formatarData } from "@/lib/format";
+import { SITUACAO_APROVADO } from "@/lib/vhsys/fluxo-orcamentos";
 import type { OrcamentoRow } from "@/lib/types/pedidos";
 
 interface OrcamentoCardProps {
   orcamento: OrcamentoRow;
   onClick: (orcamento: OrcamentoRow) => void;
+  /** Abre o formulário de emissão de pedido (orçamentos aprovados, não emitidos). */
+  onEmitir?: (orcamento: OrcamentoRow) => void;
 }
 
-export function OrcamentoCard({ orcamento, onClick }: OrcamentoCardProps) {
+export function OrcamentoCard({ orcamento, onClick, onEmitir }: OrcamentoCardProps) {
+  const podeEmitir =
+    orcamento.situacao_id === SITUACAO_APROVADO &&
+    !orcamento.pedido_emitido &&
+    !!onEmitir;
+
   return (
     <div
       onClick={() => onClick(orcamento)}
@@ -54,6 +62,21 @@ export function OrcamentoCard({ orcamento, onClick }: OrcamentoCardProps) {
         </svg>
         Pedido emitido
       </span>
+
+      {/* Botão de emissão direta no card (orçamentos aprovados não emitidos).
+          stopPropagation evita disparar o onClick do card (abre o detalhe). */}
+      {podeEmitir && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEmitir!(orcamento);
+          }}
+          className="mt-2 w-full rounded-md bg-green-700 px-2 py-1 text-xs font-medium text-white hover:bg-green-800"
+        >
+          Emitir Pedido
+        </button>
+      )}
     </div>
   );
 }

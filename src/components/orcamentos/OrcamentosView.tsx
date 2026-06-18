@@ -15,6 +15,7 @@ import { KanbanBoard, type KanbanColuna } from "@/components/crm/KanbanBoard";
 import { ViewToggle } from "@/components/crm/ViewToggle";
 import { OrcamentoModal } from "./OrcamentoModal";
 import { OrcamentoCard } from "./OrcamentoCard";
+import { EmitirPedidoModal } from "./EmitirPedidoModal";
 import { buscarMaisOrcamentos } from "@/lib/vhsys/acoes-orcamentos";
 import { moverSituacaoOrcamento } from "@/lib/vhsys/acoes";
 import { COLUNAS_KANBAN_ORCAMENTO, NOME_COLUNA_ORC } from "@/lib/vhsys/fluxo-orcamentos";
@@ -71,6 +72,13 @@ export function OrcamentosView({
 
   const [viewAtual, setViewAtual] = useState<ViewAtual>("lista");
   const [orcamentoAberto, setOrcamentoAberto] = useState<OrcamentoRow | null>(null);
+  const [orcamentoEmitir, setOrcamentoEmitir] = useState<OrcamentoRow | null>(null);
+
+  // Fecha o detalhe e abre o formulário de emissão de pedido.
+  const abrirEmissao = (o: OrcamentoRow) => {
+    setOrcamentoAberto(null);
+    setOrcamentoEmitir(o);
+  };
 
   const situacaoPorId = new Map(situacoes.map((s) => [s.id_vhsys, s]));
 
@@ -258,8 +266,14 @@ export function OrcamentosView({
           getColunaId={(o) => o.situacao_id}
           getId={(o) => o.id}
           getValor={(o) => o.valor_total ?? 0}
-          renderCard={(o) => (
-            <OrcamentoCard orcamento={o} onClick={setOrcamentoAberto} />
+          renderCard={(o, colunaId) => (
+            // Reflete a coluna efetiva (override otimista do DnD) no situacao_id
+            // para o botão "Emitir Pedido" aparecer já ao arrastar para Aprovado.
+            <OrcamentoCard
+              orcamento={o.situacao_id === colunaId ? o : { ...o, situacao_id: colunaId }}
+              onClick={setOrcamentoAberto}
+              onEmitir={abrirEmissao}
+            />
           )}
           atingiuLimitePorColuna={atingiuLimitePorSituacao}
           carregarMais={handleCarregarMais}
@@ -292,7 +306,21 @@ export function OrcamentosView({
           profile={profile}
           podeEscrever={podeEscrever}
           mostrarMoverSituacao={viewAtual === "lista"}
+          onEmitir={abrirEmissao}
           onClose={() => setOrcamentoAberto(null)}
+        />
+      )}
+
+      {orcamentoEmitir && (
+        <EmitirPedidoModal
+          orcamento={orcamentoEmitir}
+          profile={profile}
+          vendedores={vendedores}
+          onClose={() => setOrcamentoEmitir(null)}
+          onEmitido={() => {
+            setOrcamentoEmitir(null);
+            router.refresh();
+          }}
         />
       )}
     </>

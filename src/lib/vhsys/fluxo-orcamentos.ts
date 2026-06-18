@@ -9,6 +9,9 @@
 //   769 "Perdido"       → tipo_status "Cancelado"
 //   -2  "Em andamento"  → tipo_status "Em Andamento" (virtual — não envia situacao à API)
 
+/** Situação "Aprovado" de orçamentos (id VHSYS) — pré-requisito para emitir pedido. */
+export const SITUACAO_APROVADO = 768;
+
 export const SITUACAO_ORC = {
   EM_NEGOCIACAO: 860,
   EM_ANDAMENTO: -2,
