@@ -1,6 +1,6 @@
 "use client";
 // Filtros específicos de Pedidos: dois toggles estilizados —
-// "Só com saldo a receber" (default OFF) e "Ocultar legado" (default ON).
+// "Contas sem dar baixa" (default OFF) e "Ocultar legado" (default ON).
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
@@ -46,9 +46,7 @@ export function FiltrosPedido() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const saldo = searchParams.get("saldo"); // "prazo" | "entrega" | null
-  const saldoPrazo = saldo === "prazo";
-  const saldoEntrega = saldo === "entrega";
+  const semBaixa = searchParams.get("saldo") === "sem_baixa"; // "sem_baixa" | null
   // Ocultar legado é default ON: ligado a menos que legado=false na URL.
   const ocultarLegado = searchParams.get("legado") !== "false";
 
@@ -66,16 +64,10 @@ export function FiltrosPedido() {
   return (
     <>
       <Toggle
-        ligado={saldoPrazo}
-        onToggle={() => aplicar({ saldo: saldoPrazo ? undefined : "prazo" })}
+        ligado={semBaixa}
+        onToggle={() => aplicar({ saldo: semBaixa ? undefined : "sem_baixa" })}
       >
-        Saldo a prazo
-      </Toggle>
-      <Toggle
-        ligado={saldoEntrega}
-        onToggle={() => aplicar({ saldo: saldoEntrega ? undefined : "entrega" })}
-      >
-        A receber na entrega
+        Contas sem dar baixa
       </Toggle>
       <Toggle
         ligado={ocultarLegado}

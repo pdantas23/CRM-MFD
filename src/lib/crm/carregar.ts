@@ -15,12 +15,14 @@ import { COLUNAS_KANBAN_ORCAMENTO } from "@/lib/vhsys/fluxo-orcamentos";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import {
   aplicarPedidos,
-  buscarDadosPedidos,
+  buscarLotes,
   metricasPedidos,
   metricasOrcamentos,
   type DadosPedidosPrecarregados,
   type Escopo,
+  type FinAgg,
   type Metrica,
+  type PedAgg,
 } from "@/lib/crm/metricas";
 import type {
   ClientePrefillRow,
@@ -42,6 +44,9 @@ const LIMITE_POR_COLUNA = 50;
 /** Limite de números aplicáveis num filtro .in() para "só com saldo". */
 const MAX_NUMEROS_IN = 1000;
 
+/** Tamanho do chunk ao consultar a view financeira por numero. */
+const CHUNK_FIN = 200;
+
 /** Colunas mínimas para Kanban (excluindo dados jsonb). */
 const COLS_PEDIDO =
   "id, id_vhsys, numero, cliente_id_vhsys, nome_cliente, vendedor_id_vhsys, " +
@@ -51,68 +56,83 @@ const COLS_PEDIDO =
 /** Resultado da onda 0 de pedidos (só roda quando há recorte de saldo). */
 export interface PedidosOnda0 {
   dadosPedidos: DadosPedidosPrecarregados;
-  /** Números do tipo de saldo selecionado, recortados a MAX_NUMEROS_IN (p/ kanban). */
+  /** Números dos pedidos do recorte, recortados a MAX_NUMEROS_IN (p/ kanban). */
   numerosSaldo: number[];
-  /** id_vhsys dos pedidos cujo saldo em aberto é cobrança à vista na entrega. */
-  naEntregaIds: Set<number>;
+}
+
+/** Linha mínima da view financeira usada no recorte "Contas sem dar baixa". */
+interface FinSemBaixa {
+  numero: number;
+  saldo: number | null;
+  recebido: number | null;
+  total_contas: number | null;
 }
 
 /**
- * Onda 0 (apenas quando há recorte de saldo): resolve os números do pedido com
- * saldo>0 ANTES do kanban (para o `.in()` das colunas), já recortados pelo
- * TIPO de saldo (a prazo vs a receber na entrega) via forma de pagamento.
+ * Onda 0 (apenas quando o recorte "Contas sem dar baixa" está ligado): resolve
+ * o subconjunto pequeno de pedidos em PAGAMENTO_APROVADO (857) com valor ainda
+ * em aberto ANTES do kanban (para o `.in()` das colunas).
+ *
+ * BARATO: restringe à situação 857 (indexada) e usa só a view
+ * vhsys_pedidos_financeiro para a condição de saldo/total_contas — SEM cruzar
+ * contas a receber por forma de pagamento.
+ *
+ * Em aberto = `total_contas === 0` (sem contas lançadas) OU `saldo > 0`. Os com
+ * `total_contas > 0 && saldo <= 0` (já liquidados) ficam de fora.
  */
 export async function pedidosOnda0(
   supabase: DB,
   filtros: FiltrosCrm,
   escopo: Escopo
 ): Promise<PedidosOnda0> {
-  const dadosPedidos = await buscarDadosPedidos(supabase, filtros, escopo);
-
-  // Pedidos com saldo > 0 (numero + id_vhsys para ligar às contas).
-  const comSaldo = dadosPedidos.pedidos.filter(
-    (p) => (dadosPedidos.fin.get(p.numero)?.saldo ?? 0) > 0
-  );
-  const idVhsysComSaldo = comSaldo
-    .map((p) => p.id_vhsys)
-    .filter((x): x is number => !!x);
-
-  // Classifica por forma de pagamento (mesma regra do card).
-  const contas = await buscarContasForma(supabase, idVhsysComSaldo);
-  const naEntregaIds = classificarCobrancaNaEntrega(contas);
-
-  // Recorta pelo tipo escolhido.
-  const ehEntrega = (p: { id_vhsys: number }) =>
-    p.id_vhsys != null && naEntregaIds.has(p.id_vhsys);
-  const filtrados = comSaldo.filter((p) =>
-    filtros.saldoTipo === "entrega"
-      ? ehEntrega(p)
-      : filtros.saldoTipo === "prazo"
-        ? !ehEntrega(p)
-        : true
+  // 1. Pedidos do conjunto filtrado restritos à situação 857 (índice).
+  const pedidos = await buscarLotes<PedAgg>(() =>
+    aplicarPedidos(
+      supabase
+        .from("vhsys_pedidos")
+        .select("numero, id_vhsys, valor_total")
+        .eq("lixeira", false)
+        .eq("situacao_id", SITUACAO.PAGAMENTO_APROVADO),
+      filtros,
+      escopo
+    ).order("numero", { ascending: false })
   );
 
-  const numerosSaldo = filtrados.map((p) => p.numero).slice(0, MAX_NUMEROS_IN);
-  return { dadosPedidos, numerosSaldo, naEntregaIds };
-}
-
-/** Busca contas a receber (com forma de pagamento) por pedido_resolvido, em chunks. */
-async function buscarContasForma(
-  supabase: DB,
-  idVhsysList: number[]
-): Promise<ContaForma[]> {
-  const out: ContaForma[] = [];
-  for (let i = 0; i < idVhsysList.length; i += 200) {
-    const chunk = idVhsysList.slice(i, i + 200);
+  // 2. saldo + total_contas desses pedidos na view financeira (chunks).
+  const finPorNumero = new Map<number, FinSemBaixa>();
+  const numeros = pedidos.map((p) => p.numero);
+  for (let pos = 0; pos < numeros.length; pos += CHUNK_FIN) {
+    const chunk = numeros.slice(pos, pos + CHUNK_FIN);
     if (!chunk.length) continue;
     const { data } = await supabase
-      .from("vhsys_contas_receber")
-      .select("pedido_resolvido, valor, valor_pago, vencimento, forma_pagamento:dados->>forma_pagamento")
-      .in("pedido_resolvido", chunk)
-      .eq("lixeira", false);
-    if (data) out.push(...((data as unknown as ContaForma[]) ?? []));
+      .from("vhsys_pedidos_financeiro")
+      .select("numero, saldo, recebido, total_contas")
+      .in("numero", chunk);
+    for (const f of (data ?? []) as FinSemBaixa[]) finPorNumero.set(f.numero, f);
   }
-  return out;
+
+  // 3. Filtra os EM ABERTO: sem contas (total_contas = 0) OU saldo > 0.
+  const emAberto = pedidos.filter((p) => {
+    const f = finPorNumero.get(p.numero);
+    const totalContas = f?.total_contas ?? 0;
+    const saldo = f?.saldo ?? 0;
+    return totalContas === 0 || saldo > 0;
+  });
+
+  // Monta os dados pré-carregados só com o recorte (métricas agregam isso).
+  const fin = new Map<number, FinAgg>();
+  for (const p of emAberto) {
+    const f = finPorNumero.get(p.numero);
+    fin.set(p.numero, {
+      numero: p.numero,
+      recebido: f?.recebido ?? 0,
+      saldo: f?.saldo ?? 0,
+    });
+  }
+  const dadosPedidos: DadosPedidosPrecarregados = { pedidos: emAberto, fin };
+
+  const numerosSaldo = emAberto.map((p) => p.numero).slice(0, MAX_NUMEROS_IN);
+  return { dadosPedidos, numerosSaldo };
 }
 
 /** Resultado bruto da onda 1 de pedidos (antes do mapeamento para kanban). */
@@ -132,15 +152,14 @@ export interface PedidosOnda1 {
  * de montagem de pedidos/page.tsx).
  *
  * @param precarregados Dados da onda 0 (quando soComSaldo). null/undefined → RPC.
- * @param numerosSaldo  Números com saldo da onda 0 (recorte do .in()). null = sem recorte.
+ * @param numerosSaldo  Números do recorte da onda 0 (para o .in()). null = sem recorte.
  */
 export async function pedidosOnda1(
   supabase: DB,
   filtros: FiltrosCrm,
   escopo: Escopo,
   precarregados?: DadosPedidosPrecarregados | null,
-  numerosSaldo?: number[] | null,
-  naEntregaIds?: Set<number> | null
+  numerosSaldo?: number[] | null
 ): Promise<PedidosOnda1> {
   const role = escopo.role;
 
@@ -198,7 +217,7 @@ export async function pedidosOnda1(
     role !== "vendedor"
       ? supabase.from("vhsys_vendedores").select("id_vhsys, nome").order("nome")
       : Promise.resolve({ data: [] as { id_vhsys: number; nome: string }[] }),
-    metricasPedidos(supabase, filtros, escopo, precarregados ?? undefined, naEntregaIds ?? undefined),
+    metricasPedidos(supabase, filtros, escopo, precarregados ?? undefined),
     Promise.all([...consultasColunas, consultaEntregues]),
   ]);
 

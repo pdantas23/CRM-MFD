@@ -34,16 +34,15 @@ export default async function PedidosPage({
   const escopo: Escopo = { role: role ?? "", vendedorId };
   const filtros = parseFiltros(searchParams, "pedidos");
 
-  // ── Onda 0 (apenas quando "só com saldo" ligado) ──────────────────────────
-  // O recorte de saldo precisa dos números com saldo>0 ANTES do kanban (para
-  // o .in() das colunas), então essa varredura é inevitável nesse cenário.
-  // Com o toggle desligado, NENHUM lote de 1000 roda — a RPC cobre as métricas.
+  // ── Onda 0 (apenas quando "Contas sem dar baixa" ligado) ──────────────────
+  // O recorte precisa dos números do subconjunto ANTES do kanban (para o .in()
+  // das colunas). Barato: restringe à situação 857 (indexada) e consulta só a
+  // view financeira. Com o toggle desligado, a RPC cobre as métricas.
   const onda0 = filtros.soComSaldo
     ? await pedidosOnda0(supabase, filtros, escopo)
     : null;
   const numerosSaldo = onda0?.numerosSaldo ?? null;
   const dadosPedidos = onda0?.dadosPedidos ?? null;
-  const naEntregaIds = onda0?.naEntregaIds ?? null;
 
   // Chave de cache inclui rota, filtros, página-kanban e escopo do usuário
   // (obrigatório para não vazar dados entre usuários em instâncias quentes).
@@ -55,7 +54,7 @@ export default async function PedidosPage({
   // com desligado, a RPC agrega num único roundtrip (fallback de lotes se a
   // function não existir). dadosPedidos === null → RPC; senão → in-memory.
   const { onda1, onda2 } = await comCache(chavePedidos, 30_000, async () => {
-    const onda1 = await pedidosOnda1(supabase, filtros, escopo, dadosPedidos, numerosSaldo, naEntregaIds);
+    const onda1 = await pedidosOnda1(supabase, filtros, escopo, dadosPedidos, numerosSaldo);
     const onda2 = await pedidosOnda2(supabase, onda1.pedidos);
     return { onda1, onda2 };
   });

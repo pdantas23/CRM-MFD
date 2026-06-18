@@ -79,7 +79,7 @@ function aplicarComuns(
 }
 
 /** Busca todas as linhas (colunas mínimas) paginando em lotes de 1000. */
-async function buscarLotes<T>(
+export async function buscarLotes<T>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   montarQuery: () => any
 ): Promise<T[]> {
@@ -236,13 +236,13 @@ function aplicarOrcamentos(
   return q;
 }
 
-interface PedAgg {
+export interface PedAgg {
   numero: number;
   id_vhsys: number;
   valor_total: number | null;
 }
 
-interface FinAgg {
+export interface FinAgg {
   numero: number;
   recebido: number | null;
   saldo: number | null;
@@ -392,13 +392,12 @@ export async function metricasPedidos(
   supabase: DB,
   filtros: FiltrosCrm,
   escopo: Escopo,
-  /** Dados já carregados pela página — evita varredura dupla quando há recorte de saldo. */
-  precarregados?: DadosPedidosPrecarregados,
-  /** id_vhsys com saldo à vista na entrega — necessário p/ recortar por saldoTipo. */
-  naEntregaIds?: Set<number>
+  /** Dados já carregados pela onda 0 — evita varredura dupla quando há recorte de saldo. */
+  precarregados?: DadosPedidosPrecarregados
 ): Promise<Metrica[]> {
-  // Com dados já pré-carregados (toggle "só com saldo" ligado): agrega em
-  // memória, sem nova ida ao banco. Sem pré-carregados: tenta a RPC (um
+  // Com dados já pré-carregados (recorte "Contas sem dar baixa" ligado): a onda 0
+  // já entregou SÓ o subconjunto filtrado (857 em aberto), então basta agregar
+  // em memória, sem nova ida ao banco. Sem pré-carregados: tenta a RPC (um
   // roundtrip) e cai no fallback de lotes só se a function não existir.
   if (!precarregados) {
     const rpc = await tentarRpcPedidos(supabase, filtros, escopo);
@@ -412,18 +411,8 @@ export async function metricasPedidos(
     }
   }
 
-  const { pedidos: todosPedidos, fin } =
+  const { pedidos, fin } =
     precarregados ?? (await buscarDadosPedidos(supabase, filtros, escopo));
-
-  // Recorte por tipo de saldo: a prazo vs a receber na entrega (forma de pagto).
-  const naEntrega = naEntregaIds ?? new Set<number>();
-  const pedidos = filtros.saldoTipo
-    ? todosPedidos.filter((p) => {
-        if ((fin.get(p.numero)?.saldo ?? 0) <= 0) return false;
-        const ehEntrega = naEntrega.has(p.id_vhsys);
-        return filtros.saldoTipo === "entrega" ? ehEntrega : !ehEntrega;
-      })
-    : todosPedidos;
 
   const n = pedidos.length;
   const soma = pedidos.reduce((a, p) => a + (p.valor_total ?? 0), 0);
