@@ -10,12 +10,14 @@ import type { Entrega } from "@/lib/types/database";
 interface Props {
   manha: Entrega[];
   tarde: Entrega[];
+  noite: Entrega[];
   isAdmin: boolean;
 }
 
-export function DashboardEntregas({ manha, tarde, isAdmin }: Props) {
+export function DashboardEntregas({ manha, tarde, noite, isAdmin }: Props) {
   const [manhaList, setManhaList] = useState(manha);
   const [tardeList, setTardeList] = useState(tarde);
+  const [noiteList, setNoiteList] = useState(noite);
 
   return (
     <div className="space-y-4">
@@ -39,6 +41,17 @@ export function DashboardEntregas({ manha, tarde, isAdmin }: Props) {
         }
         entregas={tardeList}
         setEntregas={setTardeList}
+        isAdmin={isAdmin}
+      />
+      <PeriodoSection
+        titulo="Noite"
+        accent="bg-indigo-100"
+        iconClass="text-indigo-600"
+        icon={
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+        }
+        entregas={noiteList}
+        setEntregas={setNoiteList}
         isAdmin={isAdmin}
       />
     </div>

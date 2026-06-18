@@ -1,5 +1,5 @@
 export type Role = "admin" | "vendedor" | "entregador";
-export type Periodo = "manha" | "tarde";
+export type Periodo = "manha" | "tarde" | "noite";
 export type StatusEntrega = "entrega_final" | "entrega_parcial";
 
 export interface Profile {

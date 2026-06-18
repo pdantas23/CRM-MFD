@@ -51,6 +51,7 @@ interface EntregaFormProps {
 const periodoOptions = [
   { value: "manha", label: "Manhã" },
   { value: "tarde", label: "Tarde" },
+  { value: "noite", label: "Noite" },
 ];
 
 const statusOptions = [

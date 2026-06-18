@@ -4,8 +4,9 @@ import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { aplicarEntregas, metricasEntregas, type Metrica } from "@/lib/crm/metricas";
 import { comCache } from "@/lib/crm/cache";
-import { EntregasClient } from "@/components/entregas/EntregasClient";
 import { DashboardEntregas } from "@/components/dashboard/DashboardEntregas";
+import { TabelaSemanalEntregas } from "@/components/entregas/TabelaSemanalEntregas";
+import { EntregasAdminView } from "@/components/entregas/EntregasAdminView";
 import { Suspense } from "react";
 import type { Entrega } from "@/lib/types/database";
 
@@ -31,6 +32,24 @@ function getTodayISO() {
   }).format(new Date());
 }
 
+// Soma `dias` a uma data civil YYYY-MM-DD em UTC — sem deslocar o dia pelo fuso.
+function somarDiasCivil(iso: string, dias: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + dias);
+  return dt.toISOString().slice(0, 10);
+}
+
+// Segunda-feira (civil) da semana de uma data YYYY-MM-DD. getUTCDay(): 0=dom..6=sáb;
+// converte para offset com segunda=0 e subtrai. Cálculo em UTC para não deslocar.
+function segundaDaSemana(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const diaSemana = dt.getUTCDay(); // 0=dom
+  const offset = (diaSemana + 6) % 7; // dias desde a segunda
+  return somarDiasCivil(iso, -offset);
+}
+
 export default async function EntregasPage({
   searchParams,
 }: {
@@ -45,25 +64,60 @@ export default async function EntregasPage({
   const today = getTodayISO();
   const filtros = parseFiltros(searchParams, "entregas");
 
-  // ── Visão de entregas do dia (todos os roles) ────────────────────────────
-  // Usa o client de serviço para ignorar o recorte de RLS por vendedor —
-  // somente esta leitura; a tabela completa abaixo segue escopada por RLS.
-  const admin = createAdminClient();
-  const { data: entregasHojeData } = await admin
-    .from("entregas")
-    .select("*")
-    .eq("data", today)
-    .order("ordem", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: true });
+  // Role decide a visão: entregador vê só HOJE (turnos); vendedor/admin veem a
+  // TABELA SEMANAL. Carrega-se apenas o que cada visão precisa.
+  const isEntregador = role === "entregador";
 
-  const entregasHoje = (entregasHojeData ?? []) as Entrega[];
-  const manha = entregasHoje.filter((e) => e.periodo === "manha");
-  const tarde = entregasHoje.filter((e) => e.periodo === "tarde");
+  // Client de serviço: ignora o recorte de RLS por vendedor para a visão de
+  // hoje e a semana (mostra TODAS as entregas). A tabela completa do admin,
+  // mais abaixo, segue escopada por RLS via `supabase`.
+  const admin = createAdminClient();
+
+  // ── Visão de entregas do dia (apenas entregador) ─────────────────────────
+  let manha: Entrega[] = [];
+  let tarde: Entrega[] = [];
+  let noite: Entrega[] = [];
+  if (isEntregador) {
+    const { data: entregasHojeData } = await admin
+      .from("entregas")
+      .select("*")
+      .eq("data", today)
+      .order("ordem", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true });
+
+    const entregasHoje = (entregasHojeData ?? []) as Entrega[];
+    manha = entregasHoje.filter((e) => e.periodo === "manha");
+    tarde = entregasHoje.filter((e) => e.periodo === "tarde");
+    noite = entregasHoje.filter((e) => e.periodo === "noite");
+  }
+
+  // ── Tabela semanal (vendedor e admin) ────────────────────────────────────
+  // Segunda da semana: usa o param `inicio` (YYYY-MM-DD válido) ou a segunda da
+  // semana corrente no fuso de São Paulo. Sábado = segunda + 5 (civil, UTC).
+  const inicioParam =
+    typeof searchParams?.inicio === "string" ? searchParams.inicio : undefined;
+  const inicioSemana =
+    inicioParam && /^\d{4}-\d{2}-\d{2}$/.test(inicioParam)
+      ? inicioParam
+      : segundaDaSemana(today);
+  const sabadoSemana = somarDiasCivil(inicioSemana, 5);
+
+  let entregasSemana: Entrega[] = [];
+  if (!isEntregador) {
+    const { data: semanaData } = await admin
+      .from("entregas")
+      .select("*")
+      .gte("data", inicioSemana)
+      .lte("data", sabadoSemana)
+      .order("data", { ascending: true })
+      .order("ordem", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true });
+    entregasSemana = (semanaData ?? []) as Entrega[];
+  }
 
   // ── Tabela completa, filtros e métricas (apenas admin) ───────────────────
   let listaAdmin: Entrega[] = [];
   let metricasAdmin: Metrica[] = [];
-  let erroLista = false;
 
   if (isAdmin) {
     // Quando "só com saldo a receber": resolve os pedido_ids com saldo > 0
@@ -95,7 +149,7 @@ export default async function EntregasPage({
 
     const chaveEntregas = `entregas|${role ?? ""}|${JSON.stringify(filtros)}`;
 
-    const [{ data: entregasData, error }, metricas] = await comCache(
+    const [{ data: entregasData }, metricas] = await comCache(
       chaveEntregas,
       30_000,
       () =>
@@ -112,7 +166,6 @@ export default async function EntregasPage({
         ])
     );
 
-    erroLista = !!error;
     listaAdmin = (entregasData ?? []) as Entrega[];
     metricasAdmin = metricas;
   }
@@ -122,33 +175,35 @@ export default async function EntregasPage({
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Entregas</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Entregas de hoje · {formatDate(today)}
+          {isEntregador
+            ? `Entregas de hoje · ${formatDate(today)}`
+            : "Programação semanal"}
         </p>
       </div>
 
-      {/* Visão do dia — exibida a todos os roles */}
-      <DashboardEntregas manha={manha} tarde={tarde} isAdmin={isAdmin} />
-
-      {/* Gestão completa (tabela + filtros + métricas) — apenas admin */}
-      {isAdmin && (
-        <div className="mt-10">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">
-            Todas as entregas
-          </h2>
-          {erroLista ? (
-            <p className="text-sm text-red-600">Erro ao carregar entregas.</p>
-          ) : (
-            <Suspense>
-              <EntregasClient
-                entregas={listaAdmin}
-                filtros={filtros}
-                metricas={metricasAdmin}
-                podeNovaEntrega={isAdmin}
-                isAdmin={isAdmin}
-              />
-            </Suspense>
-          )}
-        </div>
+      {/* Roteamento por papel:
+          - entregador → visão do dia (turnos);
+          - admin → mini-navbar para alternar calendário semanal / lista completa;
+          - vendedor → calendário semanal (só leitura). */}
+      {isEntregador ? (
+        <DashboardEntregas manha={manha} tarde={tarde} noite={noite} isAdmin={isAdmin} />
+      ) : isAdmin ? (
+        <Suspense>
+          <EntregasAdminView
+            semana={entregasSemana}
+            inicioSemana={inicioSemana}
+            lista={listaAdmin}
+            filtros={filtros}
+            metricas={metricasAdmin}
+            podeNovaEntrega={isAdmin}
+          />
+        </Suspense>
+      ) : (
+        <TabelaSemanalEntregas
+          entregas={entregasSemana}
+          inicioSemana={inicioSemana}
+          isAdmin={false}
+        />
       )}
     </div>
   );

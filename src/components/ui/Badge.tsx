@@ -3,11 +3,12 @@ import { type Periodo, type StatusEntrega } from "@/lib/types/database";
 const periodoConfig: Record<Periodo, { label: string; class: string }> = {
   manha: { label: "Manhã", class: "bg-amber-100 text-amber-800 border-amber-200" },
   tarde: { label: "Tarde", class: "bg-orange-100 text-orange-800 border-orange-200" },
+  noite: { label: "Noite", class: "bg-indigo-100 text-indigo-800 border-indigo-200" },
 };
 
-const statusConfig: Record<StatusEntrega, { label: string; class: string }> = {
-  entrega_final: { label: "Entrega Final", class: "bg-green-100 text-green-800 border-green-200" },
-  entrega_parcial: { label: "Entrega Parcial", class: "bg-blue-100 text-blue-800 border-blue-200" },
+const statusConfig: Record<StatusEntrega, { label: string; labelCurto: string; class: string }> = {
+  entrega_final: { label: "Entrega Final", labelCurto: "Final", class: "bg-green-100 text-green-800 border-green-200" },
+  entrega_parcial: { label: "Entrega Parcial", labelCurto: "Parcial", class: "bg-blue-100 text-blue-800 border-blue-200" },
 };
 
 // Cor de fundo + borda-esquerda das linhas de entrega, por status.
@@ -26,11 +27,11 @@ export function PeriodoBadge({ periodo }: { periodo: Periodo }) {
   );
 }
 
-export function StatusBadge({ status }: { status: StatusEntrega }) {
+export function StatusBadge({ status, curto }: { status: StatusEntrega; curto?: boolean }) {
   const config = statusConfig[status];
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${config.class}`}>
-      {config.label}
+      {curto ? config.labelCurto : config.label}
     </span>
   );
 }

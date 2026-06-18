@@ -7,6 +7,7 @@
 // diferente da do pedido). Regra "só pedidos reais viram entregas": no cadastro
 // exige-se que o orçamento já tenha sido emitido como pedido (pedido_emitido).
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { cacheInvalidate } from "@/lib/crm/cache";
 import type { Periodo, StatusEntrega } from "@/lib/types/database";
@@ -222,4 +223,47 @@ export async function vincularEntregaOrcamento(
 
   cacheInvalidate("entregas");
   return { ok: true, orcamentoId };
+}
+
+const PERIODOS_VALIDOS: ReadonlySet<Periodo> = new Set<Periodo>([
+  "manha",
+  "tarde",
+  "noite",
+]);
+
+/**
+ * Move uma entrega para outro dia/turno (base do drag-and-drop do admin).
+ * A RLS já garante que só admin atualiza; exigirAdmin é a checagem na borda.
+ */
+export async function moverEntrega(
+  id: string,
+  novaData: string, // "YYYY-MM-DD"
+  novoPeriodo: Periodo
+): Promise<{ ok: boolean; erro?: string }> {
+  try {
+    if (!id) return { ok: false, erro: "Entrega inválida." };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(novaData)) {
+      return { ok: false, erro: "Data inválida." };
+    }
+    if (!PERIODOS_VALIDOS.has(novoPeriodo)) {
+      return { ok: false, erro: "Período inválido." };
+    }
+
+    const { erro } = await exigirAdmin();
+    if (erro) return { ok: false, erro };
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("entregas")
+      .update({ data: novaData, periodo: novoPeriodo })
+      .eq("id", id);
+
+    if (error) return { ok: false, erro: error.message };
+
+    cacheInvalidate("entregas");
+    revalidatePath("/entregas");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : "Erro inesperado." };
+  }
 }

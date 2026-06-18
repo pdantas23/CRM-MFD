@@ -1,6 +1,6 @@
 "use client";
 // Filtros específicos de Entregas:
-// - Dropdown de período do dia (Manhã/Tarde)
+// - Dropdown de período do dia (Manhã/Tarde/Noite)
 // - Toggle "Só com saldo a receber" (pedido vinculado com saldo > 0)
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
@@ -9,6 +9,7 @@ import { DropdownFiltro, type OpcaoFiltro } from "@/components/ui/DropdownFiltro
 const OPCOES_PERIODO: OpcaoFiltro[] = [
   { valor: "manha", label: "Manhã" },
   { valor: "tarde", label: "Tarde" },
+  { valor: "noite", label: "Noite" },
 ];
 
 export function FiltrosEntrega() {
