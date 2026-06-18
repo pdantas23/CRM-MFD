@@ -10,6 +10,7 @@ import { FiltrosPedido } from "@/components/crm/FiltrosPedido";
 import { ViewToggle } from "@/components/crm/ViewToggle";
 import { EntityTable, type ColunaTabela } from "@/components/crm/EntityTable";
 import { formatBRL, formatarData } from "@/lib/format";
+import { SITUACAO } from "@/lib/vhsys/fluxo";
 import type { Metrica } from "@/lib/crm/metricas";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import type { PedidoKanban, PedidoRow, SituacaoRow } from "@/lib/types/pedidos";
@@ -109,14 +110,22 @@ export function PedidosView({
       align: "right",
       render: (p) => {
         const fin = p.financeiro;
-        // Sem contas a receber registradas (ex.: pedido aguardando pagamento, sem
-        // cobrança lançada): saldo 0 NÃO significa quitado — exibe "—".
-        if (!fin || fin.total_contas <= 0) {
-          return <span className="text-gray-400">—</span>;
+        const temContas = !!fin && fin.total_contas > 0;
+        const saldo = fin?.saldo ?? 0;
+        // Valor ainda em aberto: o saldo das contas ou, se nenhuma conta foi
+        // lançada, o total do pedido (nada confirmado como recebido no VHSYS).
+        const emAberto = temContas ? saldo : (p.valor_total ?? 0);
+        // ALERTA (vermelho): pagamento aprovado, mas o VHSYS ainda não confirmou
+        // a liquidação — sinaliza ao admin que falta dar baixa no pagamento.
+        if (p.situacao_id === SITUACAO.PAGAMENTO_APROVADO && emAberto > 0) {
+          return <span className="font-semibold text-red-700">{formatBRL(emAberto)}</span>;
         }
-        if (fin.saldo > 0) {
+        // Sem contas lançadas e fora do estado aprovado: nada a exibir.
+        if (!temContas) return <span className="text-gray-400">—</span>;
+        // Saldo a prazo a receber.
+        if (saldo > 0) {
           return (
-            <span className="font-semibold text-amber-700">{formatBRL(fin.saldo)}</span>
+            <span className="font-semibold text-amber-700">{formatBRL(saldo)}</span>
           );
         }
         return <span className="text-green-700 font-medium">Quitado</span>;
