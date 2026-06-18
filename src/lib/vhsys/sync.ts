@@ -314,11 +314,15 @@ export async function sincronizarEspelho(modo: ModoSync): Promise<ResultadoEntid
       const ativos = await listar({ modificadosApos });
       const linhas = ativos.map(paraLinha);
 
-      // Incremental e completo varrem a lixeira para propagar exclusões feitas
-      // no VHSYS entre reconciliações completas — sem isso, pedidos excluídos
-      // continuam visíveis no Kanban até o próximo sync completo.
+      // Propaga exclusões feitas no VHSYS. IMPORTANTE: a varredura da lixeira NÃO
+      // usa o cursor `modificadosApos` — o VHSYS não garante atualizar
+      // `data_modificacao` ao mandar um registro para a lixeira, então filtrar por
+      // data perderia exclusões. Varremos a lixeira INTEIRA em toda rodada
+      // (inclusive no incremental) para que exclusões sumam do CRM em minutos, sem
+      // depender do sync completo diário. A lixeira costuma ser pequena, então o
+      // custo é baixo; se algum dia crescer muito, throttlar por tempo.
       if (!semIncremental) {
-        const excluidos = await listar({ modificadosApos, lixeira: "Sim" });
+        const excluidos = await listar({ lixeira: "Sim" });
         linhas.push(...excluidos.map(paraLinha));
       }
 
