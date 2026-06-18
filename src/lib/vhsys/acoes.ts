@@ -4,8 +4,10 @@
 // Arquitetura: escrever no VHSYS primeiro → em caso de sucesso, upsert imediato
 // no espelho Supabase via admin client (não aguarda o ciclo de sync).
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cacheInvalidate } from "@/lib/crm/cache";
 import { vhsysPost, vhsysPut, vhsysGet, vhsysDelete } from "./client";
 import { tipoStatusParaSituacao, transicaoPermitida, SITUACAO } from "./fluxo";
 import { tipoStatusOrcamento, transicaoOrcamentoPermitida, situacaoEfetivaOrcamento } from "./fluxo-orcamentos";
@@ -761,9 +763,23 @@ export async function criarPedidoDeOrcamento(
       }
     }
 
-    // Tudo certo: espelha o pedido criado.
-    const { data: pedidoCriado } = await vhsysGet<VhsysPedido>(`/pedidos/${idPedido}`);
-    if (pedidoCriado[0]) await upsertPedidoNoEspelho(pedidoCriado[0]);
+    // Tudo certo: espelha o pedido criado. O GET logo após o POST pode vir vazio
+    // por consistência eventual da API — então re-tenta algumas vezes e, em último
+    // caso, usa a própria resposta do POST como fallback. Assim o pedido NUNCA
+    // fica fora do espelho (o que o esconderia do CRM até o próximo sync).
+    let pedidoEspelho: VhsysPedido | undefined;
+    for (let tentativa = 0; tentativa < 3 && !pedidoEspelho; tentativa++) {
+      if (tentativa > 0) await new Promise((r) => setTimeout(r, 600));
+      const { data } = await vhsysGet<VhsysPedido>(`/pedidos/${idPedido}`);
+      pedidoEspelho = data[0];
+    }
+    if (!pedidoEspelho) {
+      // Fallback: a resposta do POST já traz os campos do pedido (o número
+      // sequencial pode faltar; o próximo sync o reconcilia).
+      const base = Array.isArray(respostaPedido) ? respostaPedido[0] : respostaPedido;
+      if (base) pedidoEspelho = base as unknown as VhsysPedido;
+    }
+    if (pedidoEspelho) await upsertPedidoNoEspelho(pedidoEspelho);
 
     // Marca o orçamento como Atendido na VHSYS (best-effort: o pedido já está
     // criado e espelhado; o status "Atendido" é cosmético e o sync reconcilia).
@@ -787,6 +803,13 @@ export async function criarPedidoDeOrcamento(
       .from("vhsys_orcamentos")
       .update({ pedido_emitido: true, sincronizado_em: new Date().toISOString() })
       .eq("id_vhsys", idOrcamentoVhsys);
+
+    // Invalida os caches para o pedido recém-emitido aparecer já na tela de
+    // Pedidos e o orçamento sumir do fluxo de Aprovados sem esperar o TTL/sync.
+    cacheInvalidate("pedidos");
+    cacheInvalidate("orcamentos");
+    revalidatePath("/pedidos");
+    revalidatePath("/orcamentos");
 
     return { ok: true, idPedidoVhsys: idPedido };
   } catch (err) {
