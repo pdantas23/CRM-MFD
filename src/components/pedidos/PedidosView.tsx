@@ -108,11 +108,15 @@ export function PedidosView({
       header: "Saldo",
       align: "right",
       render: (p) => {
-        const saldo = p.financeiro?.saldo ?? null;
-        if (saldo === null) return <span className="text-gray-400">—</span>;
-        if (saldo > 0) {
+        const fin = p.financeiro;
+        // Sem contas a receber registradas (ex.: pedido aguardando pagamento, sem
+        // cobrança lançada): saldo 0 NÃO significa quitado — exibe "—".
+        if (!fin || fin.total_contas <= 0) {
+          return <span className="text-gray-400">—</span>;
+        }
+        if (fin.saldo > 0) {
           return (
-            <span className="font-semibold text-amber-700">{formatBRL(saldo)}</span>
+            <span className="font-semibold text-amber-700">{formatBRL(fin.saldo)}</span>
           );
         }
         return <span className="text-green-700 font-medium">Quitado</span>;
