@@ -56,6 +56,30 @@ export interface VhsysCliente {
   [key: string]: unknown;
 }
 
+/**
+ * POST /clientes — campos enviados pelo modal de cadastro de cliente.
+ * Apenas razao_cliente é obrigatório; o restante é opcional.
+ */
+export interface PayloadCriarCliente {
+  razao_cliente: string;             // obrigatório, ≤255 chars
+  tipo_pessoa?: "PJ" | "PF";         // padrão PJ
+  tipo_cadastro?: "Cliente" | "Fornecedor" | "Ambos"; // padrão Cliente
+  cnpj_cliente?: string;             // ≤18 chars
+  insc_estadual_cliente?: string;    // ≤45 chars
+  fantasia_cliente?: string;         // ≤255 chars
+  celular_cliente?: string;          // ≤20 chars
+  fone_cliente?: string;             // ≤20 chars
+  email_cliente?: string;            // ≤255 chars
+  cep_cliente?: string;              // ≤10 chars
+  endereco_cliente?: string;         // ≤255 chars
+  numero_cliente?: string;           // ≤7 chars
+  bairro_cliente?: string;           // ≤45 chars
+  cidade_cliente?: string;           // ≤255 chars
+  uf_cliente?: string;               // ≤2 chars
+  complemento_cliente?: string;      // ≤45 chars
+  data_nasc_cliente?: string;        // só PF — formato YYYY-MM-DD
+}
+
 export interface VhsysVendedor {
   id_vendedor: number;
   id_registro: number;

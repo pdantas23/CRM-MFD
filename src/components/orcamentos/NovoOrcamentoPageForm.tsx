@@ -1,7 +1,7 @@
 "use client";
 // Formulário de cadastro/edição de orçamento — página dedicada.
 // Layout fiel ao VHSYS: seções com título azul/escuro e divisória pontilhada.
-// Reaproveita AutocompleteVhsys, ParcelasEditor e a lógica de submit do modal.
+// Reaproveita AutocompleteVhsys e a lógica de submit do modal.
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -10,14 +10,13 @@ import { BotaoNavegacao } from "@/components/ui/BotaoNavegacao";
 import type {
   PayloadCriarOrcamento,
   PayloadItemOrcamento,
-  PayloadParcelaOrcamento,
 } from "@/lib/vhsys/types";
 import type { Profile } from "@/lib/types/database";
 import { AutocompleteVhsys } from "@/components/ui/AutocompleteVhsys";
 import { InputValor } from "@/components/ui/InputValor";
 import { InputInteiro } from "@/components/ui/InputInteiro";
-import { ParcelasEditor, type ParcelaForm } from "./ParcelasEditor";
 import { MensagensPadrao } from "./MensagensPadrao";
+import { CadastroClienteModal } from "@/components/clientes/CadastroClienteModal";
 import { formatBRL } from "@/lib/format";
 
 // ── Tipos locais ─────────────────────────────────────────────────────────────
@@ -156,6 +155,7 @@ export function NovoOrcamentoPageForm({
   const [clienteQuery, setClienteQuery] = useState(iniciais?.nomeCliente ?? "");
   const [nomeCliente, setNomeCliente] = useState(iniciais?.nomeCliente ?? "");
   const [idCliente, setIdCliente] = useState<number | undefined>(iniciais?.idCliente);
+  const [modalClienteAberto, setModalClienteAberto] = useState(false);
 
   // ── Vendedor ────────────────────────────────────────────────────────────────
   const [vendedorId, setVendedorId] = useState<number | undefined>(
@@ -219,47 +219,6 @@ export function NovoOrcamentoPageForm({
 
   const valorTotal = valorProdutos + valorIPI + freteValor - descontoReais;
 
-  // Parcelas só podem ser escolhidas/geradas com ao menos um produto selecionado.
-  const temProduto = itens.some((i) => i.idProduto !== undefined);
-
-  // ── 4. Parcelas ─────────────────────────────────────────────────────────────
-  // string para permitir o campo vazio (apagar o "1" e digitar outro valor)
-  const [qtdParcelas, setQtdParcelas] = useState("1");
-  const parcelasKey = useRef(1000);
-
-  // Inicializa com 1 parcela visível
-  const [parcelas, setParcelas] = useState<ParcelaForm[]>(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 1);
-    const data = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    return [{ key: parcelasKey.current++, data, valor: 0, formaPagamento: "Boleto", observacao: "" }];
-  });
-
-  // Mantém o contador "Quantidade de parcelas" em sincronia com a lista
-  // (adicionar/remover parcela atualiza o número exibido no campo).
-  function handleParcelasChange(novas: ParcelaForm[]) {
-    setParcelas(novas);
-    setQtdParcelas(String(novas.length));
-  }
-
-  function gerarParcelas(qtd: number) {
-    if (qtd <= 0) { setParcelas([]); return; }
-    const valorParcela = valorTotal > 0 ? valorTotal / qtd : 0;
-    const novas: ParcelaForm[] = Array.from({ length: qtd }, (_, idx) => {
-      const d = new Date();
-      d.setMonth(d.getMonth() + idx + 1);
-      const data = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      return {
-        key: parcelasKey.current++,
-        data,
-        valor: valorParcela,
-        formaPagamento: "Boleto",
-        observacao: "",
-      };
-    });
-    setParcelas(novas);
-  }
-
   // ── 5. Transporte ───────────────────────────────────────────────────────────
   const [fretePor, setFretePor] = useState<"" | "0" | "1" | "9">(iniciais?.fretePor ?? "");
   const [transportadoraQuery, setTransportadoraQuery] = useState(iniciais?.transportadoraNome ?? "");
@@ -290,7 +249,7 @@ export function NovoOrcamentoPageForm({
   const [obs, setObs] = useState(iniciais?.obs ?? "");
   const [obsInterno, setObsInterno] = useState(iniciais?.obsInterno ?? "");
 
-  // ── Carregamento de itens e parcelas em modo edição ─────────────────────────
+  // ── Carregamento de itens em modo edição ────────────────────────────────────
 
   useEffect(() => {
     if (!modoEdicao || !orcamentoIdVhsys) return;
@@ -311,15 +270,6 @@ export function NovoOrcamentoPageForm({
           ipi_produto?: number;
           icms_produto?: number;
           cod_produto?: string;
-        }>;
-
-        // Carrega parcelas em paralelo
-        const resParcelas = await fetch(`/api/orcamento-parcelas/${orcamentoIdVhsys}`);
-        const dadosParcelas = await resParcelas.json() as Array<{
-          data_parcela: string;
-          valor_parcela: string | number;
-          forma_pagamento?: string;
-          observacoes_parcela?: string;
         }>;
 
         if (cancelado) return;
@@ -343,19 +293,6 @@ export function NovoOrcamentoPageForm({
         }));
 
         setItens(itensCarregados.length > 0 ? itensCarregados : [itemVazio(nextKey.current++)]);
-
-        // Preenche parcelas
-        if (dadosParcelas.length > 0) {
-          const parcelasCarregadas: ParcelaForm[] = dadosParcelas.map((p) => ({
-            key: parcelasKey.current++,
-            data: p.data_parcela ?? "",
-            valor: Number(p.valor_parcela) || 0,
-            formaPagamento: (p.forma_pagamento as ParcelaForm["formaPagamento"]) ?? "Boleto",
-            observacao: p.observacoes_parcela ?? "",
-          }));
-          setParcelas(parcelasCarregadas);
-          setQtdParcelas(String(parcelasCarregadas.length));
-        }
       } catch {
         // Mantém estado vazio em caso de erro
       } finally {
@@ -446,22 +383,6 @@ export function NovoOrcamentoPageForm({
       ...(i.icms > 0 ? { icms_produto: i.icms } : {}),
     }));
 
-    const parcelasMapped: PayloadParcelaOrcamento[] = parcelas
-      .filter((p) => p.data && p.valor > 0)
-      .map((p) => ({
-        data_parcela: p.data,
-        valor_parcela: p.valor,
-        ...(p.formaPagamento
-          ? {
-              forma_pagamento:
-                p.formaPagamento as PayloadParcelaOrcamento["forma_pagamento"],
-            }
-          : {}),
-        ...(p.observacao.trim()
-          ? { observacoes_parcela: p.observacao.trim() }
-          : {}),
-      }));
-
     if (modoEdicao && orcamentoIdVhsys) {
       // Modo edição: estratégia "substituir tudo"
       const itensDiff = {
@@ -473,8 +394,7 @@ export function NovoOrcamentoPageForm({
         const res = await editarOrcamento(
           orcamentoIdVhsys,
           payload,
-          itensDiff,
-          parcelasMapped.length > 0 ? parcelasMapped : undefined
+          itensDiff
         );
         if (!res.ok) {
           setErro(res.erro ?? "Erro ao salvar orçamento.");
@@ -487,8 +407,7 @@ export function NovoOrcamentoPageForm({
       startTransition(async () => {
         const res = await criarOrcamento(
           payload,
-          itensMapped,
-          parcelasMapped.length > 0 ? parcelasMapped : undefined
+          itensMapped
         );
         if (!res.ok) {
           setErro(res.erro ?? "Erro ao criar orçamento.");
@@ -513,6 +432,7 @@ export function NovoOrcamentoPageForm({
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-8 max-w-5xl">
 
       {/* ── 1. Topo: Cliente / Vendedor / Número ─────────────────────────── */}
@@ -549,6 +469,13 @@ export function NovoOrcamentoPageForm({
                 </>
               )}
             />
+            <button
+              type="button"
+              onClick={() => setModalClienteAberto(true)}
+              className="mt-1 text-sm font-semibold text-blue-700 hover:underline"
+            >
+              Cadastrar cliente
+            </button>
           </div>
 
           {/* Vendedor — lado a lado com Número */}
@@ -887,57 +814,6 @@ export function NovoOrcamentoPageForm({
         </div>
       </section>
 
-      {/* ── 4. Pagamento ──────────────────────────────────────────────────── */}
-      <section>
-        <SecaoTitulo titulo="Pagamento" />
-        <div className="mb-4 flex items-end gap-3">
-          <div className="w-32">
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Quantidade de parcelas
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={qtdParcelas}
-              disabled={!temProduto}
-              onChange={(e) => setQtdParcelas(e.target.value.replace(/\D/g, ""))}
-              placeholder="Ex.: 3"
-              className="input-base w-full"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => gerarParcelas(Number(qtdParcelas))}
-            disabled={!temProduto || !qtdParcelas || Number(qtdParcelas) < 1}
-            className="btn-secondary px-3 disabled:cursor-not-allowed disabled:opacity-50"
-            title={temProduto ? "Gerar parcelas" : "Adicione um produto primeiro"}
-            aria-label="Gerar parcelas"
-          >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-          </button>
-        </div>
-
-        <ParcelasEditor
-          parcelas={parcelas}
-          onChange={handleParcelasChange}
-          nextKey={parcelasKey}
-          totalOrcamento={valorTotal > 0 ? valorTotal : undefined}
-          podeAdicionar={temProduto}
-        />
-      </section>
-
       {/* ── 5. Transporte ─────────────────────────────────────────────────── */}
       <section>
         <SecaoTitulo titulo="Transporte" />
@@ -1115,6 +991,21 @@ export function NovoOrcamentoPageForm({
           {isPending ? "Salvando…" : modoEdicao ? "Salvar alterações" : "Salvar"}
         </button>
       </div>
+
     </form>
+
+    {/* ── Modal de cadastro de cliente (fora do form: evita submit por Enter) ── */}
+    {modalClienteAberto && (
+      <CadastroClienteModal
+        onClose={() => setModalClienteAberto(false)}
+        onCriado={(c) => {
+          setClienteQuery(c.razao);
+          setNomeCliente(c.razao);
+          setIdCliente(c.id_vhsys);
+          setModalClienteAberto(false);
+        }}
+      />
+    )}
+    </>
   );
 }
