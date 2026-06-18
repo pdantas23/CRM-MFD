@@ -98,7 +98,7 @@ export function PedidosView({
       render: (p) => {
         const situacao = p.situacao_id ? situacaoPorId.get(p.situacao_id) : null;
         return (
-          <span className="inline-flex items-center rounded-full border bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700 border-gray-200">
+          <span className="inline-flex items-center whitespace-nowrap rounded-full border bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700 border-gray-200">
             {situacao?.nome ?? p.status_base ?? "—"}
           </span>
         );

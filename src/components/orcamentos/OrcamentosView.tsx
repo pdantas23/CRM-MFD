@@ -137,7 +137,7 @@ export function OrcamentosView({
           "—";
         return (
           <span
-            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+            className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${
               (o.situacao_id != null && corSituacao[o.situacao_id]) ||
               "bg-gray-100 text-gray-700 border-gray-200"
             }`}
