@@ -86,6 +86,20 @@ function dataOuNull(s: string | null | undefined): string | null {
   return s;
 }
 
+// Data (só YYYY-MM-DD) de um valor que pode vir como timestamp ou date.
+function soDataOuNull(s: string | null | undefined): string | null {
+  const v = dataOuNull(s);
+  return v ? v.slice(0, 10) : null;
+}
+
+// Data da última mudança de situação (coluna data_situacao). Mesmo fallback
+// do sync/backfill: data_status (quando o payload trouxer) → data_mod_pedido
+// → data_pedido — para a coluna nunca ficar nula só porque a API a omitiu.
+function dataSituacaoPedido(p: VhsysPedido): string | null {
+  const ds = typeof p.data_status === "string" ? p.data_status : null;
+  return soDataOuNull(ds) ?? soDataOuNull(p.data_mod_pedido) ?? dataOuNull(p.data_pedido);
+}
+
 function situacaoEfetivaInline(situacaoId: number | null, statusBase: string | null) {
   if (situacaoId) return { situacaoId, origem: "vhsys" as const };
   const map: Record<string, number> = {
@@ -115,6 +129,7 @@ async function upsertPedidoNoEspelho(pedido: VhsysPedido): Promise<void> {
     status_base: pedido.status_pedido || null,
     origem_situacao: efetiva.origem,
     data_pedido: dataOuNull(pedido.data_pedido),
+    data_situacao: dataSituacaoPedido(pedido),
     prazo_entrega: pedido.prazo_entrega || null,
     referencia: pedido.referencia_pedido || null,
     obs: pedido.obs_pedido || null,
@@ -238,6 +253,9 @@ export async function moverSituacaoPedido(
         situacao_id: novaSituacaoId,
         status_base: tipoStatus,
         origem_situacao: "vhsys",
+        // Mesma data enviada em data_status no payload acima: registra QUANDO
+        // a situação mudou, para o filtro "Atualizadas em" da tela de Pedidos.
+        data_situacao: payload.data_status,
         sincronizado_em: new Date().toISOString(),
       })
       .eq("id_vhsys", idVhsys);

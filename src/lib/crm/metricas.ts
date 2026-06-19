@@ -8,6 +8,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { formatBRL } from "@/lib/format";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import { COLUNAS_KANBAN } from "@/lib/vhsys/fluxo";
+import { hojeISOSaoPaulo } from "@/lib/entregas/hoje";
 // Cliente Supabase server — o projeto não gera tipos para as tabelas vhsys_*,
 // então as queries usam encadeamento livre sem checagem de schema.
 type DB = Awaited<ReturnType<typeof createClient>>;
@@ -269,6 +270,10 @@ export function aplicarPedidos(
   let q = aplicarComuns(query, filtrosComSituacao, escopo, "data_pedido");
   // Ocultar legado (default ON): limita a origem_situacao = 'vhsys'.
   if (filtros.ocultarLegado) q = q.eq("origem_situacao", "vhsys");
+  // "Atualizadas em": recorte pela data da última mudança de situação
+  // (independente do período, que usa data_pedido). Só pedidos.
+  if (filtros.situacaoAtualizadaDe) q = q.gte("data_situacao", filtros.situacaoAtualizadaDe);
+  if (filtros.situacaoAtualizadaAte) q = q.lte("data_situacao", filtros.situacaoAtualizadaAte);
   return q;
 }
 
@@ -378,6 +383,8 @@ async function tentarRpcPedidos(
       p_so_com_saldo: filtros.soComSaldo,
       p_data_de: filtros.dataDe,
       p_data_ate: filtros.dataAte,
+      p_sit_de: filtros.situacaoAtualizadaDe,
+      p_sit_ate: filtros.situacaoAtualizadaAte,
     })
     .maybeSingle();
 
@@ -431,19 +438,21 @@ interface EntregaAgg {
   data: string;
   status: string;
   pedido_id: string | null;
+  entregue_em: string | null;
 }
 
 /**
- * Classificações de status de entrega:
- * - Concluída : status = "entrega_final"
- * - Pendente  : status = "entrega_parcial" E data >= hoje (ainda no prazo)
- * - Atrasada  : status = "entrega_parcial" E data < hoje (prazo expirado)
+ * Classificações de status de entrega (baseadas na REALIZAÇÃO, não no tipo
+ * final/parcial):
+ * - Concluída : entregue_em preenchido (entrega realizada).
+ * - Atrasada  : NÃO realizada E data < hoje (prazo expirado), independente de
+ *               ser final ou parcial.
+ * - Pendente  : NÃO realizada E data >= hoje (ainda no prazo).
  *
- * O campo `data` é a data da entrega agendada/realizada (YYYY-MM-DD).
- * "Atrasada" = entrega_parcial com data anterior a hoje (prazo já passou).
+ * O campo `data` é a data da entrega agendada (YYYY-MM-DD).
  */
 function classificarEntrega(e: EntregaAgg, hojeIso: string): "concluida" | "pendente" | "atrasada" {
-  if (e.status === "entrega_final") return "concluida";
+  if (e.entregue_em) return "concluida";
   return e.data < hojeIso ? "atrasada" : "pendente";
 }
 
@@ -492,16 +501,13 @@ export async function metricasEntregas(
     aplicarEntregas(
       supabase
         .from("entregas")
-        .select("id, data, status, pedido_id")
+        .select("id, data, status, pedido_id, entregue_em")
         .order("data", { ascending: false }),
       filtros
     )
   );
 
-  const hojeIso = (() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  })();
+  const hojeIso = hojeISOSaoPaulo();
 
   let concluidas = 0, pendentes = 0, atrasadas = 0;
   const pedidoIdsComSaldo = new Set<string>();

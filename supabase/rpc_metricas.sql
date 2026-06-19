@@ -81,7 +81,13 @@ $$;
 -- para que as métricas batam com o que o Kanban exibe (exclui 778 Cancelado).
 -- recebido/saldo agregam da view vhsys_pedidos_financeiro via LEFT JOIN por
 -- numero (pedido sem contas conta 0). p_so_com_saldo restringe a saldo > 0
--- (afeta n e valor_total também).
+-- (afeta n e valor_total também). p_sit_de/p_sit_ate recortam por data_situacao
+-- (filtro "Atualizadas em").
+--
+-- A assinatura ganhou p_sit_de/p_sit_ate: derruba a versão antiga (8 args) para
+-- não deixar duas overloads e evitar ambiguidade na chamada PostgREST.
+drop function if exists public.pedidos_metricas(text, bigint, bigint[], bigint, boolean, boolean, date, date);
+
 create or replace function public.pedidos_metricas(
   p_busca         text    default null,
   p_numero        bigint  default null,
@@ -90,7 +96,10 @@ create or replace function public.pedidos_metricas(
   p_ocultar_legado boolean default true,
   p_so_com_saldo  boolean default false,
   p_data_de       date    default null,
-  p_data_ate      date    default null
+  p_data_ate      date    default null,
+  -- "Atualizadas em": recorte por data_situacao (independente de data_pedido).
+  p_sit_de        date    default null,
+  p_sit_ate       date    default null
 )
 returns table (
   n           bigint,
@@ -137,6 +146,8 @@ as $$
       and (p_vendedor_id is null or p.vendedor_id_vhsys = p_vendedor_id)
       and (p_data_de is null or p.data_pedido >= p_data_de)
       and (p_data_ate is null or p.data_pedido <= p_data_ate)
+      and (p_sit_de is null or p.data_situacao >= p_sit_de)
+      and (p_sit_ate is null or p.data_situacao <= p_sit_ate)
       and (p_so_com_saldo is not true or coalesce(fin.saldo, 0) > 0)
   )
   select
@@ -149,6 +160,6 @@ $$;
 
 -- ── Permissões ──────────────────────────────────────────────────────────────
 revoke all on function public.orcamentos_metricas(text, bigint, bigint[], bigint, boolean, date, date) from anon;
-revoke all on function public.pedidos_metricas(text, bigint, bigint[], bigint, boolean, boolean, date, date) from anon;
+revoke all on function public.pedidos_metricas(text, bigint, bigint[], bigint, boolean, boolean, date, date, date, date) from anon;
 grant execute on function public.orcamentos_metricas(text, bigint, bigint[], bigint, boolean, date, date) to authenticated;
-grant execute on function public.pedidos_metricas(text, bigint, bigint[], bigint, boolean, boolean, date, date) to authenticated;
+grant execute on function public.pedidos_metricas(text, bigint, bigint[], bigint, boolean, boolean, date, date, date, date) to authenticated;

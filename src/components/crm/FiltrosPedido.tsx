@@ -1,8 +1,12 @@
 "use client";
 // Filtros específicos de Pedidos: dois toggles estilizados —
-// "Contas sem dar baixa" (default OFF) e "Ocultar legado" (default ON).
+// "Contas sem dar baixa" (default OFF) e "Ocultar legado" (default ON) —
+// mais o seletor "Atualizadas em" (intervalo sobre a data da última mudança
+// de situação, params sit_de/sit_ate). Tudo otimista via useFiltrosUrl.
 
 import { useFiltrosUrl } from "./FiltrosUrlProvider";
+import { PeriodoDropdown } from "./PeriodoDropdown";
+import { resolverPreset, type PeriodoPreset } from "@/lib/crm/filtros";
 
 function Toggle({
   ligado,
@@ -48,6 +52,23 @@ export function FiltrosPedido() {
   // Ocultar legado é default ON: ligado a menos que legado=false na URL.
   const ocultarLegado = getParam("legado") !== "false";
 
+  // "Atualizadas em": intervalo sobre data_situacao (sit_de/sit_ate). Sempre
+  // gravamos datas concretas (preset null no dropdown) — o rótulo mostra o
+  // intervalo; vazio = qualquer data.
+  const sitDe = getParam("sit_de") ?? null;
+  const sitAte = getParam("sit_ate") ?? null;
+
+  function aplicarPreset(preset: PeriodoPreset) {
+    const r = resolverPreset(preset);
+    aplicar({ sit_de: r.de ?? undefined, sit_ate: r.ate ?? undefined });
+  }
+  function aplicarCustom(de: string, ate: string) {
+    aplicar({ sit_de: de || undefined, sit_ate: ate || undefined });
+  }
+  function limparAtualizadas() {
+    aplicar({ sit_de: undefined, sit_ate: undefined });
+  }
+
   return (
     <>
       <Toggle
@@ -62,6 +83,16 @@ export function FiltrosPedido() {
       >
         Ocultar legado
       </Toggle>
+      <PeriodoDropdown
+        preset={null}
+        dataDe={sitDe}
+        dataAte={sitAte}
+        onPreset={aplicarPreset}
+        onCustom={aplicarCustom}
+        rotuloPrefixo="Atualizadas em"
+        rotuloVazio="Qualquer data"
+        onLimpar={limparAtualizadas}
+      />
     </>
   );
 }

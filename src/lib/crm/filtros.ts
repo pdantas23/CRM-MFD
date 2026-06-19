@@ -41,6 +41,13 @@ export interface FiltrosCrm {
   soComSaldo: boolean;
   /** Ocultar registros legado (origem_situacao = 'legado'). Default ON. */
   ocultarLegado: boolean;
+  /**
+   * Filtro "Atualizadas em" (específico de Pedidos): recorta pela DATA da
+   * última mudança de situação (coluna data_situacao), independente do período
+   * (que usa data_pedido). YYYY-MM-DD ou null. Vazio = sem recorte.
+   */
+  situacaoAtualizadaDe: string | null;
+  situacaoAtualizadaAte: string | null;
   // ── Específicos de Entregas ──
   /**
    * Situações de entrega em string (ex.: "entrega_final","entrega_parcial").
@@ -62,7 +69,7 @@ function str(v: string | string[] | undefined): string | undefined {
 }
 
 /** Resolve um preset em datas concretas (YYYY-MM-DD), no fuso local. */
-function resolverPreset(preset: PeriodoPreset): { de: string | null; ate: string | null } {
+export function resolverPreset(preset: PeriodoPreset): { de: string | null; ate: string | null } {
   const hoje = new Date();
   const ate = isoLocal(hoje);
   const inicio = new Date(hoje);
@@ -187,6 +194,14 @@ export function parseFiltros(
   // Ocultar legado: default LIGADO. Só fica OFF se o param vier explicitamente "false".
   const ocultarLegado = entidade === "pedidos" ? str(sp.legado) !== "false" : false;
 
+  // "Atualizadas em" (só pedidos): intervalo sobre data_situacao. Params
+  // sit_de/sit_ate (não colidem com data_de/data_ate do período). Validados
+  // como YYYY-MM-DD calendário; inválido → null (ignora como ausente).
+  const sitDeRaw = entidade === "pedidos" ? str(sp.sit_de) : undefined;
+  const sitAteRaw = entidade === "pedidos" ? str(sp.sit_ate) : undefined;
+  const situacaoAtualizadaDe = sitDeRaw ? validarData(sitDeRaw) : null;
+  const situacaoAtualizadaAte = sitAteRaw ? validarData(sitAteRaw) : null;
+
   // Específicos de entregas
   const STATUS_ENTREGA_VALIDOS = ["entrega_final", "entrega_parcial"];
   const situacoesStr =
@@ -218,6 +233,8 @@ export function parseFiltros(
     saldoTipo,
     soComSaldo,
     ocultarLegado,
+    situacaoAtualizadaDe,
+    situacaoAtualizadaAte,
     situacoesStr,
     periodoEntrega,
     soComSaldoEntrega,

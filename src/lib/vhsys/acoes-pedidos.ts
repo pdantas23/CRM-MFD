@@ -9,7 +9,7 @@ import type { PedidoRow } from "@/lib/types/pedidos";
 const COLS_PEDIDO =
   "id, id_vhsys, numero, cliente_id_vhsys, nome_cliente, vendedor_id_vhsys, " +
   "vendedor_nome, valor_total, situacao_id, status_base, origem_situacao, " +
-  "data_pedido, prazo_entrega, referencia, obs, data_mod_vhsys, lixeira";
+  "data_pedido, data_situacao, prazo_entrega, referencia, obs, data_mod_vhsys, lixeira";
 
 type ProfileLean = { role: string; vendedor_id: number | null };
 

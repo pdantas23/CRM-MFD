@@ -6,11 +6,16 @@
 // automaticamente: por orcamento_id (vínculo gravado) ou, na ausência dele,
 // pelo numero_orcamento textual. Anexos = anexo legado + entrega_anexos.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { StatusBadge } from "@/components/ui/Badge";
+import { StatusBadge, AtrasadaBadge, EntregueBadge, ehAtrasada } from "@/components/ui/Badge";
 import { formatBRL, formatarData } from "@/lib/format";
-import { vincularEntregaOrcamento } from "@/lib/entregas/acoes";
+import {
+  vincularEntregaOrcamento,
+  marcarEntregaEntregue,
+  desmarcarEntregaEntregue,
+} from "@/lib/entregas/acoes";
+import { hojeISOSaoPaulo } from "@/lib/entregas/hoje";
 import type { Entrega, EntregaAnexo } from "@/lib/types/database";
 
 interface ItemApi {
@@ -88,6 +93,36 @@ export function EntregaModal({ entrega, isAdmin, onClose, onChanged }: Props) {
   const [enviando, setEnviando] = useState(false);
   const [removendoId, setRemovendoId] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Baixa de entrega (estado "entregue") — só admin.
+  const entregue = Boolean(entrega.entregue_em);
+  const atrasada = ehAtrasada(entrega, hojeISOSaoPaulo());
+  const [pendingBaixa, startBaixa] = useTransition();
+  const [avisoBaixa, setAvisoBaixa] = useState<string | null>(null);
+
+  function marcarEntregue() {
+    setAvisoBaixa(null);
+    startBaixa(async () => {
+      const res = await marcarEntregaEntregue(entrega.id);
+      if (!res.ok) setAvisoBaixa(res.erro);
+      else if (res.aviso) setAvisoBaixa(res.aviso);
+      onChanged?.();
+      onClose();
+    });
+  }
+
+  function desmarcarEntregue() {
+    setAvisoBaixa(null);
+    startBaixa(async () => {
+      const res = await desmarcarEntregaEntregue(entrega.id);
+      if (!res.ok && res.erro) {
+        setAvisoBaixa(res.erro);
+        return;
+      }
+      onChanged?.();
+      onClose();
+    });
+  }
 
   // Carrega anexos ao abrir.
   useEffect(() => {
@@ -299,6 +334,7 @@ export function EntregaModal({ entrega, isAdmin, onClose, onChanged }: Props) {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <StatusBadge status={entrega.status} />
+            {entregue ? <EntregueBadge /> : atrasada ? <AtrasadaBadge /> : null}
             <button
               type="button"
               onClick={onClose}
@@ -542,10 +578,44 @@ export function EntregaModal({ entrega, isAdmin, onClose, onChanged }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 border-t px-6 py-4">
-          <button type="button" onClick={onClose} className="btn-secondary">
-            Fechar
-          </button>
+        <div className="border-t px-6 py-4">
+          {avisoBaixa && (
+            <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {avisoBaixa}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-gray-500">
+              {entregue && entrega.entregue_em && (
+                <span>Entregue em {formatarData(entrega.entregue_em.slice(0, 10))}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {isAdmin &&
+                (entregue ? (
+                  <button
+                    type="button"
+                    onClick={desmarcarEntregue}
+                    disabled={pendingBaixa}
+                    className="btn-secondary disabled:opacity-60"
+                  >
+                    {pendingBaixa ? "Desmarcando…" : "Desmarcar"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={marcarEntregue}
+                    disabled={pendingBaixa}
+                    className="btn-primary disabled:opacity-60"
+                  >
+                    {pendingBaixa ? "Marcando…" : "Marcar como entregue"}
+                  </button>
+                ))}
+              <button type="button" onClick={onClose} className="btn-secondary">
+                Fechar
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

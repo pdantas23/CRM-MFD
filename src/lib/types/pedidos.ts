@@ -22,6 +22,8 @@ export interface PedidoRow {
   status_base: string | null;
   origem_situacao: "vhsys" | "legado";
   data_pedido: string | null;
+  /** Data da última mudança de situação (filtro "Atualizadas em"). */
+  data_situacao: string | null;
   prazo_entrega: string | null;
   referencia: string | null;
   obs: string | null;

@@ -51,7 +51,7 @@ const CHUNK_FIN = 200;
 const COLS_PEDIDO =
   "id, id_vhsys, numero, cliente_id_vhsys, nome_cliente, vendedor_id_vhsys, " +
   "vendedor_nome, valor_total, situacao_id, status_base, origem_situacao, " +
-  "data_pedido, prazo_entrega, referencia, obs, data_mod_vhsys, lixeira";
+  "data_pedido, data_situacao, prazo_entrega, referencia, obs, data_mod_vhsys, lixeira";
 
 /** Resultado da onda 0 de pedidos (só roda quando há recorte de saldo). */
 export interface PedidosOnda0 {

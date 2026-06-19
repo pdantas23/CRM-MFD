@@ -15,6 +15,12 @@ interface PeriodoDropdownProps {
   onPreset: (preset: PeriodoPreset) => void;
   /** Aplica um range custom (limpa periodo). */
   onCustom: (de: string, ate: string) => void;
+  /** Prefixo do rótulo do trigger. Default: "Período". */
+  rotuloPrefixo?: string;
+  /** Rótulo quando nada selecionado. Default: igual a rotuloPrefixo. */
+  rotuloVazio?: string;
+  /** Se informado, exibe opção "Limpar" no popover (volta a "qualquer data"). */
+  onLimpar?: () => void;
 }
 
 const PRESETS: { valor: PeriodoPreset; label: string }[] = [
@@ -36,6 +42,9 @@ export function PeriodoDropdown({
   dataAte,
   onPreset,
   onCustom,
+  rotuloPrefixo = "Período",
+  rotuloVazio,
+  onLimpar,
 }: PeriodoDropdownProps) {
   const [aberto, setAberto] = useState(false);
   const [de, setDe] = useState(dataDe ?? "");
@@ -62,11 +71,12 @@ export function PeriodoDropdown({
     };
   }, [aberto]);
 
+  const vazio = !preset && !dataDe && !dataAte;
   const rotulo = preset
     ? rotuloPreset(preset)
     : dataDe || dataAte
       ? `${dataDe ?? "…"} – ${dataAte ?? "…"}`
-      : "Período";
+      : (rotuloVazio ?? rotuloPrefixo);
 
   function aplicarCustom() {
     if (!de && !ate) return;
@@ -81,9 +91,15 @@ export function PeriodoDropdown({
         onClick={() => setAberto((v) => !v)}
         aria-haspopup="dialog"
         aria-expanded={aberto}
-        className="flex h-9 items-center gap-1.5 rounded-lg border border-blue-600 bg-blue-50 px-3 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
+        className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors ${
+          vazio && onLimpar
+            ? "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+            : "border-blue-600 bg-blue-50 text-blue-700 hover:bg-blue-100"
+        }`}
       >
-        <span className="text-xs text-blue-400">Período:</span>
+        <span className={`text-xs ${vazio && onLimpar ? "text-gray-400" : "text-blue-400"}`}>
+          {rotuloPrefixo}:
+        </span>
         <span>{rotulo}</span>
         <svg
           className={`h-3.5 w-3.5 transition-transform ${aberto ? "rotate-180" : ""}`}
@@ -139,6 +155,21 @@ export function PeriodoDropdown({
               </button>
             </div>
           </div>
+
+          {onLimpar && (
+            <div className="mt-2 border-t border-gray-100 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onLimpar();
+                  setAberto(false);
+                }}
+                className="w-full rounded-md px-2 py-1.5 text-left text-sm text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                Qualquer data
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

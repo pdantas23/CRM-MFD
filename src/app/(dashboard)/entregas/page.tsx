@@ -158,7 +158,7 @@ export default async function EntregasPage({
           comFiltros(
             supabase
               .from("entregas")
-              .select("id, data, periodo, status, nome_cliente, cpf_cnpj, numero_orcamento, bairro, endereco, anexo_url, anexo_nome, ordem, pedido_id, orcamento_id, created_at")
+              .select("id, data, periodo, status, nome_cliente, cpf_cnpj, numero_orcamento, bairro, endereco, anexo_url, anexo_nome, ordem, pedido_id, orcamento_id, entregue_em, entregue_por, created_at")
               .order("data", { ascending: false })
               .order("created_at", { ascending: false })
               .limit(500) // cap defensivo; tabela tem poucas linhas hoje

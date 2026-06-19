@@ -147,6 +147,7 @@ export function EntityToolbar({
     limpar([
       "q", "situacao", "vendedor", "periodo", "data_de", "data_ate",
       "pedido_emitido", "com_saldo", "saldo", "legado", "pagina", "periodo_entrega",
+      "sit_de", "sit_ate",
     ]);
   }
 

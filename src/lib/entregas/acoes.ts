@@ -9,8 +9,11 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { cacheInvalidate } from "@/lib/crm/cache";
 import { ehAdmin } from "@/lib/auth/roles";
+import { moverSituacaoPedido } from "@/lib/vhsys/acoes";
+import { SITUACAO } from "@/lib/vhsys/fluxo";
 import type { Periodo, StatusEntrega } from "@/lib/types/database";
 
 /** Dados do orçamento úteis para preencher e vincular uma entrega. */
@@ -267,4 +270,199 @@ export async function moverEntrega(
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : "Erro inesperado." };
   }
+}
+
+// ── Marcar/desmarcar entrega como realizada ("entregue") ──────────────────────
+
+type ResultadoMarcar =
+  | { ok: true; aviso?: string }
+  | { ok: false; erro: string };
+
+/**
+ * Resolve o id_vhsys (id_ped) do PEDIDO emitido a partir do orçamento da entrega.
+ *
+ * A entrega guarda o ORÇAMENTO (orcamento_id uuid → vhsys_orcamentos.id) ou, na
+ * falta dele, o numero_orcamento textual. Não há FK confiável orçamento→pedido
+ * no espelho; o vínculo é o MESMO heurístico usado em /entregas/nova (sentido
+ * inverso): um pedido emitido daquele orçamento cita-o por
+ *   - obs "Orçamento #N"  (emissão manual via CRM — criarPedidoDeOrcamento), ou
+ *   - referencia "ORC-{id_vhsys}" (emissão nativa/fallback).
+ * Procura no espelho de pedidos (admin client) por qualquer um desses padrões.
+ * Retorna null se não houver pedido vinculado (ex.: entrega sem orçamento ou
+ * orçamento ainda não emitido) — o chamador trata como aviso, não erro.
+ */
+async function resolverPedidoIdVhsys(
+  admin: ReturnType<typeof createAdminClient>,
+  orcamentoId: string | null,
+  numeroOrcamentoTexto: string | null
+): Promise<number | null> {
+  // 1. Descobre id_vhsys + numero do orçamento (por uuid ou por número textual).
+  let orcIdVhsys: number | null = null;
+  let orcNumero: number | null = null;
+
+  if (orcamentoId) {
+    const { data } = await admin
+      .from("vhsys_orcamentos")
+      .select("id_vhsys, numero")
+      .eq("id", orcamentoId)
+      .maybeSingle();
+    const o = data as { id_vhsys: number; numero: number } | null;
+    orcIdVhsys = o?.id_vhsys ?? null;
+    orcNumero = o?.numero ?? null;
+  } else if (numeroOrcamentoTexto) {
+    const n = Number(numeroOrcamentoTexto);
+    if (Number.isInteger(n) && n > 0) {
+      const { data } = await admin
+        .from("vhsys_orcamentos")
+        .select("id_vhsys, numero")
+        .eq("numero", n)
+        .eq("lixeira", false)
+        .limit(1)
+        .maybeSingle();
+      const o = data as { id_vhsys: number; numero: number } | null;
+      orcIdVhsys = o?.id_vhsys ?? null;
+      orcNumero = o?.numero ?? null;
+    }
+  }
+
+  if (orcIdVhsys === null && orcNumero === null) return null;
+
+  // 2. Procura o pedido que cita esse orçamento na obs ("Orçamento #N") ou na
+  //    referencia ("ORC-{id_vhsys}"). Pedido vivo (lixeira=false).
+  const filtros: string[] = [];
+  if (orcNumero !== null) filtros.push(`obs.ilike.%Orçamento #${orcNumero}%`);
+  if (orcIdVhsys !== null) filtros.push(`referencia.eq.ORC-${orcIdVhsys}`);
+  if (filtros.length === 0) return null;
+
+  const { data: ped } = await admin
+    .from("vhsys_pedidos")
+    .select("id_vhsys")
+    .or(filtros.join(","))
+    .eq("lixeira", false)
+    .limit(1)
+    .maybeSingle();
+
+  return (ped as { id_vhsys: number } | null)?.id_vhsys ?? null;
+}
+
+/**
+ * Marca uma entrega como entregue (estado de controle do admin). Ao marcar,
+ * tenta mover o PEDIDO correspondente no VHSYS:
+ *   - entrega_final   → ENTREGUE (777)
+ *   - entrega_parcial → ENTREGA_PARCIAL (1180)
+ * A baixa da entrega NÃO é revertida se o VHSYS falhar (pedido não encontrado,
+ * transição não permitida, erro de API): retorna { ok:true, aviso } e a entrega
+ * permanece marcada. Idempotente: se já estiver entregue, retorna ok.
+ */
+export async function marcarEntregaEntregue(
+  entregaId: string
+): Promise<ResultadoMarcar> {
+  if (!entregaId) return { ok: false, erro: "Entrega inválida." };
+
+  const { supabase, userId, erro } = await exigirAdmin();
+  if (erro) return { ok: false, erro };
+
+  // Carrega o estado atual da entrega.
+  const { data: entregaRow } = await supabase
+    .from("entregas")
+    .select("status, orcamento_id, numero_orcamento, entregue_em")
+    .eq("id", entregaId)
+    .maybeSingle();
+  if (!entregaRow) return { ok: false, erro: "Entrega não encontrada." };
+  const entrega = entregaRow as {
+    status: string;
+    orcamento_id: string | null;
+    numero_orcamento: string | null;
+    entregue_em: string | null;
+  };
+
+  // Idempotente: já entregue → nada a fazer.
+  if (entrega.entregue_em) return { ok: true };
+
+  // Marca a entrega. .select() confirma a persistência (RLS devolve 0 linhas
+  // sem erro se bloqueada).
+  const { data: salvo, error } = await supabase
+    .from("entregas")
+    .update({ entregue_em: new Date().toISOString(), entregue_por: userId })
+    .eq("id", entregaId)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, erro: error.message };
+  if (!salvo) {
+    return { ok: false, erro: "Não foi possível marcar a entrega (sem permissão)." };
+  }
+
+  cacheInvalidate("entregas");
+  revalidatePath("/entregas");
+
+  // Move o pedido no VHSYS — best-effort. Falha NÃO reverte a baixa.
+  const admin = createAdminClient();
+  const idVhsys = await resolverPedidoIdVhsys(
+    admin,
+    entrega.orcamento_id,
+    entrega.numero_orcamento
+  );
+
+  if (idVhsys === null) {
+    return {
+      ok: true,
+      aviso:
+        "Entrega marcada, mas não foi possível localizar o pedido vinculado no VHSYS para atualizar a situação.",
+    };
+  }
+
+  const novaSituacao =
+    entrega.status === "entrega_final" ? SITUACAO.ENTREGUE : SITUACAO.ENTREGA_PARCIAL;
+  const res = await moverSituacaoPedido(idVhsys, novaSituacao, "Baixa de entrega");
+
+  // moverSituacaoPedido já gravou a nova situação no espelho (vhsys_pedidos),
+  // mas o cache das telas de Pedidos/Orçamentos precisa ser invalidado para a
+  // mudança aparecer sem esperar o TTL/sync — mesmo padrão da emissão de pedido.
+  cacheInvalidate("pedidos");
+  cacheInvalidate("orcamentos");
+  revalidatePath("/pedidos");
+  revalidatePath("/orcamentos");
+
+  if (!res.ok) {
+    // Transição não permitida (ex.: pedido já ENTREGUE / vindo de CANCELADO):
+    // sucesso silencioso — o destino já é o esperado ou não há o que fazer.
+    if (res.erro && /transi[çc][ãa]o/i.test(res.erro)) {
+      return { ok: true };
+    }
+    return {
+      ok: true,
+      aviso: `Entrega marcada, mas a situação do pedido no VHSYS não pôde ser atualizada: ${res.erro ?? "erro desconhecido"}.`,
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Desmarca a entrega (remove a baixa). NÃO reverte a situação do pedido no VHSYS:
+ * o pedido pode ter avançado por outros motivos e o admin reverte manualmente no
+ * Kanban se necessário — a desmarcação aqui é apenas do estado local da entrega.
+ */
+export async function desmarcarEntregaEntregue(
+  entregaId: string
+): Promise<{ ok: boolean; erro?: string }> {
+  if (!entregaId) return { ok: false, erro: "Entrega inválida." };
+
+  const { supabase, erro } = await exigirAdmin();
+  if (erro) return { ok: false, erro };
+
+  const { data: salvo, error } = await supabase
+    .from("entregas")
+    .update({ entregue_em: null, entregue_por: null })
+    .eq("id", entregaId)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, erro: error.message };
+  if (!salvo) {
+    return { ok: false, erro: "Não foi possível desmarcar a entrega (sem permissão)." };
+  }
+
+  cacheInvalidate("entregas");
+  revalidatePath("/entregas");
+  return { ok: true };
 }

@@ -50,6 +50,22 @@ function dataOuNull(s: string | null | undefined): string | null {
   return s;
 }
 
+// Data (só YYYY-MM-DD) de um valor que pode vir como timestamp ou date.
+function soDataOuNull(s: string | null | undefined): string | null {
+  const v = dataOuNull(s);
+  return v ? v.slice(0, 10) : null;
+}
+
+// Data da última mudança de situação do pedido (coluna data_situacao).
+// A listagem GET /pedidos NÃO traz data_status — só o histórico de status.
+// Por isso usamos o mesmo fallback do backfill: data_status (quando vier no
+// payload) → data_mod_pedido → data_pedido. Assim a coluna nunca fica nula à
+// toa só porque a listagem omitiu data_status.
+function dataSituacaoPedido(p: VhsysPedido): string | null {
+  const ds = typeof p.data_status === "string" ? p.data_status : null;
+  return soDataOuNull(ds) ?? soDataOuNull(p.data_mod_pedido) ?? dataOuNull(p.data_pedido);
+}
+
 function paraLinhaProduto(registro: unknown) {
   const p = registro as VhsysProduto;
   return {
@@ -135,6 +151,7 @@ function paraLinhaPedido(registro: unknown) {
     status_base: p.status_pedido || null,
     origem_situacao: efetiva.origem,
     data_pedido: dataOuNull(p.data_pedido),
+    data_situacao: dataSituacaoPedido(p),
     prazo_entrega: p.prazo_entrega || null,
     referencia: p.referencia_pedido || null,
     obs: p.obs_pedido || null,

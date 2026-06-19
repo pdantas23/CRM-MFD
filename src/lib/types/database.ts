@@ -25,6 +25,8 @@ export interface Entrega {
   ordem: number | null;
   pedido_id: string | null;
   orcamento_id: string | null;
+  entregue_em: string | null;
+  entregue_por: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -93,8 +95,11 @@ export type Database = {
           endereco: string;
           anexo_url: string | null;
           anexo_nome: string | null;
+          ordem: number | null;
           pedido_id: string | null;
           orcamento_id: string | null;
+          entregue_em: string | null;
+          entregue_por: string | null;
           created_by: string | null;
           created_at: string;
         };
@@ -110,8 +115,11 @@ export type Database = {
           endereco: string;
           anexo_url?: string | null;
           anexo_nome?: string | null;
+          ordem?: number | null;
           pedido_id?: string | null;
           orcamento_id?: string | null;
+          entregue_em?: string | null;
+          entregue_por?: string | null;
           created_by?: string | null;
           created_at?: string;
         };
@@ -127,8 +135,11 @@ export type Database = {
           endereco?: string;
           anexo_url?: string | null;
           anexo_nome?: string | null;
+          ordem?: number | null;
           pedido_id?: string | null;
           orcamento_id?: string | null;
+          entregue_em?: string | null;
+          entregue_por?: string | null;
           created_by?: string | null;
           created_at?: string;
         };
