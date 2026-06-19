@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { NovoOrcamentoPageForm } from "@/components/orcamentos/NovoOrcamentoPageForm";
 import type { IniciaisOrcamento } from "@/components/orcamentos/NovoOrcamentoPageForm";
+import { ehAdmin } from "@/lib/auth/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function EditarOrcamentoPage({ params }: PageProps) {
     redirect("/login");
   }
 
-  if (profile.role !== "admin" && profile.role !== "vendedor") {
+  if (!ehAdmin(profile.role) && profile.role !== "vendedor") {
     redirect("/orcamentos");
   }
 
@@ -53,7 +54,7 @@ export default async function EditarOrcamentoPage({ params }: PageProps) {
 
   // Carrega vendedores (somente para admin)
   const vendedores: { id_vhsys: number; nome: string }[] =
-    profile.role === "admin"
+    ehAdmin(profile.role)
       ? ((
           await supabase
             .from("vhsys_vendedores")

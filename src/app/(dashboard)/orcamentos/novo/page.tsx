@@ -3,6 +3,7 @@ import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { redirect } from "next/navigation";
 import { NovoOrcamentoPageForm } from "@/components/orcamentos/NovoOrcamentoPageForm";
 import { iniciarRequest, medir, emitirLog } from "@/lib/perf/boot";
+import { ehAdmin } from "@/lib/auth/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export default async function NovoOrcamentoPage() {
     redirect("/login");
   }
 
-  if (profile.role !== "admin" && profile.role !== "vendedor") {
+  if (!ehAdmin(profile.role) && profile.role !== "vendedor") {
     redirect("/orcamentos");
   }
 
@@ -24,7 +25,7 @@ export default async function NovoOrcamentoPage() {
   const [[vendedores, msVendedores], [ultimoOrcResult, msUltimoOrc]] =
     await Promise.all([
       medir(async () => {
-        if (profile.role !== "admin") return [];
+        if (!ehAdmin(profile.role)) return [];
         const result = await supabase
           .from("vhsys_vendedores")
           .select("id_vhsys, nome")

@@ -5,6 +5,7 @@ import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { PeriodoBadge, StatusBadge } from "@/components/ui/Badge";
 import { DeleteButton } from "@/components/entregas/DeleteButton";
 import type { Entrega } from "@/lib/types/database";
+import { ehAdmin } from "@/lib/auth/roles";
 
 function formatDate(dateStr: string) {
   const [year, month, day] = dateStr.split("-");
@@ -52,7 +53,7 @@ export default async function EntregaDetailPage({
 
   if (!entrega) notFound();
 
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = ehAdmin(profile?.role);
   const e = entrega as Entrega;
 
   return (

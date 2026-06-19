@@ -6,6 +6,7 @@ import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
 import { orcamentosOnda, orcamentosKanbanOnda, POR_PAGINA } from "@/lib/crm/carregar";
 import { comCache } from "@/lib/crm/cache";
+import { ehAdmin } from "@/lib/auth/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function OrcamentosPage({
   const { profile } = await getSessaoComProfile();
 
   // Entregador não tem acesso a orçamentos; apenas admin e vendedor.
-  if (profile && profile.role !== "admin" && profile.role !== "vendedor") {
+  if (profile && !ehAdmin(profile.role) && profile.role !== "vendedor") {
     redirect("/entregas");
   }
 
@@ -43,7 +44,7 @@ export default async function OrcamentosPage({
   // Cada uma é cacheada por 30s para navegações rápidas.
   const [resultado, kanban] = await Promise.all([
     comCache(chaveCache, 30_000, () =>
-      orcamentosOnda(supabase, filtros, escopo, pagina, profile?.role === "admin")
+      orcamentosOnda(supabase, filtros, escopo, pagina, ehAdmin(profile?.role))
     ),
     comCache(chaveCacheKanban, 30_000, () =>
       orcamentosKanbanOnda(supabase, filtros, escopo)
@@ -58,7 +59,7 @@ export default async function OrcamentosPage({
   const usarPlanned = resultado.countAproximado;
 
   const podeEscrever =
-    profile?.role === "admin" ||
+    ehAdmin(profile?.role) ||
     profile?.role === "vendedor";
 
   if (!profile) {

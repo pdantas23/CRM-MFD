@@ -10,6 +10,7 @@ import { formatBRL, formatarData } from "@/lib/format";
 import { COLUNAS_KANBAN_ORCAMENTO, NOME_COLUNA_ORC } from "@/lib/vhsys/fluxo-orcamentos";
 import type { OrcamentoRow, SituacaoRow } from "@/lib/types/pedidos";
 import type { Profile } from "@/lib/types/database";
+import { ehAdmin } from "@/lib/auth/roles";
 
 const SITUACAO_APROVADO = 768;
 
@@ -82,12 +83,12 @@ export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profil
   }
 
   const podeEditar =
-    profile.role === "admin" ||
+    ehAdmin(profile.role) ||
     (profile.role === "vendedor" && profile.vendedor_id === orcamento.vendedor_id_vhsys);
   const podeEmitir =
     !orcamento.pedido_emitido &&
     orcamento.situacao_id === SITUACAO_APROVADO &&
-    (profile.role === "admin" ||
+    (ehAdmin(profile.role) ||
       (profile.role === "vendedor" && profile.vendedor_id === orcamento.vendedor_id_vhsys));
 
   // Carrega itens ao abrir modal

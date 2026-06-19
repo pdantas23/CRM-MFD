@@ -6,6 +6,7 @@ import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
 import { pedidosOnda0, pedidosOnda1, pedidosOnda2 } from "@/lib/crm/carregar";
 import { comCache } from "@/lib/crm/cache";
+import { ehAdmin } from "@/lib/auth/roles";
 import type {
   PedidoKanban,
   SituacaoRow,
@@ -23,12 +24,12 @@ export default async function PedidosPage({
   const { profile } = await getSessaoComProfile();
 
   // Entregador não tem acesso a pedidos; apenas admin e vendedor.
-  if (profile && profile.role !== "admin" && profile.role !== "vendedor") {
+  if (profile && !ehAdmin(profile.role) && profile.role !== "vendedor") {
     redirect("/entregas");
   }
 
   const role = profile?.role;
-  const podeEscrever = role === "admin" || role === "vendedor";
+  const podeEscrever = ehAdmin(role) || role === "vendedor";
   const vendedorId = profile?.vendedor_id ?? null;
 
   const escopo: Escopo = { role: role ?? "", vendedorId };

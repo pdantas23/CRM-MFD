@@ -1,4 +1,4 @@
-export type Role = "admin" | "vendedor" | "entregador";
+export type Role = "superadmin" | "admin" | "vendedor" | "entregador";
 export type Periodo = "manha" | "tarde" | "noite";
 export type StatusEntrega = "entrega_final" | "entrega_parcial";
 

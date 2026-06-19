@@ -10,6 +10,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { cacheInvalidate } from "@/lib/crm/cache";
+import { ehAdmin } from "@/lib/auth/roles";
 import type { Periodo, StatusEntrega } from "@/lib/types/database";
 
 /** Dados do orçamento úteis para preencher e vincular uma entrega. */
@@ -38,7 +39,7 @@ async function exigirAdmin() {
     .select("role")
     .eq("id", user.id)
     .single();
-  if ((profile as { role: string } | null)?.role !== "admin") {
+  if (!ehAdmin((profile as { role: string } | null)?.role)) {
     return { supabase, userId: null, erro: "Permissão negada: somente administradores." as const };
   }
   return { supabase, userId: user.id, erro: null };

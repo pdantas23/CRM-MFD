@@ -12,6 +12,7 @@ import type {
   PayloadItemOrcamento,
 } from "@/lib/vhsys/types";
 import type { Profile } from "@/lib/types/database";
+import { ehAdmin } from "@/lib/auth/roles";
 import { AutocompleteVhsys } from "@/components/ui/AutocompleteVhsys";
 import { InputValor } from "@/components/ui/InputValor";
 import { InputInteiro } from "@/components/ui/InputInteiro";
@@ -367,7 +368,7 @@ export function NovoOrcamentoPageForm({
     };
 
     // Vendedor (admin escolhe; vendedor usa o próprio via server action)
-    if (profile.role === "admin" && vendedorId) {
+    if (ehAdmin(profile.role) && vendedorId) {
       const vend = vendedores.find((v) => v.id_vhsys === vendedorId);
       payload.vendedor_pedido_id = vendedorId;
       if (vend) payload.vendedor_pedido = vend.nome;
@@ -483,7 +484,7 @@ export function NovoOrcamentoPageForm({
             <label className="mb-1 block text-sm font-medium text-gray-700">
               Vendedor
             </label>
-            {profile.role === "admin" ? (
+            {ehAdmin(profile.role) ? (
               <select
                 value={vendedorId ?? ""}
                 onChange={(e) =>

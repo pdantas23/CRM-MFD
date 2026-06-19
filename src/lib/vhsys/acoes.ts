@@ -47,12 +47,15 @@ export async function exigirAdminOuVendedor(): Promise<ContextoAcao> {
     .eq("id", user.id)
     .single();
 
-  if (!profile || !["admin", "vendedor"].includes(profile.role as string)) {
+  if (!profile || !["admin", "superadmin", "vendedor"].includes(profile.role as string)) {
     throw new Error("Permissão negada: somente administradores e vendedores podem executar esta ação.");
   }
 
+  // superadmin é tratado como admin no contexto da ação (mesmos poderes).
+  const roleEfetiva = profile.role === "superadmin" ? "admin" : (profile.role as "admin" | "vendedor");
+
   return {
-    role: profile.role as "admin" | "vendedor",
+    role: roleEfetiva,
     vendedorId: (profile as { vendedor_id: number | null }).vendedor_id ?? null,
     userId: user.id,
   };

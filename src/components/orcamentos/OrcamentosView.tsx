@@ -23,6 +23,7 @@ import type { Metrica } from "@/lib/crm/metricas";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import type { OrcamentoRow, SituacaoRow } from "@/lib/types/pedidos";
 import type { Profile } from "@/lib/types/database";
+import { ehAdmin } from "@/lib/auth/roles";
 
 type ViewAtual = "lista" | "kanban";
 
@@ -92,7 +93,7 @@ export function OrcamentosView({
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
-  const podeNovo = profile.role === "admin" || profile.role === "vendedor";
+  const podeNovo = ehAdmin(profile.role) || profile.role === "vendedor";
   const opcoesSituacao = situacoes.map((s) => ({ id: s.id_vhsys, nome: s.nome }));
 
   // ── Definição de colunas da tabela (migrada de OrcamentosClient) ──────────
@@ -190,7 +191,7 @@ export function OrcamentosView({
         filtros={filtros}
         situacoes={opcoesSituacao}
         vendedores={vendedores}
-        mostrarVendedor={profile.role === "admin"}
+        mostrarVendedor={ehAdmin(profile.role)}
         filtroEspecifico={<FiltroConvertido />}
         acaoPrimaria={
           <div className="flex items-center gap-2">

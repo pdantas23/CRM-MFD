@@ -9,6 +9,7 @@ import { TabelaSemanalEntregas } from "@/components/entregas/TabelaSemanalEntreg
 import { EntregasAdminView } from "@/components/entregas/EntregasAdminView";
 import { Suspense } from "react";
 import type { Entrega } from "@/lib/types/database";
+import { ehAdmin } from "@/lib/auth/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +60,7 @@ export default async function EntregasPage({
 
   const { profile } = await getSessaoComProfile();
   const role = profile?.role;
-  const isAdmin = role === "admin";
+  const isAdmin = ehAdmin(role);
 
   const today = getTodayISO();
   const filtros = parseFiltros(searchParams, "entregas");

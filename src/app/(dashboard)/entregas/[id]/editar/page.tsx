@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { EntregaForm } from "@/components/entregas/EntregaForm";
 import type { Entrega } from "@/lib/types/database";
+import { ehAdmin } from "@/lib/auth/roles";
 
 export default async function EditarEntregaPage({
   params,
@@ -20,7 +21,7 @@ export default async function EditarEntregaPage({
 
   if (!user) redirect("/login");
 
-  if (profile?.role !== "admin") {
+  if (!ehAdmin(profile?.role)) {
     redirect(`/entregas/${id}`);
   }
 
