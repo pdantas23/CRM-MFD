@@ -26,7 +26,7 @@ export interface VendedorVhsys {
   nome: string;
 }
 
-type Resultado<T = Record<string, never>> =
+type Resultado<T = Record<never, never>> =
   | ({ ok: true } & T)
   | { ok: false; erro: string };
 

@@ -5,12 +5,14 @@
 // Persiste tudo na URL com router.replace (nunca push por tecla).
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
+import { useFiltrosUrl } from "./FiltrosUrlProvider";
 import { MultiSelectFiltro } from "./MultiSelectFiltro";
 import { PeriodoDropdown } from "./PeriodoDropdown";
 import { DropdownFiltro, type OpcaoFiltro } from "@/components/ui/DropdownFiltro";
 import type { FiltrosCrm, PeriodoPreset } from "@/lib/crm/filtros";
+
+const PRESETS_VALIDOS: PeriodoPreset[] = ["hoje", "7d", "30d", "90d", "ano", "tudo"];
 
 /** id pode ser numérico (orcamentos/pedidos) ou string (entregas). */
 interface SituacaoOpcao {
@@ -54,29 +56,15 @@ export function EntityToolbar({
   acaoPrimaria,
   filtroEspecifico,
 }: EntityToolbarProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { aplicar, limpar, getParam } = useFiltrosUrl();
 
   // Busca controlada por estado LOCAL, atualizada sincronamente a cada tecla.
-  const buscaUrl = searchParams.get("q") ?? "";
+  const buscaUrl = getParam("q") ?? "";
   const [termo, setTermo] = useState(buscaUrl);
   const termoDebounced = useDebouncedValue(termo, 350);
   // Último valor que ESTE componente emitiu para a URL (evita loop de sync).
   const ultimoEmitido = useRef(buscaUrl);
   const digitando = useRef(false);
-
-  /** Aplica mudanças na URL com replace (sem scroll, sem push). */
-  function aplicar(mudancas: Record<string, string | undefined>) {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [k, v] of Object.entries(mudancas)) {
-      if (v === undefined || v === "") params.delete(k);
-      else params.set(k, v);
-    }
-    if (!("pagina" in mudancas)) params.delete("pagina");
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
 
   // Sincroniza o termo debounced para a URL (somente quando muda de fato).
   useEffect(() => {
@@ -114,8 +102,33 @@ export function EntityToolbar({
     label: v.nome,
   }));
 
-  // situacoesSelecionadas como override; caso omitido usa filtros.situacoes (números).
-  const situacoesAtivas = situacoesSelecionadas ?? filtros.situacoes.map(String);
+  // Seleção OTIMISTA de situação: lê do overlay/URL (`situacao`) quando houver,
+  // senão cai no valor derivado pelo server (situacoesSelecionadas/filtros).
+  const situacaoParam = getParam("situacao");
+  const padraoSituacao = situacoesSelecionadas ?? filtros.situacoes.map(String);
+  const situacoesAtivas =
+    situacaoParam !== undefined
+      ? situacaoParam.split(",").filter(Boolean)
+      : padraoSituacao;
+
+  // Vendedor OTIMISTA.
+  const vendedorAtual =
+    getParam("vendedor") ?? (filtros.vendedor !== null ? String(filtros.vendedor) : undefined);
+
+  // Período OTIMISTA: deriva preset/datas do overlay/URL quando presente.
+  const periodoRaw = getParam("periodo");
+  const dataDeRaw = getParam("data_de");
+  const dataAteRaw = getParam("data_ate");
+  const temCustom = dataDeRaw !== undefined || dataAteRaw !== undefined;
+  const presetOtimista: PeriodoPreset | null = temCustom
+    ? null
+    : periodoRaw !== undefined
+      ? PRESETS_VALIDOS.includes(periodoRaw as PeriodoPreset)
+        ? (periodoRaw as PeriodoPreset)
+        : null
+      : filtros.periodoPreset;
+  const dataDeOtimista = temCustom ? (dataDeRaw ?? null) : presetOtimista ? null : filtros.dataDe;
+  const dataAteOtimista = temCustom ? (dataAteRaw ?? null) : presetOtimista ? null : filtros.dataAte;
 
   function setSituacoes(valores: string[]) {
     aplicar({ situacao: valores.length ? valores.join(",") : undefined });
@@ -131,14 +144,10 @@ export function EntityToolbar({
     ultimoEmitido.current = "";
     setTermo("");
     // Zera APENAS as chaves de filtro conhecidas; preserva params extra (ex.: perf=1).
-    const CHAVES_FILTRO = [
+    limpar([
       "q", "situacao", "vendedor", "periodo", "data_de", "data_ate",
-      "pedido_emitido", "com_saldo", "saldo", "ocultar_legado", "pagina", "periodo_entrega",
-    ];
-    const params = new URLSearchParams(searchParams.toString());
-    for (const k of CHAVES_FILTRO) params.delete(k);
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      "pedido_emitido", "com_saldo", "saldo", "legado", "pagina", "periodo_entrega",
+    ]);
   }
 
   return (
@@ -179,15 +188,15 @@ export function EntityToolbar({
           <DropdownFiltro
             label="Vendedor"
             opcoes={opcoesVendedor}
-            valorAtual={filtros.vendedor !== null ? String(filtros.vendedor) : undefined}
+            valorAtual={vendedorAtual}
             onChange={(v) => aplicar({ vendedor: v })}
           />
         )}
 
         <PeriodoDropdown
-          preset={filtros.periodoPreset}
-          dataDe={filtros.dataDe}
-          dataAte={filtros.dataAte}
+          preset={presetOtimista}
+          dataDe={dataDeOtimista}
+          dataAte={dataAteOtimista}
           onPreset={setPreset}
           onCustom={setCustom}
         />

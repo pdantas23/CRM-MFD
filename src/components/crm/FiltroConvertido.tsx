@@ -2,7 +2,7 @@
 // Filtro específico de Orçamentos: "Convertido em pedido?" (Qualquer/Sim/Não).
 // Atua sobre pedido_emitido via param na URL.
 
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useFiltrosUrl } from "./FiltrosUrlProvider";
 import { DropdownFiltro, type OpcaoFiltro } from "@/components/ui/DropdownFiltro";
 
 const OPCOES: OpcaoFiltro[] = [
@@ -11,19 +11,12 @@ const OPCOES: OpcaoFiltro[] = [
 ];
 
 export function FiltroConvertido() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { aplicar, getParam } = useFiltrosUrl();
 
-  const atual = searchParams.get("pedido_emitido") ?? undefined;
+  const atual = getParam("pedido_emitido");
 
   function onChange(v: string | undefined) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (v) params.set("pedido_emitido", v);
-    else params.delete("pedido_emitido");
-    params.delete("pagina");
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    aplicar({ pedido_emitido: v });
   }
 
   return (

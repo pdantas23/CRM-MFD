@@ -2,7 +2,7 @@
 // Filtros específicos de Pedidos: dois toggles estilizados —
 // "Contas sem dar baixa" (default OFF) e "Ocultar legado" (default ON).
 
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useFiltrosUrl } from "./FiltrosUrlProvider";
 
 function Toggle({
   ligado,
@@ -42,24 +42,11 @@ function Toggle({
 }
 
 export function FiltrosPedido() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { aplicar, getParam } = useFiltrosUrl();
 
-  const semBaixa = searchParams.get("saldo") === "sem_baixa"; // "sem_baixa" | null
+  const semBaixa = getParam("saldo") === "sem_baixa"; // "sem_baixa" | null
   // Ocultar legado é default ON: ligado a menos que legado=false na URL.
-  const ocultarLegado = searchParams.get("legado") !== "false";
-
-  function aplicar(mudancas: Record<string, string | undefined>) {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [k, v] of Object.entries(mudancas)) {
-      if (v === undefined) params.delete(k);
-      else params.set(k, v);
-    }
-    params.delete("pagina");
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
+  const ocultarLegado = getParam("legado") !== "false";
 
   return (
     <>

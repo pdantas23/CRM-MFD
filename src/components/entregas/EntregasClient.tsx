@@ -9,6 +9,8 @@ import { EntityToolbar } from "@/components/crm/EntityToolbar";
 import { BotaoNavegacao } from "@/components/ui/BotaoNavegacao";
 import { EntityMetrics } from "@/components/crm/EntityMetrics";
 import { FiltrosEntrega } from "@/components/crm/FiltrosEntrega";
+import { FiltrosUrlProvider } from "@/components/crm/FiltrosUrlProvider";
+import { OverlayCarregando } from "@/components/crm/OverlayCarregando";
 import { PeriodoBadge, StatusBadge, statusRowClass } from "@/components/ui/Badge";
 import { EntregaModal } from "@/components/entregas/EntregaModal";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
@@ -131,7 +133,7 @@ export function EntregasClient({
   isAdmin,
 }: EntregasClientProps) {
   return (
-    <>
+    <FiltrosUrlProvider>
       <EntityToolbar
         filtros={filtros}
         situacoes={STATUS_OPCOES}
@@ -159,11 +161,13 @@ export function EntregasClient({
         }
       />
 
-      <EntityMetrics metricas={metricas} />
+      <OverlayCarregando>
+        <EntityMetrics metricas={metricas} />
 
-      <div className="card overflow-hidden">
-        <TabelaInterna entregas={entregas} isAdmin={isAdmin} />
-      </div>
-    </>
+        <div className="card overflow-hidden">
+          <TabelaInterna entregas={entregas} isAdmin={isAdmin} />
+        </div>
+      </OverlayCarregando>
+    </FiltrosUrlProvider>
   );
 }

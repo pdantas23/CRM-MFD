@@ -4,12 +4,14 @@
 // e adicionando a visão Kanban com carregamento agrupado por situação.
 
 import { useState } from "react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { BotaoNavegacao } from "@/components/ui/BotaoNavegacao";
 import { formatBRL, formatarData } from "@/lib/format";
 import { EntityToolbar } from "@/components/crm/EntityToolbar";
 import { EntityMetrics } from "@/components/crm/EntityMetrics";
 import { FiltroConvertido } from "@/components/crm/FiltroConvertido";
+import { FiltrosUrlProvider, useFiltrosUrl } from "@/components/crm/FiltrosUrlProvider";
+import { OverlayCarregando } from "@/components/crm/OverlayCarregando";
 import { EntityTable, type ColunaTabela } from "@/components/crm/EntityTable";
 import { KanbanBoard, type KanbanColuna } from "@/components/crm/KanbanBoard";
 import { ViewToggle } from "@/components/crm/ViewToggle";
@@ -53,7 +55,15 @@ interface Props {
   podeEscrever?: boolean;
 }
 
-export function OrcamentosView({
+export function OrcamentosView(props: Props) {
+  return (
+    <FiltrosUrlProvider>
+      <OrcamentosViewInner {...props} />
+    </FiltrosUrlProvider>
+  );
+}
+
+function OrcamentosViewInner({
   orcamentos,
   pagina,
   totalPaginas,
@@ -68,8 +78,7 @@ export function OrcamentosView({
   podeEscrever,
 }: Props) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { aplicar } = useFiltrosUrl();
 
   const [viewAtual, setViewAtual] = useState<ViewAtual>("lista");
   const [orcamentoAberto, setOrcamentoAberto] = useState<OrcamentoRow | null>(null);
@@ -82,16 +91,6 @@ export function OrcamentosView({
   };
 
   const situacaoPorId = new Map(situacoes.map((s) => [s.id_vhsys, s]));
-
-  function navegarCom(mudancas: Record<string, string | undefined>) {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [k, v] of Object.entries(mudancas)) {
-      if (v === undefined || v === "") params.delete(k);
-      else params.set(k, v);
-    }
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
 
   const podeNovo = ehAdmin(profile.role) || profile.role === "vendedor";
   const opcoesSituacao = situacoes.map((s) => ({ id: s.id_vhsys, nome: s.nome }));
@@ -216,6 +215,7 @@ export function OrcamentosView({
         }
       />
 
+      <OverlayCarregando>
       <EntityMetrics metricas={metricas} />
 
       {/* ── Visão Lista ───────────────────────────────────────────────────── */}
@@ -239,7 +239,7 @@ export function OrcamentosView({
               {pagina > 1 && (
                 <button
                   type="button"
-                  onClick={() => navegarCom({ pagina: String(pagina - 1) })}
+                  onClick={() => aplicar({ pagina: String(pagina - 1) })}
                   className="btn-secondary !px-3 !py-1.5 text-sm"
                 >
                   Anterior
@@ -248,7 +248,7 @@ export function OrcamentosView({
               {pagina < totalPaginas && (
                 <button
                   type="button"
-                  onClick={() => navegarCom({ pagina: String(pagina + 1) })}
+                  onClick={() => aplicar({ pagina: String(pagina + 1) })}
                   className="btn-secondary !px-3 !py-1.5 text-sm"
                 >
                   Próxima
@@ -291,6 +291,7 @@ export function OrcamentosView({
           }
         />
       )}
+      </OverlayCarregando>
 
       {/* ── Modais ────────────────────────────────────────────────────────── */}
       {orcamentoAberto && (

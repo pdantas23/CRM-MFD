@@ -3,7 +3,7 @@
 // - Dropdown de período do dia (Manhã/Tarde/Noite)
 // - Toggle "Só com saldo a receber" (pedido vinculado com saldo > 0)
 
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useFiltrosUrl } from "./FiltrosUrlProvider";
 import { DropdownFiltro, type OpcaoFiltro } from "@/components/ui/DropdownFiltro";
 
 const OPCOES_PERIODO: OpcaoFiltro[] = [
@@ -13,22 +13,10 @@ const OPCOES_PERIODO: OpcaoFiltro[] = [
 ];
 
 export function FiltrosEntrega() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { aplicar, getParam } = useFiltrosUrl();
 
-  const periodoAtual = searchParams.get("periodo_entrega") ?? undefined;
-  const comSaldo = searchParams.get("com_saldo") === "true";
-
-  function aplicar(mudancas: Record<string, string | undefined>) {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [k, v] of Object.entries(mudancas)) {
-      if (v === undefined) params.delete(k);
-      else params.set(k, v);
-    }
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
+  const periodoAtual = getParam("periodo_entrega");
+  const comSaldo = getParam("com_saldo") === "true";
 
   return (
     <>

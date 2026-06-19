@@ -7,6 +7,8 @@ import { PedidosCalendario } from "./PedidosCalendario";
 import { EntityToolbar } from "@/components/crm/EntityToolbar";
 import { EntityMetrics } from "@/components/crm/EntityMetrics";
 import { FiltrosPedido } from "@/components/crm/FiltrosPedido";
+import { FiltrosUrlProvider } from "@/components/crm/FiltrosUrlProvider";
+import { OverlayCarregando } from "@/components/crm/OverlayCarregando";
 import { ViewToggle } from "@/components/crm/ViewToggle";
 import { EntityTable, type ColunaTabela } from "@/components/crm/EntityTable";
 import { formatBRL, formatarData } from "@/lib/format";
@@ -134,7 +136,7 @@ export function PedidosView({
   ];
 
   return (
-    <>
+    <FiltrosUrlProvider>
       <EntityToolbar
         filtros={filtros}
         situacoes={opcoesSituacao}
@@ -154,37 +156,39 @@ export function PedidosView({
         }
       />
 
-      <EntityMetrics metricas={metricas} />
+      <OverlayCarregando>
+        <EntityMetrics metricas={metricas} />
 
-      {viewAtual === "kanban" && (
-        <PedidosKanban
-          situacoes={situacoes}
-          pedidos={pedidos}
-          onCardClick={setSelecionado}
-          atingiuLimitePorSituacao={atingiuLimitePorSituacao}
-          podeEscrever={podeEscrever}
-        />
-      )}
+        {viewAtual === "kanban" && (
+          <PedidosKanban
+            situacoes={situacoes}
+            pedidos={pedidos}
+            onCardClick={setSelecionado}
+            atingiuLimitePorSituacao={atingiuLimitePorSituacao}
+            podeEscrever={podeEscrever}
+          />
+        )}
 
-      {viewAtual === "lista" && (
-        <EntityTable<PedidoKanban>
-          colunas={colunasLista}
-          rows={pedidos}
-          getRowKey={(p) => p.id}
-          onRowClick={(p) => setSelecionado(p)}
-          emptyMessage="Nenhum pedido encontrado com estes filtros."
-        />
-      )}
+        {viewAtual === "lista" && (
+          <EntityTable<PedidoKanban>
+            colunas={colunasLista}
+            rows={pedidos}
+            getRowKey={(p) => p.id}
+            onRowClick={(p) => setSelecionado(p)}
+            emptyMessage="Nenhum pedido encontrado com estes filtros."
+          />
+        )}
 
-      {viewAtual === "calendario" && (
-        <PedidosCalendario
-          pedidosIniciais={pedidosBase}
-          anoInicial={anoAtual}
-          mesInicial={mesAtual}
-          situacoes={situacoes}
-          onPedidoClick={setSelecionado}
-        />
-      )}
+        {viewAtual === "calendario" && (
+          <PedidosCalendario
+            pedidosIniciais={pedidosBase}
+            anoInicial={anoAtual}
+            mesInicial={mesAtual}
+            situacoes={situacoes}
+            onPedidoClick={setSelecionado}
+          />
+        )}
+      </OverlayCarregando>
 
       {selecionado && (
         <PedidoModal
@@ -194,6 +198,6 @@ export function PedidosView({
           podeEscrever={podeEscrever}
         />
       )}
-    </>
+    </FiltrosUrlProvider>
   );
 }
