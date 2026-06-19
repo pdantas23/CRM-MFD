@@ -355,10 +355,10 @@ export function NovoOrcamentoPageForm({
         : {}),
       // Peso
       ...(pesoBruto > 0
-        ? { peso_total_nota: pesoBruto.toFixed(3) }
+        ? { peso_total_nota: pesoBruto.toFixed(2) }
         : {}),
       ...(pesoLiq > 0
-        ? { peso_total_nota_liq: pesoLiq.toFixed(3) }
+        ? { peso_total_nota_liq: pesoLiq.toFixed(2) }
         : {}),
       // Totais: NÃO enviar valor_total_produtos/valor_total_nota na criação.
       // O VHSYS grava o total enviado e depois SOMA cada produto postado em

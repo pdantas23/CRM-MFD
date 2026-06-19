@@ -408,8 +408,8 @@ export function EmitirPedidoModal({
       ...(obsInterno.trim() ? { obs_interno_pedido: obsInterno.trim() } : {}),
       ...(descontoReais > 0 ? { desconto_pedido: descontoReais.toFixed(2) } : {}),
       ...(freteValor > 0 ? { frete_pedido: freteValor.toFixed(2) } : {}),
-      ...(pesoBruto > 0 ? { peso_total_nota: pesoBruto.toFixed(3) } : {}),
-      ...(pesoLiq > 0 ? { peso_total_nota_liq: pesoLiq.toFixed(3) } : {}),
+      ...(pesoBruto > 0 ? { peso_total_nota: pesoBruto.toFixed(2) } : {}),
+      ...(pesoLiq > 0 ? { peso_total_nota_liq: pesoLiq.toFixed(2) } : {}),
       ...(transportadoraId
         ? {
             id_transportadora: transportadoraId,
