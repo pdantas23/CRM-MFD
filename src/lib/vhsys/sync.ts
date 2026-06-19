@@ -12,6 +12,7 @@ import {
   listarOrcamentos,
   listarContasReceber,
   listarNotasFiscais,
+  buscarDataUltimoStatusPedido,
 } from "./vendas";
 import { situacaoEfetiva } from "./fluxo";
 import { situacaoEfetivaOrcamento } from "./fluxo-orcamentos";
@@ -37,6 +38,17 @@ export interface ResultadoEntidade {
 // Sobreposição do cursor incremental: relê os últimos minutos para não
 // perder registros modificados durante a execução anterior.
 const SOBREPOSICAO_MS = 5 * 60 * 1000;
+
+// Enriquecimento de data_situacao (só incremental): teto de pedidos cujo
+// histórico de status é consultado por rodada e pausa de cortesia entre as
+// chamadas (espelha o throttle de vhsysGetTodos). O incremental processa
+// poucos pedidos; o CAP é só uma trava de segurança contra um pico anômalo.
+const CAP_HISTORICO_STATUS = 200;
+const PAUSA_HISTORICO_MS = 150;
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 function numeroOuNull(s: string | null | undefined): number | null {
   if (s === null || s === undefined || s === "") return null;
@@ -161,6 +173,63 @@ function paraLinhaPedido(registro: unknown) {
     dados: p,
     sincronizado_em: new Date().toISOString(),
   };
+}
+
+// Enriquece data_situacao dos pedidos com a DATA REAL da última mudança de
+// situação, buscada do histórico (GET /pedidos/{id_ped}/status). SÓ no modo
+// incremental (são poucos pedidos) — o completo iteraria milhares de pedidos e
+// estouraria o tempo. NÃO rebaixa: prioridade (1) data exata do histórico →
+// (2) valor já existente no espelho → (3) fallback data_mod/data_pedido. Assim
+// o completo (exatas vazio) e o caso "sem histórico" preservam uma data exata
+// previamente gravada em vez de sobrescrevê-la.
+async function enriquecerPedidos(
+  ativos: unknown[],
+  modo: ModoSync,
+  supabase: ReturnType<typeof createAdminClient>
+): Promise<Map<number, Record<string, unknown>>> {
+  const pedidos = ativos as VhsysPedido[];
+  const ids = pedidos.map((p) => p.id_ped);
+
+  // 1. Valores atuais no espelho (em chunks para não estourar o IN).
+  const existentes = new Map<number, string | null>();
+  const CHUNK = 500;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const lote = ids.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from("vhsys_pedidos")
+      .select("id_vhsys, data_situacao")
+      .in("id_vhsys", lote);
+    if (error) throw new Error(`ler data_situacao: ${error.message}`);
+    for (const row of data ?? []) {
+      existentes.set(row.id_vhsys as number, (row.data_situacao as string | null) ?? null);
+    }
+  }
+
+  // 2. Datas exatas do histórico — só no incremental, com CAP e throttle.
+  const exatas = new Map<number, string>();
+  if (modo === "incremental") {
+    if (pedidos.length > CAP_HISTORICO_STATUS) {
+      console.warn(
+        `enriquecerPedidos: ${pedidos.length} pedidos no incremental excede o CAP de ` +
+          `${CAP_HISTORICO_STATUS}; buscando histórico só dos primeiros ${CAP_HISTORICO_STATUS}.`
+      );
+    }
+    const alvo = pedidos.slice(0, CAP_HISTORICO_STATUS);
+    for (let i = 0; i < alvo.length; i++) {
+      const p = alvo[i];
+      const d = await buscarDataUltimoStatusPedido(p.id_ped);
+      if (d) exatas.set(p.id_ped, d);
+      if (i < alvo.length - 1) await sleep(PAUSA_HISTORICO_MS);
+    }
+  }
+
+  // 3. Resolve por prioridade exata → existente → fallback.
+  const over = new Map<number, Record<string, unknown>>();
+  for (const p of pedidos) {
+    const ds = exatas.get(p.id_ped) ?? existentes.get(p.id_ped) ?? dataSituacaoPedido(p);
+    over.set(p.id_ped, { data_situacao: ds });
+  }
+  return over;
 }
 
 function paraLinhaOrcamento(registro: unknown) {
@@ -290,6 +359,17 @@ interface EntidadeSync {
   paraLinha: (registro: unknown) => Record<string, unknown>;
   /** Entidade sem suporte a data_modificacao/lixeira (sempre lista completa). */
   semIncremental?: boolean;
+  /**
+   * Sobrescritas opcionais por id_vhsys aplicadas às linhas dos registros
+   * ATIVOS (não à lixeira) após paraLinha. Chave = id_vhsys. Usado para
+   * enriquecer campos que exigem chamadas extras à API (ex.: data_situacao do
+   * histórico de status dos pedidos no incremental).
+   */
+  enriquecer?: (
+    ativos: unknown[],
+    modo: ModoSync,
+    supabase: ReturnType<typeof createAdminClient>
+  ) => Promise<Map<number, Record<string, unknown>>>;
 }
 
 const ENTIDADES: EntidadeSync[] = [
@@ -297,7 +377,7 @@ const ENTIDADES: EntidadeSync[] = [
   { entidade: "produtos", tabela: "vhsys_produtos", listar: listarProdutos, paraLinha: paraLinhaProduto },
   { entidade: "clientes", tabela: "vhsys_clientes", listar: listarClientes, paraLinha: paraLinhaCliente },
   { entidade: "vendedores", tabela: "vhsys_vendedores", listar: listarVendedores, paraLinha: paraLinhaVendedor },
-  { entidade: "pedidos", tabela: "vhsys_pedidos", listar: listarPedidos, paraLinha: paraLinhaPedido },
+  { entidade: "pedidos", tabela: "vhsys_pedidos", listar: listarPedidos, paraLinha: paraLinhaPedido, enriquecer: enriquecerPedidos },
   { entidade: "orcamentos", tabela: "vhsys_orcamentos", listar: listarOrcamentos, paraLinha: paraLinhaOrcamento },
   { entidade: "contas_receber", tabela: "vhsys_contas_receber", listar: listarContasReceber, paraLinha: paraLinhaContaReceber },
   { entidade: "notas_fiscais", tabela: "vhsys_notas_fiscais", listar: listarNotasFiscais, paraLinha: paraLinhaNotaFiscal },
@@ -314,7 +394,7 @@ export async function sincronizarEspelho(modo: ModoSync): Promise<ResultadoEntid
   const resultados: ResultadoEntidade[] = [];
   const inicioExecucao = new Date();
 
-  for (const { entidade, tabela, listar, paraLinha, semIncremental } of ENTIDADES) {
+  for (const { entidade, tabela, listar, paraLinha, semIncremental, enriquecer } of ENTIDADES) {
     try {
       let modificadosApos: Date | undefined;
       if (modo === "incremental" && !semIncremental) {
@@ -329,7 +409,19 @@ export async function sincronizarEspelho(modo: ModoSync): Promise<ResultadoEntid
       }
 
       const ativos = await listar({ modificadosApos });
-      const linhas = ativos.map(paraLinha);
+      let linhas = ativos.map(paraLinha);
+
+      // Enriquecimento por entidade (só os ATIVOS; a lixeira nunca é enriquecida):
+      // aplica sobrescritas por id_vhsys após paraLinha. Ex.: data_situacao exata
+      // do histórico de status dos pedidos no incremental (não rebaixa).
+      if (enriquecer) {
+        const over = await enriquecer(ativos, modo, supabase);
+        linhas = linhas.map((l) =>
+          over.has(l.id_vhsys as number)
+            ? { ...l, ...over.get(l.id_vhsys as number) }
+            : l
+        );
+      }
 
       // Propaga exclusões feitas no VHSYS. IMPORTANTE: a varredura da lixeira NÃO
       // usa o cursor `modificadosApos` — o VHSYS não garante atualizar

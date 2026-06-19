@@ -458,3 +458,20 @@ export interface RespostaStatusPedido {
   tipo_status: string;
   id_pedido: number;
 }
+
+/**
+ * Item do histórico retornado por GET /pedidos/{id_ped}/status.
+ * Itens vêm em ordem crescente de id_status; o de MAIOR id_status é o mais
+ * recente. data_status é a data REAL da mudança de situação (YYYY-MM-DD).
+ * Campos extras (id_usuario/nome_usuario) não constam na spec pública.
+ */
+export interface ItemHistoricoStatusPedido {
+  id_status: number;
+  id_pedido: number;
+  data_status: string;
+  obs_status?: string;
+  tipo_status?: string;
+  situacao?: number | null;
+  id_usuario?: number | string | null;
+  nome_usuario?: string | null;
+}
