@@ -44,8 +44,13 @@ export const SEGMENTO_ENTREGA = new Set<number>([
   SITUACAO.ENTREGUE,
 ]);
 
-/** Gate: cadastro de entrega habilitado apenas em separação e entrega parcial. */
+/**
+ * Gate: cadastro de entrega habilitado a partir de Pagamento Aprovado — inclui
+ * separação e entrega parcial. Permite cadastrar a entrega mesmo sem dar baixa
+ * no recebível (basta o pagamento estar aprovado).
+ */
 const GATE_ENTREGA = new Set<number>([
+  SITUACAO.PAGAMENTO_APROVADO,
   SITUACAO.EM_SEPARACAO,
   SITUACAO.ENTREGA_PARCIAL,
 ]);
