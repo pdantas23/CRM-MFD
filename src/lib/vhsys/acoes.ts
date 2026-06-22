@@ -416,164 +416,15 @@ export async function moverSituacaoOrcamento(
 }
 
 /**
- * Emite pedido a partir de orçamento aprovado (situacao 768).
- * Idempotente: verifica pedido_emitido no espelho antes de agir.
- * Estratégia: PUT /orcamentos/{id} status_pedido='Atendido' +
- * POST /orcamentos/{id}/status tipo_status='Atendido'.
- * Se pedido_emitido ainda não aparecer após isso, usa fallback:
- * POST /pedidos copiando dados do orçamento.
- * Exige role='admin'.
- */
-export async function emitirPedidoDeOrcamento(
-  idOrcamentoVhsys: number
-): Promise<ResultadoAcao & { idPedidoVhsys?: number }> {
-  try {
-    const ctx = await exigirAdminOuVendedor();
-
-    if (!Number.isInteger(idOrcamentoVhsys) || idOrcamentoVhsys <= 0) {
-      throw new Error("idOrcamentoVhsys inválido.");
-    }
-
-    const admin = createAdminClient();
-
-    // Idempotência: checar espelho (inclui situacao_id para validação)
-    const { data: orcEspelho } = await admin
-      .from("vhsys_orcamentos")
-      .select("pedido_emitido, situacao_id, nome_cliente, cliente_id_vhsys, vendedor_id_vhsys, vendedor_nome, valor_total, dados")
-      .eq("id_vhsys", idOrcamentoVhsys)
-      .single();
-
-    if (!orcEspelho) throw new Error("Orçamento não encontrado no espelho.");
-
-    // Vendedor só pode emitir orçamentos do próprio vendedor_id
-    if (ctx.role === "vendedor") {
-      const vendedorOrc = (orcEspelho as { vendedor_id_vhsys: number | null }).vendedor_id_vhsys ?? null;
-      if (vendedorOrc !== ctx.vendedorId) {
-        throw new Error("Permissão negada: este orçamento não pertence ao seu vendedor.");
-      }
-    }
-
-    // Idempotência: já emitido → erro visível
-    if ((orcEspelho as { pedido_emitido: boolean }).pedido_emitido) {
-      return { ok: false, erro: "Pedido já emitido para este orçamento." };
-    }
-
-    // Validação: só orçamentos com situacao_id=768 (Aprovado) podem ser emitidos
-    const situacaoOrc = (orcEspelho as { situacao_id: number | null }).situacao_id;
-    if (situacaoOrc !== 768) {
-      throw new Error(
-        `Orçamento não está na situação Aprovado (situacao_id=${situacaoOrc}). Emissão bloqueada.`
-      );
-    }
-
-    // Tenta marcar orçamento como Atendido via PUT + POST status
-    await vhsysPut(`/orcamentos/${idOrcamentoVhsys}`, { status_pedido: "Atendido" });
-
-    const payloadStatusOrc: PayloadStatusOrcamento = {
-      data_status: hojeISO(),
-      tipo_status: "Atendido",
-      obs_status: "Pedido emitido via CRM.",
-    };
-    await vhsysPost(`/orcamentos/${idOrcamentoVhsys}/status`, payloadStatusOrc);
-
-    // Refetch orçamento para verificar se pedido_emitido mudou
-    const { data: orcAtualizado } = await vhsysGet<VhsysOrcamento>(`/orcamentos/${idOrcamentoVhsys}`);
-    const orc = orcAtualizado[0];
-    if (orc) await upsertOrcamentoNoEspelho(orc);
-
-    // Se pedido_emitido=1 após o PUT/POST, buscar pedido novo na API não é
-    // trivial (não há referência direta). Registrar sucesso com aviso.
-    if (orc?.pedido_emitido === 1) {
-      return { ok: true };
-    }
-
-    // Fallback: criar pedido manualmente copiando dados do orçamento.
-    // ATENÇÃO: a API VHSYS não tem rollback — se o PUT acima falhou após
-    // persistir e já houver um pedido com referencia ORC-{id} no espelho,
-    // não criar novamente para evitar duplicatas.
-    const referenciaPedido = `ORC-${idOrcamentoVhsys}`;
-    const { data: pedidoExistente } = await admin
-      .from("vhsys_pedidos")
-      .select("id_vhsys")
-      .eq("referencia", referenciaPedido)
-      .eq("lixeira", false)
-      .maybeSingle();
-
-    if (pedidoExistente) {
-      // Pedido já criado em execução anterior — marcar orçamento como emitido e retornar
-      await admin
-        .from("vhsys_orcamentos")
-        .update({ pedido_emitido: true, sincronizado_em: new Date().toISOString() })
-        .eq("id_vhsys", idOrcamentoVhsys);
-      return { ok: true, idPedidoVhsys: (pedidoExistente as { id_vhsys: number }).id_vhsys };
-    }
-
-    const dadosOrc = (orcEspelho as { dados: VhsysOrcamento }).dados;
-    const payloadPedido: PayloadCriarPedido = {
-      nome_cliente: dadosOrc?.nome_cliente ?? String(orcEspelho.nome_cliente),
-      id_cliente: dadosOrc?.id_cliente ?? undefined,
-      vendedor_pedido: dadosOrc?.vendedor_pedido ?? String(orcEspelho.vendedor_nome ?? ""),
-      vendedor_pedido_id: dadosOrc?.vendedor_pedido_id ?? undefined,
-      referencia_pedido: referenciaPedido,
-      obs_pedido: dadosOrc?.obs_pedido ?? "",
-      status_pedido: "Em Aberto",
-      estoque_pedido: 0,
-      contas_pedido: 0,
-    };
-
-    const respostaPedido = await vhsysPost<RespostaCriarPedido[]>(
-      "/pedidos",
-      payloadPedido
-    );
-
-    const idPedido = Array.isArray(respostaPedido)
-      ? respostaPedido[0]?.id_ped
-      : (respostaPedido as RespostaCriarPedido).id_ped;
-
-    if (!idPedido) throw new Error("Pedido criado mas id_ped não retornado pela API.");
-
-    // Copiar itens do orçamento para o pedido
-    const { data: itens } = await vhsysGet<Record<string, unknown>>(
-      `/orcamentos/${idOrcamentoVhsys}/produtos`
-    );
-    for (const item of itens) {
-      const i = item as Record<string, unknown>;
-      const payloadItem: PayloadItemPedido = {
-        id_produto: Number(i.id_produto),
-        desc_produto: String(i.desc_produto ?? ""),
-        qtde_produto: Number(i.qtde_produto ?? 1),
-        valor_unit_produto: Number(i.valor_unit_produto ?? 0),
-        desconto_produto: i.desconto_produto ? Number(i.desconto_produto) : undefined,
-      };
-      await vhsysPost(`/pedidos/${idPedido}/produtos`, payloadItem);
-    }
-
-    // Refetch pedido criado e upsert no espelho
-    const { data: pedidoCriado } = await vhsysGet<VhsysPedido>(`/pedidos/${idPedido}`);
-    if (pedidoCriado[0]) await upsertPedidoNoEspelho(pedidoCriado[0]);
-
-    // Atualizar espelho do orçamento com pedido_emitido=true
-    await admin
-      .from("vhsys_orcamentos")
-      .update({ pedido_emitido: true, sincronizado_em: new Date().toISOString() })
-      .eq("id_vhsys", idOrcamentoVhsys);
-
-    return { ok: true, idPedidoVhsys: idPedido };
-  } catch (err) {
-    return { ok: false, erro: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-/**
  * Cria pedido a partir de orçamento aprovado (situacao 768) usando os dados
- * EDITADOS de um formulário (cabeçalho, itens e parcelas), diferente de
- * emitirPedidoDeOrcamento que copia o orçamento tal como está.
+ * EDITADOS no formulário do EmitirPedidoModal (cabeçalho, itens e parcelas).
  *
- * Estratégia (espelha emitirPedidoDeOrcamento): marca o orçamento como Atendido
- * (PUT + POST status). Se a VHSYS auto-gerar o pedido (pedido_emitido=1), não
- * cria manualmente — retorna aviso. Caso contrário, POST /pedidos +
- * POST /pedidos/{id}/produtos (loop) + POST /pedidos/{id}/parcelas (array).
- * Idempotente via referencia ORC-{id}. Exige admin ou vendedor (autor).
+ * Fluxo: POST /pedidos + POST /pedidos/{id}/produtos (array) +
+ * POST /pedidos/{id}/parcelas (array); rollback (DELETE) se itens/parcelas
+ * falharem. Confirma o pedido lendo-o pela PK (GET /pedidos/{id_ped}); se o GET
+ * vier vazio, FALHA e NÃO marca como emitido (sem "emissão fantasma"). Só após
+ * confirmar, marca o orçamento como Atendido e pedido_emitido=true no espelho.
+ * Idempotente via observação "Orçamento #N". Exige admin ou vendedor (autor).
  */
 export async function criarPedidoDeOrcamento(
   idOrcamentoVhsys: number,
@@ -762,6 +613,20 @@ export async function criarPedidoDeOrcamento(
       if (parcelas && parcelas.length > 0) {
         await vhsysPost(`/pedidos/${idPedido}/parcelas`, parcelas);
       }
+
+      // Situação inicial: sem isso o pedido nasce SEM situação personalizada
+      // (situacao=""), o espelho o marca como origem "legado" e a aba Pedidos o
+      // ESCONDE (filtro "Ocultar legado" ligado por padrão). Atribui 858
+      // (Aguardando pagamento) — mesmo protocolo de moverSituacaoPedido.
+      const payloadSituacaoInicial: PayloadStatusPedido = {
+        data_status: hojeISO(),
+        tipo_status: "Em Aberto",
+        situacao: SITUACAO.AGUARDANDO_PAGAMENTO,
+      };
+      await vhsysPost<RespostaStatusPedido>(
+        `/pedidos/${idPedido}/status`,
+        payloadSituacaoInicial
+      );
     } catch (errItens) {
       // Rollback: remove o pedido recém-criado (ainda não espelhado) para não
       // deixar pedido órfão sem produtos. "Ou vai tudo, ou nada é emitido."
@@ -784,10 +649,8 @@ export async function criarPedidoDeOrcamento(
       }
     }
 
-    // Tudo certo: espelha o pedido criado. O GET logo após o POST pode vir vazio
-    // por consistência eventual da API — então re-tenta algumas vezes e, em último
-    // caso, usa a própria resposta do POST como fallback. Assim o pedido NUNCA
-    // fica fora do espelho (o que o esconderia do CRM até o próximo sync).
+    // Confirma que o pedido REALMENTE existe no VHSYS lendo-o pela PK. O GET logo
+    // após o POST pode vir vazio por consistência eventual — re-tenta algumas vezes.
     let pedidoEspelho: VhsysPedido | undefined;
     for (let tentativa = 0; tentativa < 3 && !pedidoEspelho; tentativa++) {
       if (tentativa > 0) await new Promise((r) => setTimeout(r, 600));
@@ -795,12 +658,34 @@ export async function criarPedidoDeOrcamento(
       pedidoEspelho = data[0];
     }
     if (!pedidoEspelho) {
-      // Fallback: a resposta do POST já traz os campos do pedido (o número
-      // sequencial pode faltar; o próximo sync o reconcilia).
-      const base = Array.isArray(respostaPedido) ? respostaPedido[0] : respostaPedido;
-      if (base) pedidoEspelho = base as unknown as VhsysPedido;
+      // SEM MASCARAMENTO: antes, quando o GET vinha vazio, forjávamos o espelho
+      // com a resposta do POST e seguíamos como sucesso — isso criava "emissões
+      // fantasma" (ok:true sem o pedido existir no VHSYS). Agora falhamos de
+      // forma honesta e NÃO marcamos o orçamento como emitido.
+      return {
+        ok: false,
+        erro:
+          `O VHSYS aceitou a emissão (id interno ${idPedido}) mas não confirmou o ` +
+          `pedido no sistema — nada foi marcado como emitido. Verifique no VHSYS e ` +
+          `tente novamente; se persistir, a integração de emissão precisa de ajuste.`,
+      };
     }
-    if (pedidoEspelho) await upsertPedidoNoEspelho(pedidoEspelho);
+    await upsertPedidoNoEspelho(pedidoEspelho);
+
+    // Fixa a situação inicial no espelho de forma AUTORITATIVA. O GET acima pode
+    // ter trazido a situação antes do POST /status propagar (situacao=""), o que
+    // gravaria origem "legado" e ESCONDERIA o pedido da aba (filtro "Ocultar
+    // legado"). Mesma estratégia de moverSituacaoPedido: grava direto, sem refetch.
+    await admin
+      .from("vhsys_pedidos")
+      .update({
+        situacao_id: SITUACAO.AGUARDANDO_PAGAMENTO,
+        status_base: "Em Aberto",
+        origem_situacao: "vhsys",
+        data_situacao: hojeISO(),
+        sincronizado_em: new Date().toISOString(),
+      })
+      .eq("id_vhsys", idPedido);
 
     // Marca o orçamento como Atendido na VHSYS (best-effort: o pedido já está
     // criado e espelhado; o status "Atendido" é cosmético e o sync reconcilia).
