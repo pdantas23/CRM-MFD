@@ -209,7 +209,7 @@ export function EntityToolbar({
       <div
         className={`${
           filtrosAbertos ? "flex" : "hidden"
-        } mt-2 flex-col items-stretch gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center`}
+        } mt-2 flex-col gap-2 [&>*]:w-full [&>div>button]:w-full sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:[&>*]:w-auto sm:[&>div>button]:w-auto`}
       >
         <MultiSelectFiltro
           label="Situação"
@@ -240,7 +240,7 @@ export function EntityToolbar({
         <button
           type="button"
           onClick={limparTudo}
-          className="self-end text-sm font-medium text-gray-500 hover:text-gray-700 sm:ml-auto"
+          className="!w-auto self-end text-sm font-medium text-gray-500 hover:text-gray-700 sm:ml-auto"
         >
           Limpar
         </button>
