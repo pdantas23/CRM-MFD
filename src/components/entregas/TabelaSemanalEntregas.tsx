@@ -301,6 +301,7 @@ export function TabelaSemanalEntregas({ entregas, inicioSemana, isAdmin }: Props
                             <EntregaCard
                               entrega={entrega}
                               arrastavel={isAdmin}
+                              isAdmin={isAdmin}
                               onClick={
                                 arrastando ? undefined : () => setModalEntrega(entrega)
                               }

@@ -272,6 +272,71 @@ export async function moverEntrega(
   }
 }
 
+export async function excluirEntrega(
+  id: string
+): Promise<{ ok: boolean; erro?: string }> {
+  try {
+    if (!id) return { ok: false, erro: "Entrega inválida." };
+
+    const { supabase, erro } = await exigirAdmin();
+    if (erro) return { ok: false, erro };
+
+    // Carrega o anexo legado e confirma que a entrega existe.
+    const { data: entregaRow } = await supabase
+      .from("entregas")
+      .select("anexo_url")
+      .eq("id", id)
+      .maybeSingle();
+    if (!entregaRow) return { ok: false, erro: "Entrega não encontrada." };
+
+    // Reúne os caminhos no bucket (anexo legado + linhas de entrega_anexos) para
+    // apagar os arquivos antes do delete (o cascade só remove as linhas, não os
+    // arquivos do storage).
+    const extrairCaminho = (url: string | null): string | null => {
+      if (!url) return null;
+      const partes = url.split("/anexos-entregas/");
+      return partes[1] || null;
+    };
+
+    const caminhos: string[] = [];
+    const legado = extrairCaminho(
+      (entregaRow as { anexo_url: string | null }).anexo_url
+    );
+    if (legado) caminhos.push(legado);
+
+    const { data: anexos } = await supabase
+      .from("entrega_anexos")
+      .select("url")
+      .eq("entrega_id", id);
+    for (const a of (anexos ?? []) as { url: string }[]) {
+      const c = extrairCaminho(a.url);
+      if (c) caminhos.push(c);
+    }
+
+    // Best-effort: não bloqueia a exclusão se a remoção dos arquivos falhar.
+    if (caminhos.length > 0) {
+      await supabase.storage.from("anexos-entregas").remove(caminhos);
+    }
+
+    // Remove a entrega (cascade apaga entrega_anexos). O .select() confirma que a
+    // RLS permitiu o delete (sem linha => registro inexistente ou sem permissão).
+    const { data: removida, error } = await supabase
+      .from("entregas")
+      .delete()
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, erro: error.message };
+    if (!removida) return { ok: false, erro: "Não foi possível excluir a entrega." };
+
+    cacheInvalidate("entregas");
+    revalidatePath("/entregas");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : "Erro inesperado." };
+  }
+}
+
 // ── Marcar/desmarcar entrega como realizada ("entregue") ──────────────────────
 
 type ResultadoMarcar =
