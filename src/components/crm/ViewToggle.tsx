@@ -13,13 +13,13 @@ interface ViewToggleProps {
 
 export function ViewToggle({ opcoes, valor, onChange }: ViewToggleProps) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex w-full items-center gap-2 sm:w-auto">
       {opcoes.map((opcao) => (
         <button
           key={opcao.valor}
           type="button"
           onClick={() => onChange(opcao.valor)}
-          className={valor === opcao.valor ? "btn-primary" : "btn-secondary"}
+          className={`${valor === opcao.valor ? "btn-primary" : "btn-secondary"} flex-1 whitespace-nowrap sm:flex-none`}
         >
           {opcao.label}
         </button>

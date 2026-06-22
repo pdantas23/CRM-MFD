@@ -193,7 +193,7 @@ function OrcamentosViewInner({
         mostrarVendedor={ehAdmin(profile.role)}
         filtroEspecifico={<FiltroConvertido />}
         acaoPrimaria={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <ViewToggle
               opcoes={[
                 { valor: "lista", label: "Lista" },

@@ -15,11 +15,11 @@ export function EntityMetrics({ metricas }: EntityMetricsProps) {
       {metricas.map((m) => (
         <div
           key={m.label}
-          className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
+          className="min-w-0 rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
         >
-          <p className="text-xs text-gray-500">{m.label}</p>
+          <p className="truncate text-xs text-gray-500">{m.label}</p>
           <p
-            className={`mt-0.5 text-lg font-semibold ${
+            className={`mt-0.5 break-words text-base font-semibold sm:text-lg ${
               m.destaque ? "text-blue-600" : "text-gray-900"
             }`}
           >

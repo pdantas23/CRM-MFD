@@ -58,6 +58,8 @@ export function EntityToolbar({
 }: EntityToolbarProps) {
   const { aplicar, limpar, getParam } = useFiltrosUrl();
 
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+
   // Busca controlada por estado LOCAL, atualizada sincronamente a cada tecla.
   const buscaUrl = getParam("q") ?? "";
   const [termo, setTermo] = useState(buscaUrl);
@@ -130,6 +132,12 @@ export function EntityToolbar({
   const dataDeOtimista = temCustom ? (dataDeRaw ?? null) : presetOtimista ? null : filtros.dataDe;
   const dataAteOtimista = temCustom ? (dataAteRaw ?? null) : presetOtimista ? null : filtros.dataAte;
 
+  const algumFiltroAtivo =
+    situacoesAtivas.length > 0 ||
+    Boolean(vendedorAtual) ||
+    temCustom ||
+    periodoRaw !== undefined;
+
   function setSituacoes(valores: string[]) {
     aplicar({ situacao: valores.length ? valores.join(",") : undefined });
   }
@@ -176,8 +184,33 @@ export function EntityToolbar({
         {acaoPrimaria && <div className="shrink-0">{acaoPrimaria}</div>}
       </div>
 
-      {/* Linha 2: filtros à esquerda + Limpar à direita */}
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+      {/* Linha 2: filtros. No mobile, recolhidos atrás de um botão "Filtros"
+          (um por linha quando aberto); no desktop, inline como antes. */}
+      <button
+        type="button"
+        onClick={() => setFiltrosAbertos((v) => !v)}
+        aria-expanded={filtrosAbertos}
+        className="mt-2 flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 sm:hidden"
+      >
+        <span className="flex items-center gap-2">
+          Filtros
+          {algumFiltroAtivo && <span className="h-2 w-2 rounded-full bg-blue-600" />}
+        </span>
+        <svg
+          className={`h-4 w-4 transition-transform ${filtrosAbertos ? "rotate-180" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      <div
+        className={`${
+          filtrosAbertos ? "flex" : "hidden"
+        } mt-2 flex-col items-stretch gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center`}
+      >
         <MultiSelectFiltro
           label="Situação"
           opcoes={opcoesSituacao}
@@ -207,7 +240,7 @@ export function EntityToolbar({
         <button
           type="button"
           onClick={limparTudo}
-          className="ml-auto text-sm font-medium text-gray-500 hover:text-gray-700"
+          className="self-end text-sm font-medium text-gray-500 hover:text-gray-700 sm:ml-auto"
         >
           Limpar
         </button>
