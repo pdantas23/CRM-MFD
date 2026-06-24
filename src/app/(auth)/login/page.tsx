@@ -31,9 +31,9 @@ export default function LoginPage() {
   }, []);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-900 to-blue-700 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-900 to-primary-700 px-4">
       {loading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-700">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-primary-900 to-primary-700">
           <Spinner className="h-8 w-8 text-white" />
         </div>
       )}
@@ -41,12 +41,16 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-lg">
-            <svg className="h-9 w-9 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-9 w-9 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white">Sistema MFD</h1>
-          <p className="mt-1 text-blue-200">Acesso interno</p>
+          <h1 className="text-2xl font-bold text-white">
+            {process.env.NEXT_PUBLIC_APP_NAME ?? "CRM"}
+          </h1>
+          <p className="mt-1 text-primary-200">
+            {process.env.NEXT_PUBLIC_APP_LOGIN_SUBTITLE ?? "Acesso interno"}
+          </p>
         </div>
 
         <div className="card p-8">
@@ -99,6 +103,15 @@ export default function LoginPage() {
               {loading ? <><Spinner /> Entrando...</> : "Entrar"}
             </button>
           </form>
+
+          <div className="mt-5 border-t border-gray-100 pt-4 text-center">
+            <a
+              href="/gerenciamento"
+              className="text-sm font-medium text-gray-500 transition-colors hover:text-gray-800"
+            >
+              Gerenciamento interno do CRM
+            </a>
+          </div>
         </div>
       </div>
     </div>

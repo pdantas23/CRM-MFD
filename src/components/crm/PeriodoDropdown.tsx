@@ -94,10 +94,10 @@ export function PeriodoDropdown({
         className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors ${
           vazio && onLimpar
             ? "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-            : "border-blue-600 bg-blue-50 text-blue-700 hover:bg-blue-100"
+            : "border-primary-600 bg-primary-50 text-primary-700 hover:bg-primary-100"
         }`}
       >
-        <span className={`text-xs ${vazio && onLimpar ? "text-gray-400" : "text-blue-400"}`}>
+        <span className={`text-xs ${vazio && onLimpar ? "text-gray-400" : "text-primary-400"}`}>
           {rotuloPrefixo}:
         </span>
         <span>{rotulo}</span>
@@ -123,7 +123,7 @@ export function PeriodoDropdown({
                   setAberto(false);
                 }}
                 className={`rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-gray-50 ${
-                  preset === p.valor ? "font-semibold text-blue-700" : "text-gray-700"
+                  preset === p.valor ? "font-semibold text-primary-700" : "text-gray-700"
                 }`}
               >
                 {p.label}
@@ -138,13 +138,13 @@ export function PeriodoDropdown({
                 type="date"
                 value={de}
                 onChange={(e) => setDe(e.target.value)}
-                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-blue-500"
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-primary-500"
               />
               <input
                 type="date"
                 value={ate}
                 onChange={(e) => setAte(e.target.value)}
-                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-blue-500"
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-primary-500"
               />
               <button
                 type="button"

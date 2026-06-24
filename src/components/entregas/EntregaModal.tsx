@@ -475,8 +475,8 @@ export function EntregaModal({ entrega, isAdmin, onClose, onChanged }: Props) {
               </div>
             ) : isAdmin ? (
               // Não resolveu o orçamento: admin pode vincular pelo número.
-              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-                <label className="mb-1.5 block text-sm font-medium text-blue-900">
+              <div className="rounded-lg border border-primary-100 bg-primary-50 p-4">
+                <label className="mb-1.5 block text-sm font-medium text-primary-900">
                   Vincular pelo número do orçamento
                 </label>
                 <div className="flex gap-2">
@@ -658,7 +658,7 @@ function LinhaAnexo({
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex min-w-0 items-center gap-2 text-sm text-blue-600 hover:underline"
+        className="flex min-w-0 items-center gap-2 text-sm text-primary-600 hover:underline"
       >
         <svg className="h-4 w-4 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />

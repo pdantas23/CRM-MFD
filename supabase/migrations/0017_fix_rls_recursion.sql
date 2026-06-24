@@ -31,6 +31,7 @@ grant execute on function public.is_admin(uuid) to anon, authenticated;
 
 -- 2. PROFILES: remove a policy recursiva e recria via is_admin()
 drop policy if exists "Admin vê todos" on public.profiles;
+drop policy if exists "Admin vê todos os profiles" on public.profiles;
 
 create policy "Admin vê todos os profiles"
   on public.profiles for select

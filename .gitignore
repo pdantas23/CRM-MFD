@@ -26,6 +26,10 @@ yarn-error.log*
 # local env files
 .env*.local
 
+# seeds com dados sensíveis (não versionar)
+*.seed.json
+accounts.seed.*
+
 # vercel
 .vercel
 

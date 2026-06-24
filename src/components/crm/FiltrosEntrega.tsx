@@ -35,13 +35,13 @@ export function FiltrosEntrega() {
         onClick={() => aplicar({ com_saldo: comSaldo ? undefined : "true" })}
         className={`flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${
           comSaldo
-            ? "border-blue-600 bg-blue-50 text-blue-700"
+            ? "border-primary-600 bg-primary-50 text-primary-700"
             : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
         }`}
       >
         <span
           className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
-            comSaldo ? "bg-blue-600" : "bg-gray-300"
+            comSaldo ? "bg-primary-600" : "bg-gray-300"
           }`}
         >
           <span

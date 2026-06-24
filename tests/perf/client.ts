@@ -17,6 +17,18 @@ import { resolve } from "node:path";
 import { createClient as createSupabaseClient, type SupabaseClient } from "@supabase/supabase-js";
 import { parseFiltros, type Entidade, type FiltrosCrm } from "@/lib/crm/filtros";
 import type { Escopo } from "@/lib/crm/metricas";
+import { construirModeloSituacoes } from "@/lib/vhsys/situacoes-modelo";
+
+/** Modelo de situações fixo (situações da conta SA, base da suíte de perf). */
+const MODELO_TESTE = construirModeloSituacoes([
+  { id_vhsys: 858, nome: "Aguardando Pagamento", tipo_status: "Em Aberto", ordem: 1 },
+  { id_vhsys: 1179, nome: "Pagamento Parcial", tipo_status: "Em Aberto", ordem: 2 },
+  { id_vhsys: 857, nome: "Pagamento Aprovado", tipo_status: "Em Andamento", ordem: 3 },
+  { id_vhsys: 859, nome: "Em Separação", tipo_status: "Em Andamento", ordem: 4 },
+  { id_vhsys: 1180, nome: "Entrega Parcial", tipo_status: "Em Aberto", ordem: 5 },
+  { id_vhsys: 777, nome: "Entregue", tipo_status: "Atendido", ordem: 6 },
+  { id_vhsys: 778, nome: "Cancelado", tipo_status: "Cancelado", ordem: 7 },
+]);
 
 // Raiz do projeto (este arquivo está em tests/perf/).
 const RAIZ = resolve(__dirname, "..", "..");
@@ -51,12 +63,21 @@ export function criarClienteTeste(): SupabaseClient {
   });
 }
 
+/** Conta usada nos cenários de perf (defina PERF_CONTA_ID para uma conta real). */
+export const CONTA_ID_TESTE =
+  process.env.PERF_CONTA_ID ?? "00000000-0000-0000-0000-000000000000";
+
 /** Escopo de aplicação "admin" para os cenários (vê tudo, sem RLS por vendedor). */
-export const escopoAdminTeste: Escopo = { role: "admin", vendedorId: null };
+export const escopoAdminTeste: Escopo = {
+  role: "admin",
+  vendedorId: null,
+  contaId: CONTA_ID_TESTE,
+  modelo: MODELO_TESTE,
+};
 
 /** Escopo de aplicação "vendedor" (restringe a um vendedor_id_vhsys). */
 export function escopoVendedorTeste(id: number): Escopo {
-  return { role: "vendedor", vendedorId: id };
+  return { role: "vendedor", vendedorId: id, contaId: CONTA_ID_TESTE, modelo: MODELO_TESTE };
 }
 
 /**

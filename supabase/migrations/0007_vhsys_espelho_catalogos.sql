@@ -7,7 +7,7 @@
 -- ============================================================
 
 -- 1. PRODUTOS
-create table public.vhsys_produtos (
+create table if not exists public.vhsys_produtos (
   id uuid primary key default gen_random_uuid(),
   id_vhsys bigint not null unique,          -- id_produto
   codigo text,                              -- cod_produto
@@ -26,11 +26,11 @@ create table public.vhsys_produtos (
   sincronizado_em timestamptz not null default now()
 );
 
-create index vhsys_produtos_descricao_idx on public.vhsys_produtos using gin (to_tsvector('portuguese', descricao));
-create index vhsys_produtos_lixeira_idx on public.vhsys_produtos (lixeira);
+create index if not exists vhsys_produtos_descricao_idx on public.vhsys_produtos using gin (to_tsvector('portuguese', descricao));
+create index if not exists vhsys_produtos_lixeira_idx on public.vhsys_produtos (lixeira);
 
 -- 2. CLIENTES
-create table public.vhsys_clientes (
+create table if not exists public.vhsys_clientes (
   id uuid primary key default gen_random_uuid(),
   id_vhsys bigint not null unique,          -- id_cliente
   razao text not null,                      -- razao_cliente
@@ -56,12 +56,12 @@ create table public.vhsys_clientes (
   sincronizado_em timestamptz not null default now()
 );
 
-create index vhsys_clientes_razao_idx on public.vhsys_clientes (razao);
-create index vhsys_clientes_cnpj_idx on public.vhsys_clientes (cnpj_cpf);
-create index vhsys_clientes_lixeira_idx on public.vhsys_clientes (lixeira);
+create index if not exists vhsys_clientes_razao_idx on public.vhsys_clientes (razao);
+create index if not exists vhsys_clientes_cnpj_idx on public.vhsys_clientes (cnpj_cpf);
+create index if not exists vhsys_clientes_lixeira_idx on public.vhsys_clientes (lixeira);
 
 -- 3. VENDEDORES
-create table public.vhsys_vendedores (
+create table if not exists public.vhsys_vendedores (
   id uuid primary key default gen_random_uuid(),
   id_vhsys bigint not null unique,          -- id_vendedor
   nome text not null,                       -- razao_vendedor
@@ -79,7 +79,7 @@ create table public.vhsys_vendedores (
 );
 
 -- 4. ESTADO DO SYNC (cursor incremental por entidade)
-create table public.vhsys_sync_estado (
+create table if not exists public.vhsys_sync_estado (
   entidade text primary key,                -- 'produtos' | 'clientes' | 'vendedores'
   ultima_sync_em timestamptz,               -- cursor para data_modificacao
   ultima_reconciliacao_em timestamptz,      -- última varredura completa
@@ -92,11 +92,11 @@ alter table public.vhsys_clientes enable row level security;
 alter table public.vhsys_vendedores enable row level security;
 alter table public.vhsys_sync_estado enable row level security;
 
-create policy "Autenticados leem produtos"
-  on public.vhsys_produtos for select using (auth.role() = 'authenticated');
-create policy "Autenticados leem clientes"
-  on public.vhsys_clientes for select using (auth.role() = 'authenticated');
-create policy "Autenticados leem vendedores"
-  on public.vhsys_vendedores for select using (auth.role() = 'authenticated');
-create policy "Autenticados leem sync estado"
-  on public.vhsys_sync_estado for select using (auth.role() = 'authenticated');
+drop policy if exists "Autenticados leem produtos" on public.vhsys_produtos;
+create policy "Autenticados leem produtos" on public.vhsys_produtos for select using (auth.role() = 'authenticated');
+drop policy if exists "Autenticados leem clientes" on public.vhsys_clientes;
+create policy "Autenticados leem clientes" on public.vhsys_clientes for select using (auth.role() = 'authenticated');
+drop policy if exists "Autenticados leem vendedores" on public.vhsys_vendedores;
+create policy "Autenticados leem vendedores" on public.vhsys_vendedores for select using (auth.role() = 'authenticated');
+drop policy if exists "Autenticados leem sync estado" on public.vhsys_sync_estado;
+create policy "Autenticados leem sync estado" on public.vhsys_sync_estado for select using (auth.role() = 'authenticated');

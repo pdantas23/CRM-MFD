@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
+    const base = process.env.CNPJ_API_BASE ?? "https://brasilapi.com.br/api/cnpj/v1/";
+    const res = await fetch(`${base}${cnpj}`, {
       signal: controller.signal,
       cache: "no-store",
     });

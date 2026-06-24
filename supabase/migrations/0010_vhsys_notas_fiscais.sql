@@ -9,7 +9,7 @@
 -- ============================================================
 
 -- 1. NOTAS FISCAIS
-create table public.vhsys_notas_fiscais (
+create table if not exists public.vhsys_notas_fiscais (
   id uuid primary key default gen_random_uuid(),
   id_vhsys bigint not null unique,          -- id_venda (PK da NF-e; casa com NFe_<id> das contas)
   numero bigint,                            -- id_pedido (número sequencial da NF, "NFe Venda N")
@@ -27,17 +27,17 @@ create table public.vhsys_notas_fiscais (
   sincronizado_em timestamptz not null default now()
 );
 
-create index vhsys_notas_fiscais_pedido_idx on public.vhsys_notas_fiscais (pedido_id_vhsys);
+create index if not exists vhsys_notas_fiscais_pedido_idx on public.vhsys_notas_fiscais (pedido_id_vhsys);
 
 alter table public.vhsys_notas_fiscais enable row level security;
-create policy "Autenticados leem notas fiscais"
-  on public.vhsys_notas_fiscais for select using (auth.role() = 'authenticated');
+drop policy if exists "Autenticados leem notas fiscais" on public.vhsys_notas_fiscais;
+create policy "Autenticados leem notas fiscais" on public.vhsys_notas_fiscais for select using (auth.role() = 'authenticated');
 
 -- 2. Coluna de vínculo conta→nota (extraída de identificacao "NFe_<id>")
 alter table public.vhsys_contas_receber
-  add column nfe_id_vhsys bigint;
+  add column if not exists nfe_id_vhsys bigint;
 
-create index vhsys_contas_receber_nfe_idx on public.vhsys_contas_receber (nfe_id_vhsys);
+create index if not exists vhsys_contas_receber_nfe_idx on public.vhsys_contas_receber (nfe_id_vhsys);
 
 -- 3. View financeira: resolve o pedido direto (Ped_) ou via NF-e
 create or replace view public.vhsys_pedidos_financeiro

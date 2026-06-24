@@ -194,7 +194,7 @@ export function EntityToolbar({
       >
         <span className="flex items-center gap-2">
           Filtros
-          {algumFiltroAtivo && <span className="h-2 w-2 rounded-full bg-blue-600" />}
+          {algumFiltroAtivo && <span className="h-2 w-2 rounded-full bg-primary-600" />}
         </span>
         <svg
           className={`h-4 w-4 transition-transform ${filtrosAbertos ? "rotate-180" : ""}`}

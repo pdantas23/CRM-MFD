@@ -155,13 +155,13 @@ export function Select({
                   select(option.value);
                 }}
                 className={`flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm transition-colors ${
-                  isHighlighted ? "bg-blue-50 text-blue-700" : "text-gray-700"
+                  isHighlighted ? "bg-primary-50 text-primary-700" : "text-gray-700"
                 } ${isSelected ? "font-medium" : ""}`}
               >
                 <span className="truncate">{option.label}</span>
                 {isSelected && (
                   <svg
-                    className="h-4 w-4 shrink-0 text-blue-600"
+                    className="h-4 w-4 shrink-0 text-primary-600"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"

@@ -5,8 +5,10 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Gestão de Entregas",
-  description: "Sistema interno de gestão de entregas",
+  // Nome da aplicação configurável (genérico por padrão). O nome real da conta
+  // ativa aparece na sidebar; aqui fica o rótulo da aba, pré-seleção de conta.
+  title: process.env.APP_NAME ?? "CRM",
+  description: "Sistema de gestão",
 };
 
 export default function RootLayout({

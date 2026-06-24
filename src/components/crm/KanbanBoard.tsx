@@ -157,7 +157,7 @@ export function KanbanBoard<T>({
           return (
             <div
               key={coluna.id}
-              className={`flex min-h-[200px] ${larguraColuna} shrink-0 flex-col rounded-lg border border-gray-200 bg-gray-100/60 transition-shadow${isDropTarget ? " ring-2 ring-blue-400" : ""}`}
+              className={`flex min-h-[200px] ${larguraColuna} shrink-0 flex-col rounded-lg border border-gray-200 bg-gray-100/60 transition-shadow${isDropTarget ? " ring-2 ring-primary-400" : ""}`}
               onDragOver={
                 onMoverCard
                   ? (e) => {

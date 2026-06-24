@@ -31,6 +31,10 @@ if (!url || !serviceKey) {
 
 
 // ── Definição dos vendedores ──────────────────────────────────────────────
+// Dados sensíveis (e-mail/senha/vendedor_id) NÃO ficam no código: são lidos de
+// scripts/vendedores.seed.json (ignorado pelo git via *.seed.json).
+// TODO: rotacionar as senhas de seed expostas no histórico do git (versões
+// anteriores deste arquivo continham senhas em texto plano) — trocar no Supabase Auth.
 
 interface VendedorSpec {
   email: string;
@@ -39,11 +43,28 @@ interface VendedorSpec {
   vendedor_id: number;
 }
 
-const VENDEDORES: VendedorSpec[] = [
-  { email: "francisco@francisco.com", senha: "mfd2026", nome: "Francisco", vendedor_id: 231600 },
-  { email: "djalma@djalma.com",       senha: "mfd2026", nome: "Djalma",    vendedor_id: 259526 },
-  { email: "davi@davi.com",           senha: "mfd2026", nome: "Davi",      vendedor_id: 262880 },
-];
+const SEED_PATH = "./scripts/vendedores.seed.json";
+
+function carregarVendedores(): VendedorSpec[] {
+  let bruto: string;
+  try {
+    bruto = readFileSync(SEED_PATH, "utf-8");
+  } catch {
+    console.error(
+      `ERRO: ${SEED_PATH} não encontrado. Crie o arquivo (não versionado) com o ` +
+        `formato [{ "email", "senha", "nome", "vendedor_id" }].`
+    );
+    process.exit(1);
+  }
+  const dados = JSON.parse(bruto) as VendedorSpec[];
+  if (!Array.isArray(dados) || dados.length === 0) {
+    console.error(`ERRO: ${SEED_PATH} vazio ou em formato inválido.`);
+    process.exit(1);
+  }
+  return dados;
+}
+
+const VENDEDORES: VendedorSpec[] = carregarVendedores();
 
 // ── Cliente Supabase (inicializado em main após env load) ─────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

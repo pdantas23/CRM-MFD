@@ -155,7 +155,7 @@ export function ParcelasEditor({ parcelas, onChange, nextKey, totalOrcamento, po
         onClick={adicionar}
         disabled={!podeAdicionar}
         title={podeAdicionar ? undefined : "Adicione um produto primeiro"}
-        className="text-sm text-blue-600 hover:text-blue-800 disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:text-gray-400"
+        className="text-sm text-primary-600 hover:text-primary-800 disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:text-gray-400"
       >
         + Adicionar parcela
       </button>

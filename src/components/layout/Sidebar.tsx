@@ -6,9 +6,16 @@ import { createClient } from "@/lib/supabase/client";
 import { Spinner } from "@/components/ui/Spinner";
 import { ehSuperadmin } from "@/lib/auth/roles";
 import type { Profile, Role } from "@/lib/types/database";
+import { SeletorConta, type ContaOpcao } from "@/components/layout/SeletorConta";
 
 interface SidebarProps {
   profile: Profile;
+  /** Nome da empresa/conta ativa (vindo do VHSYS, cacheado em accounts). */
+  nomeEmpresa: string;
+  /** Contas que o usuário pode acessar (para o seletor de troca). */
+  contas: ContaOpcao[];
+  /** Slug da conta atualmente ativa. */
+  slugAtivo: string;
 }
 
 interface NavItem {
@@ -72,7 +79,7 @@ const navItems: NavItem[] = [
   },
 ];
 
-export function Sidebar({ profile }: SidebarProps) {
+export function Sidebar({ profile, nomeEmpresa, contas, slugAtivo }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -126,12 +133,15 @@ export function Sidebar({ profile }: SidebarProps) {
           </svg>
         </button>
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-600">
             <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
           </div>
-          <span className="text-sm font-semibold text-gray-900">MFD</span>
+          <span className="text-sm font-semibold text-gray-900">{nomeEmpresa}</span>
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-gray-500">
+            {slugAtivo}
+          </span>
         </div>
       </div>
 
@@ -146,24 +156,29 @@ export function Sidebar({ profile }: SidebarProps) {
 
       {/* Sidebar (drawer mobile / static desktop) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-blue-900 text-white transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-primary-900 text-white transition-transform duration-200 lg:static lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-blue-800 px-5">
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-primary-800 px-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600">
               <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
             </div>
-            <span className="text-sm font-semibold leading-tight">MFD</span>
+            <div className="min-w-0">
+              <span className="block truncate text-sm font-semibold leading-tight">{nomeEmpresa}</span>
+              <span className="block font-mono text-[10px] uppercase leading-tight text-primary-300">
+                {slugAtivo}
+              </span>
+            </div>
           </div>
           <button
             type="button"
             onClick={() => setOpen(false)}
             aria-label="Fechar menu"
-            className="-mr-2 inline-flex h-10 w-10 items-center justify-center rounded-lg text-blue-200 hover:bg-blue-800 hover:text-white lg:hidden"
+            className="-mr-2 inline-flex h-10 w-10 items-center justify-center rounded-lg text-primary-200 hover:bg-primary-800 hover:text-white lg:hidden"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -194,8 +209,8 @@ export function Sidebar({ profile }: SidebarProps) {
                 aria-current={isActive ? "page" : undefined}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors disabled:pointer-events-none ${
                   isActive
-                    ? "bg-blue-700 text-white"
-                    : "text-blue-200 hover:bg-blue-800 hover:text-white"
+                    ? "bg-primary-700 text-white"
+                    : "text-primary-200 hover:bg-primary-800 hover:text-white"
                 } ${isPendingThis ? "opacity-70" : ""}`}
               >
                 {isPendingThis ? (
@@ -209,19 +224,20 @@ export function Sidebar({ profile }: SidebarProps) {
           })}
         </nav>
 
-        <div className="shrink-0 border-t border-blue-800 p-3">
+        <div className="shrink-0 border-t border-primary-800 p-3">
+          <SeletorConta contas={contas} slugAtivo={slugAtivo} />
           <div className="mb-2 flex items-center gap-3 rounded-lg px-3 py-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-700 text-sm font-bold">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-700 text-sm font-bold">
               {profile.nome.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-white">{profile.nome}</p>
-              <p className="text-xs capitalize text-blue-300">{profile.role}</p>
+              <p className="text-xs capitalize text-primary-300">{profile.role}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-blue-200 transition-colors hover:bg-blue-800 hover:text-white"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-primary-200 transition-colors hover:bg-primary-800 hover:text-white"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

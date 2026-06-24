@@ -10,7 +10,11 @@
 // montagem do Promise.all, mesmo escopo RLS, mesmas colunas e limites.
 
 import type { createClient } from "@/lib/supabase/server";
-import { COLUNAS_KANBAN, SITUACAO } from "@/lib/vhsys/fluxo";
+import {
+  construirModeloSituacoes,
+  type ModeloSituacoes,
+  type SituacaoBase,
+} from "@/lib/vhsys/situacoes-modelo";
 import { COLUNAS_KANBAN_ORCAMENTO } from "@/lib/vhsys/fluxo-orcamentos";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import {
@@ -33,6 +37,24 @@ import type {
   SituacaoRow,
 } from "@/lib/types/pedidos";
 type DB = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Carrega o modelo de situações de PEDIDOS da conta (colunas/segmentos/legado
+ * derivados das situações sincronizadas) — base de todo o fluxo data-driven.
+ */
+export async function carregarModeloSituacoes(
+  supabase: DB,
+  contaId: string
+): Promise<ModeloSituacoes> {
+  const { data } = await supabase
+    .from("vhsys_situacoes")
+    .select("id_vhsys, nome, tipo_status, ordem")
+    .eq("conta_id", contaId)
+    .eq("entidade", "pedidos")
+    .eq("lixeira", false)
+    .order("ordem");
+  return construirModeloSituacoes((data ?? []) as SituacaoBase[]);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PEDIDOS
@@ -92,7 +114,7 @@ export async function pedidosOnda0(
         .from("vhsys_pedidos")
         .select("numero, id_vhsys, valor_total")
         .eq("lixeira", false)
-        .eq("situacao_id", SITUACAO.PAGAMENTO_APROVADO),
+        .eq("situacao_id", escopo.modelo.pagamentoAprovadoId ?? -1),
       filtros,
       escopo
     ).order("numero", { ascending: false })
@@ -107,6 +129,7 @@ export async function pedidosOnda0(
     const { data } = await supabase
       .from("vhsys_pedidos_financeiro")
       .select("numero, saldo, recebido, total_contas")
+      .eq("conta_id", escopo.contaId)
       .in("numero", chunk);
     for (const f of (data ?? []) as FinSemBaixa[]) finPorNumero.set(f.numero, f);
   }
@@ -162,15 +185,18 @@ export async function pedidosOnda1(
   numerosSaldo?: number[] | null
 ): Promise<PedidosOnda1> {
   const role = escopo.role;
+  const colunas = escopo.modelo.colunas;
+  const entregueId = escopo.modelo.entregueId;
 
   // Multi-select de situação limita as colunas exibidas no kanban.
   const colunasFiltradas =
     filtros.situacoes.length > 0
-      ? COLUNAS_KANBAN.filter((id) => filtros.situacoes.includes(id))
-      : COLUNAS_KANBAN;
-  const colunasAtivas = colunasFiltradas.filter((id) => id !== SITUACAO.ENTREGUE);
+      ? colunas.filter((id) => filtros.situacoes.includes(id))
+      : colunas;
+  const colunasAtivas = colunasFiltradas.filter((id) => id !== entregueId);
   const incluiEntregue =
-    filtros.situacoes.length === 0 || filtros.situacoes.includes(SITUACAO.ENTREGUE);
+    entregueId !== null &&
+    (filtros.situacoes.length === 0 || filtros.situacoes.includes(entregueId));
 
   /** Aplica os filtros compartilhados + recorte de saldo a uma query de coluna. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -200,7 +226,7 @@ export async function pedidosOnda1(
           .from("vhsys_pedidos")
           .select(COLS_PEDIDO)
           .eq("lixeira", false)
-          .eq("situacao_id", SITUACAO.ENTREGUE)
+          .eq("situacao_id", entregueId ?? -1)
           .order("data_mod_vhsys", { ascending: false })
           .limit(LIMITE_POR_COLUNA)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -211,11 +237,16 @@ export async function pedidosOnda1(
     supabase
       .from("vhsys_situacoes")
       .select("id_vhsys, entidade, nome, tipo_status, ordem, lixeira")
+      .eq("conta_id", escopo.contaId)
       .eq("entidade", "pedidos")
       .eq("lixeira", false)
       .order("ordem"),
     role !== "vendedor"
-      ? supabase.from("vhsys_vendedores").select("id_vhsys, nome").order("nome")
+      ? supabase
+          .from("vhsys_vendedores")
+          .select("id_vhsys, nome")
+          .eq("conta_id", escopo.contaId)
+          .order("nome")
       : Promise.resolve({ data: [] as { id_vhsys: number; nome: string }[] }),
     metricasPedidos(supabase, filtros, escopo, precarregados ?? undefined),
     Promise.all([...consultasColunas, consultaEntregues]),
@@ -225,8 +256,10 @@ export async function pedidosOnda1(
   colunasAtivas.forEach((id, idx) => {
     atingiuLimitePorSituacao[id] = (resultados[idx].data?.length ?? 0) >= LIMITE_POR_COLUNA;
   });
-  atingiuLimitePorSituacao[SITUACAO.ENTREGUE] =
-    (resultados[resultados.length - 1].data?.length ?? 0) >= LIMITE_POR_COLUNA;
+  if (entregueId !== null) {
+    atingiuLimitePorSituacao[entregueId] =
+      (resultados[resultados.length - 1].data?.length ?? 0) >= LIMITE_POR_COLUNA;
+  }
 
   const pedidos: PedidoRow[] = resultados.flatMap(
     (r) => (r.data ?? []) as unknown as PedidoRow[]
@@ -322,7 +355,8 @@ function classificarCobrancaNaEntrega(contas: ContaForma[]): Set<number> {
  */
 export async function pedidosOnda2(
   supabase: DB,
-  pedidos: PedidoRow[]
+  pedidos: PedidoRow[],
+  contaId: string
 ): Promise<PedidosOnda2> {
   const pedidoIds = pedidos.map((p) => p.id);
   const idVhsysList = pedidos
@@ -345,6 +379,7 @@ export async function pedidosOnda2(
       ? supabase
           .from("vhsys_clientes")
           .select("id_vhsys, cnpj_cpf, bairro, endereco, numero")
+          .eq("conta_id", contaId)
           .in("id_vhsys", clienteIds)
       : Promise.resolve({ data: [] as ClientePrefillRow[] }),
     pedidoIds.length
@@ -356,6 +391,7 @@ export async function pedidosOnda2(
       ? supabase
           .from("vhsys_contas_receber")
           .select("pedido_resolvido, valor, valor_pago, vencimento, forma_pagamento:dados->>forma_pagamento")
+          .eq("conta_id", contaId)
           .in("pedido_resolvido", idVhsysList)
           .eq("lixeira", false)
       : Promise.resolve({ data: [] as ContaForma[] }),
@@ -424,7 +460,7 @@ export async function orcamentosOnda(
   /** Aplica todos os filtros de orçamento a uma query encadeada. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function aplicar(query: any): any {
-    let q = query;
+    let q = query.eq("conta_id", escopo.contaId);
     if (filtros.busca) {
       if (filtros.buscaNumero !== null) {
         q = q.eq("numero", filtros.buscaNumero);
@@ -477,6 +513,7 @@ export async function orcamentosOnda(
     supabase
       .from("vhsys_situacoes")
       .select("id_vhsys, entidade, nome, tipo_status, ordem, lixeira")
+      .eq("conta_id", escopo.contaId)
       .eq("entidade", "orcamentos")
       .eq("lixeira", false)
       .order("ordem"),
@@ -484,6 +521,7 @@ export async function orcamentosOnda(
       ? supabase
           .from("vhsys_vendedores")
           .select("id_vhsys, nome")
+          .eq("conta_id", escopo.contaId)
           .eq("lixeira", false)
           .order("nome")
       : Promise.resolve({ data: [] as { id_vhsys: number; nome: string }[] }),
@@ -527,7 +565,7 @@ export async function orcamentosKanbanOnda(
   /** Aplica os mesmos filtros de orcamentosOnda a uma query encadeada. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function aplicar(query: any): any {
-    let q = query;
+    let q = query.eq("conta_id", escopo.contaId);
     if (filtros.busca) {
       if (filtros.buscaNumero !== null) {
         q = q.eq("numero", filtros.buscaNumero);

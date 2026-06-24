@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { PedidoCard } from "./PedidoCard";
-import { COLUNAS_KANBAN, SEGMENTO_PAGAMENTO, SITUACAO } from "@/lib/vhsys/fluxo";
+import { ehSegmentoPagamento, type ModeloSituacoes } from "@/lib/vhsys/situacoes-modelo";
 import { buscarMaisPedidos } from "@/lib/vhsys/acoes-pedidos";
 import { moverSituacaoPedido } from "@/lib/vhsys/acoes";
 import { KanbanBoard, type KanbanColuna } from "@/components/crm/KanbanBoard";
@@ -16,29 +16,31 @@ interface PedidosKanbanProps {
   atingiuLimitePorSituacao?: Record<number, boolean>;
   /** Habilita drag-and-drop para mover situação */
   podeEscrever?: boolean;
+  /** Modelo de situações da conta (colunas/segmentos data-driven). */
+  modelo: ModeloSituacoes;
 }
 
-// Colunas dinâmicas: nomes/ordem vêm do espelho de situações da conta
-// (GET /situacoes); o fluxo (quais entram e em que sequência) vem de
-// COLUNAS_KANBAN. 778 (Cancelado) fica fora do quadro.
+// Colunas dinâmicas: nomes/ordem/IDs vêm das situações sincronizadas da conta
+// (modelo). A "Cancelado" fica fora do quadro.
 export function PedidosKanban({
   situacoes,
   pedidos,
   onCardClick,
   atingiuLimitePorSituacao = {},
   podeEscrever,
+  modelo,
 }: PedidosKanbanProps) {
   const router = useRouter();
   const porId = new Map(situacoes.map((s) => [s.id_vhsys, s]));
 
-  const colunas: KanbanColuna[] = COLUNAS_KANBAN.filter((id) => porId.has(id)).map((id) => {
+  const colunas: KanbanColuna[] = modelo.colunas.filter((id) => porId.has(id)).map((id) => {
     const situacao = porId.get(id)!;
-    const ehPagamento = SEGMENTO_PAGAMENTO.has(id);
+    const ehPagamento = ehSegmentoPagamento(modelo, id);
     return {
       id,
       nome: situacao.nome,
       segmentoLabel: ehPagamento ? "Pagamento" : "Entrega",
-      segmentoCor: ehPagamento ? "border-amber-300" : "border-blue-300",
+      segmentoCor: ehPagamento ? "border-amber-300" : "border-primary-300",
     };
   });
 
@@ -66,12 +68,12 @@ export function PedidosKanban({
       getColunaId={(p) => p.situacao_id}
       getId={(p) => p.id}
       getValor={(p) => p.valor_total ?? 0}
-      renderCard={(p) => <PedidoCard pedido={p} onClick={onCardClick} />}
+      renderCard={(p) => <PedidoCard pedido={p} onClick={onCardClick} modelo={modelo} />}
       atingiuLimitePorColuna={atingiuLimitePorSituacao}
       carregarMais={handleCarregarMais}
       mensagemVazio="Nenhum pedido nesta situação"
       // Pedido entregue é situação final — não pode ser arrastado para outra coluna.
-      podeMoverItem={(p) => p.situacao_id !== SITUACAO.ENTREGUE}
+      podeMoverItem={(p) => p.situacao_id !== modelo.entregueId}
       onMoverCard={
         podeEscrever
           ? async (pedido, novaSituacaoId) => {

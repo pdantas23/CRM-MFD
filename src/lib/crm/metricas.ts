@@ -7,7 +7,7 @@
 import type { createClient } from "@/lib/supabase/server";
 import { formatBRL } from "@/lib/format";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
-import { COLUNAS_KANBAN } from "@/lib/vhsys/fluxo";
+import type { ModeloSituacoes } from "@/lib/vhsys/situacoes-modelo";
 import { hojeISOSaoPaulo } from "@/lib/entregas/hoje";
 // Cliente Supabase server — o projeto não gera tipos para as tabelas vhsys_*,
 // então as queries usam encadeamento livre sem checagem de schema.
@@ -23,6 +23,10 @@ export interface Metrica {
 export interface Escopo {
   role: string;
   vendedorId: number | null;
+  /** Conta ativa: isola TODAS as queries do espelho à conta do cookie. */
+  contaId: string;
+  /** Modelo de situações de PEDIDOS da conta (colunas/segmentos/legado data-driven). */
+  modelo: ModeloSituacoes;
 }
 
 const LOTE = 1000;
@@ -52,7 +56,8 @@ function aplicarComuns(
   colData: "data_orcamento" | "data_pedido"
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
-  let q = query;
+  // Isolamento multi-conta: TODA query de pedidos/orçamentos é restrita à conta ativa.
+  let q = query.eq("conta_id", escopo.contaId);
 
   if (filtros.busca) {
     if (filtros.buscaNumero !== null) {
@@ -206,6 +211,7 @@ async function tentarRpcOrcamentos(
 ): Promise<OrcMetricasRpc | null> {
   const { data, error } = await supabase
     .rpc("orcamentos_metricas", {
+      p_conta_id: escopo.contaId,
       p_busca: filtros.buscaNumero === null && filtros.busca ? filtros.busca : null,
       p_numero: filtros.buscaNumero,
       p_situacoes: filtros.situacoes.length > 0 ? filtros.situacoes : null,
@@ -263,9 +269,9 @@ export function aplicarPedidos(
   escopo: Escopo
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
-  // Constrói filtros com situações efetivas (kanban default quando vazio).
+  // Constrói filtros com situações efetivas (colunas da conta quando vazio).
   const situacoesEfetivas =
-    filtros.situacoes.length > 0 ? filtros.situacoes : COLUNAS_KANBAN;
+    filtros.situacoes.length > 0 ? filtros.situacoes : escopo.modelo.colunas;
   const filtrosComSituacao: FiltrosCrm = { ...filtros, situacoes: situacoesEfetivas };
   let q = aplicarComuns(query, filtrosComSituacao, escopo, "data_pedido");
   // Ocultar legado (default ON): limita a origem_situacao = 'vhsys'.
@@ -280,14 +286,17 @@ export function aplicarPedidos(
 /** Carrega da view os numeros com saldo > 0, em chunks de 200, dado o conjunto. */
 async function carregarSaldoPorNumero(
   supabase: DB,
-  numeros: number[]
+  numeros: number[],
+  contaId: string
 ): Promise<Map<number, FinAgg>> {
   const mapa = new Map<number, FinAgg>();
   for (let pos = 0; pos < numeros.length; pos += CHUNK_FIN) {
     const chunk = numeros.slice(pos, pos + CHUNK_FIN);
+    // numero pode colidir entre contas → restringe à conta ativa.
     const { data } = await supabase
       .from("vhsys_pedidos_financeiro")
       .select("numero, recebido, saldo")
+      .eq("conta_id", contaId)
       .in("numero", chunk);
     for (const f of (data ?? []) as FinAgg[]) mapa.set(f.numero, f);
   }
@@ -320,7 +329,7 @@ export async function buscarDadosPedidos(
       escopo
     ).order("numero", { ascending: false })
   );
-  const fin = await carregarSaldoPorNumero(supabase, pedidos.map((p) => p.numero));
+  const fin = await carregarSaldoPorNumero(supabase, pedidos.map((p) => p.numero), escopo.contaId);
   return { pedidos, fin };
 }
 
@@ -375,9 +384,11 @@ async function tentarRpcPedidos(
 ): Promise<PedMetricasRpc | null> {
   const { data, error } = await supabase
     .rpc("pedidos_metricas", {
+      p_conta_id: escopo.contaId,
       p_busca: filtros.buscaNumero === null && filtros.busca ? filtros.busca : null,
       p_numero: filtros.buscaNumero,
-      p_situacoes: filtros.situacoes.length > 0 ? filtros.situacoes : null,
+      // Sempre envia as colunas da conta (a RPC tinha um default fixo da SA).
+      p_situacoes: filtros.situacoes.length > 0 ? filtros.situacoes : escopo.modelo.colunas,
       p_vendedor_id: vendedorParaRpc(filtros, escopo),
       p_ocultar_legado: filtros.ocultarLegado,
       p_so_com_saldo: filtros.soComSaldo,
@@ -464,10 +475,12 @@ function classificarEntrega(e: EntregaAgg, hojeIso: string): "concluida" | "pend
 function aplicarEntregas(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
-  filtros: FiltrosCrm
+  filtros: FiltrosCrm,
+  contaId: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
-  let q = query;
+  // Isolamento multi-conta: entregas restritas à conta ativa.
+  let q = query.eq("conta_id", contaId);
 
   if (filtros.busca) {
     // Busca por cliente, bairro, endereço ou número de orçamento.
@@ -494,7 +507,8 @@ export { aplicarEntregas };
 
 export async function metricasEntregas(
   supabase: DB,
-  filtros: FiltrosCrm
+  filtros: FiltrosCrm,
+  contaId: string
 ): Promise<Metrica[]> {
   // 1. Agrega entregas (colunas mínimas).
   const entregas = await buscarLotes<EntregaAgg>(() =>
@@ -503,7 +517,8 @@ export async function metricasEntregas(
         .from("entregas")
         .select("id, data, status, pedido_id, entregue_em")
         .order("data", { ascending: false }),
-      filtros
+      filtros,
+      contaId
     )
   );
 

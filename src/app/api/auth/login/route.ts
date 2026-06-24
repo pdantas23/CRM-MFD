@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { iniciarRequest, medir, emitirLog } from "@/lib/perf/boot";
+import { contasDoUsuario } from "@/lib/accounts/contexto";
+import { COOKIE_CONTA, COOKIE_CONTA_OPTS } from "@/lib/accounts/contexto";
 
 /** Volta ao login com um código de erro legível pelo client (?erro=...). */
 function erroLogin(request: NextRequest, codigo: string) {
@@ -29,7 +31,7 @@ export async function POST(request: NextRequest) {
 
   const { data: profile } = await admin
     .from("profiles")
-    .select("id")
+    .select("id, role")
     .ilike("nome", nome)
     .single();
 
@@ -83,11 +85,34 @@ export async function POST(request: NextRequest) {
 
   emitirLog(perfCtx, { signIn: msSignIn }, { source: "login", result: "ok" });
 
-  const response = NextResponse.redirect(new URL("/", request.url), {
+  // OWNER: acesso de gerenciamento (não operacional) — vai direto à área de
+  // contas, sem conta ativa.
+  const role = (profile as { role?: string }).role;
+  if (role === "owner") {
+    const respOwner = NextResponse.redirect(new URL("/gerenciamento", request.url), {
+      status: 303,
+    });
+    cookiesParaSetar.forEach(({ name, value, options }) =>
+      respOwner.cookies.set(name, value, options)
+    );
+    return respOwner;
+  }
+
+  // Demais roles: resolve as contas que o usuário pode acessar:
+  //  - 1 conta  → seleciona automaticamente (seta cookie) e vai ao dashboard.
+  //  - >1 conta → redireciona ao seletor (sem cookie de conta ainda).
+  const userId = signInResult.data.user?.id;
+  const contas = userId ? await contasDoUsuario(userId) : [];
+
+  const destino = contas.length === 1 ? "/" : "/selecionar-conta";
+  const response = NextResponse.redirect(new URL(destino, request.url), {
     status: 303,
   });
   cookiesParaSetar.forEach(({ name, value, options }) =>
     response.cookies.set(name, value, options)
   );
+  if (contas.length === 1) {
+    response.cookies.set(COOKIE_CONTA, contas[0].slug, COOKIE_CONTA_OPTS);
+  }
   return response;
 }

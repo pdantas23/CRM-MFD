@@ -3,7 +3,7 @@
 -- ============================================================
 
 -- 1. PROFILES
-create table public.profiles (
+create table if not exists public.profiles (
   id uuid references auth.users on delete cascade primary key,
   nome text not null,
   role text not null check (role in ('admin', 'entregador')),
@@ -30,12 +30,12 @@ $$;
 
 grant execute on function public.is_admin(uuid) to anon, authenticated;
 
-create policy "Usuário vê o próprio perfil"
-  on public.profiles for select
+drop policy if exists "Usuário vê o próprio perfil" on public.profiles;
+create policy "Usuário vê o próprio perfil" on public.profiles for select
   using (auth.uid() = id);
 
-create policy "Admin vê todos os profiles"
-  on public.profiles for select
+drop policy if exists "Admin vê todos os profiles" on public.profiles;
+create policy "Admin vê todos os profiles" on public.profiles for select
   using (public.is_admin(auth.uid()));
 
 -- Trigger: cria profile automaticamente ao criar usuário
@@ -52,13 +52,13 @@ begin
 end;
 $$ language plpgsql security definer;
 
-create trigger on_auth_user_created
+create or replace trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
 
 -- 2. ENTREGAS
-create table public.entregas (
+create table if not exists public.entregas (
   id uuid primary key default gen_random_uuid(),
   data date not null,
   periodo text not null check (periodo in ('manha', 'tarde')),
@@ -75,26 +75,26 @@ create table public.entregas (
   created_at timestamptz default now()
 );
 
-create index entregas_data_idx on public.entregas (data);
-create index entregas_data_periodo_ordem_idx
+create index if not exists entregas_data_idx on public.entregas (data);
+create index if not exists entregas_data_periodo_ordem_idx
   on public.entregas (data, periodo, ordem nulls last, created_at);
 
 alter table public.entregas enable row level security;
 
-create policy "Todos autenticados podem ver"
-  on public.entregas for select
+drop policy if exists "Todos autenticados podem ver" on public.entregas;
+create policy "Todos autenticados podem ver" on public.entregas for select
   using (auth.role() = 'authenticated');
 
-create policy "Só admin insere"
-  on public.entregas for insert
+drop policy if exists "Só admin insere" on public.entregas;
+create policy "Só admin insere" on public.entregas for insert
   with check (public.is_admin(auth.uid()));
 
-create policy "Só admin atualiza"
-  on public.entregas for update
+drop policy if exists "Só admin atualiza" on public.entregas;
+create policy "Só admin atualiza" on public.entregas for update
   using (public.is_admin(auth.uid()));
 
-create policy "Só admin deleta"
-  on public.entregas for delete
+drop policy if exists "Só admin deleta" on public.entregas;
+create policy "Só admin deleta" on public.entregas for delete
   using (public.is_admin(auth.uid()));
 
 
@@ -102,17 +102,18 @@ create policy "Só admin deleta"
 -- Bucket público: o app usa getPublicUrl() e os anexos são abertos
 -- direto via <a href>. URLs contêm UUID da entrega + timestamp.
 insert into storage.buckets (id, name, public)
-values ('anexos-entregas', 'anexos-entregas', true);
+values ('anexos-entregas', 'anexos-entregas', true)
+on conflict (id) do nothing;
 
-create policy "Admin faz upload"
-  on storage.objects for insert
+drop policy if exists "Admin faz upload" on storage.objects;
+create policy "Admin faz upload" on storage.objects for insert
   with check (
     bucket_id = 'anexos-entregas'
     and public.is_admin(auth.uid())
   );
 
-create policy "Admin deleta"
-  on storage.objects for delete
+drop policy if exists "Admin deleta" on storage.objects;
+create policy "Admin deleta" on storage.objects for delete
   using (
     bucket_id = 'anexos-entregas'
     and public.is_admin(auth.uid())

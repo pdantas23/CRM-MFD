@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Select } from "@/components/ui/Select";
+import { CoresClient } from "@/components/configuracoes/CoresClient";
 import {
   criarUsuario,
   atualizarUsuario,
@@ -15,9 +16,16 @@ interface Props {
   usuarios: UsuarioRow[];
   vendedores: VendedorVhsys[];
   currentUserId: string;
+  /** Cor primária atual da conta ativa (hex). */
+  corAtual: string;
+  /** Nome da conta ativa (exibido na aba Cores). */
+  nomeEmpresa: string;
+  /** Slug da conta ativa (sufixo automático do nome de login). */
+  slugConta: string;
 }
 
 const ROLE_OPCOES = [
+  { value: "owner", label: "Owner" },
   { value: "superadmin", label: "Superadmin" },
   { value: "admin", label: "Admin" },
   { value: "vendedor", label: "Vendedor" },
@@ -25,6 +33,7 @@ const ROLE_OPCOES = [
 ];
 
 const ROLE_LABEL: Record<string, string> = {
+  owner: "Owner",
   superadmin: "Superadmin",
   admin: "Admin",
   vendedor: "Vendedor",
@@ -33,7 +42,10 @@ const ROLE_LABEL: Record<string, string> = {
 
 // ── Abas ────────────────────────────────────────────────────────────────────
 
-const ABAS = [{ id: "usuarios", label: "Usuários" }] as const;
+const ABAS = [
+  { id: "usuarios", label: "Usuários" },
+  { id: "cores", label: "Cores" },
+] as const;
 type AbaId = (typeof ABAS)[number]["id"];
 
 // ── Ícone de olho ─────────────────────────────────────────────────────────
@@ -71,7 +83,14 @@ function IconeOlho({ visivel }: { visivel: boolean }) {
 
 // ── Componente principal ──────────────────────────────────────────────────
 
-export function UsuariosClient({ usuarios, vendedores, currentUserId }: Props) {
+export function UsuariosClient({
+  usuarios,
+  vendedores,
+  currentUserId,
+  corAtual,
+  nomeEmpresa,
+  slugConta,
+}: Props) {
   const router = useRouter();
   const [abaAtiva, setAbaAtiva] = useState<AbaId>("usuarios");
   const [modalCriacaoAberto, setModalCriacaoAberto] = useState(false);
@@ -95,7 +114,7 @@ export function UsuariosClient({ usuarios, vendedores, currentUserId }: Props) {
             onClick={() => setAbaAtiva(aba.id)}
             className={`px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none ${
               abaAtiva === aba.id
-                ? "border-b-2 border-blue-600 text-blue-600"
+                ? "border-b-2 border-primary-600 text-primary-600"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -125,10 +144,15 @@ export function UsuariosClient({ usuarios, vendedores, currentUserId }: Props) {
         </>
       )}
 
+      {abaAtiva === "cores" && (
+        <CoresClient corAtual={corAtual} nomeEmpresa={nomeEmpresa} />
+      )}
+
       {/* Modal de criação */}
       {modalCriacaoAberto && (
         <ModalCriacaoUsuario
           vendedorOpcoes={vendedorOpcoes}
+          slugConta={slugConta}
           onSucesso={() => {
             setModalCriacaoAberto(false);
             router.refresh();
@@ -157,10 +181,12 @@ export function UsuariosClient({ usuarios, vendedores, currentUserId }: Props) {
 
 function ModalCriacaoUsuario({
   vendedorOpcoes,
+  slugConta,
   onSucesso,
   onFechar,
 }: {
   vendedorOpcoes: { value: string; label: string }[];
+  slugConta: string;
   onSucesso: () => void;
   onFechar: () => void;
 }) {
@@ -250,13 +276,26 @@ function ModalCriacaoUsuario({
           {/* Nome */}
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Nome</label>
-            <input
-              type="text"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              className="input-base"
-              required
-            />
+            <div className="flex items-stretch">
+              <input
+                type="text"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                className="input-base rounded-r-none"
+                required
+              />
+              {slugConta && (
+                <span className="inline-flex items-center rounded-r-lg border border-l-0 border-gray-300 bg-gray-50 px-3 font-mono text-sm text-gray-500">
+                  -{slugConta}
+                </span>
+              )}
+            </div>
+            {slugConta && (
+              <p className="mt-1 text-xs text-gray-500">
+                O slug da conta é adicionado automaticamente — login:{" "}
+                <span className="font-mono text-gray-700">{(nome.trim() || "nome")}-{slugConta}</span>
+              </p>
+            )}
           </div>
 
           {/* Email */}

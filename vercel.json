@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/cron/vhsys-sync",
+      "path": "/api/cron/vhsys-sync?modo=completo",
       "schedule": "0 6 * * *"
     }
   ]

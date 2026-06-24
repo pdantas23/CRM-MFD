@@ -12,7 +12,7 @@
 -- direto e indexável. A reconciliação é feita por uma função (fonte única da
 -- verdade), chamada no backfill e pós-loop no sync.
 --
--- Idempotente (add column if not exists / create or replace / create index if
+-- Idempotente (add column if not exists / create or replace / create index if not exists if
 -- not exists) e reversível (bloco de rollback comentado no fim).
 -- ============================================================
 

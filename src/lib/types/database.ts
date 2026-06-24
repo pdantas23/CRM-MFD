@@ -1,4 +1,4 @@
-export type Role = "superadmin" | "admin" | "vendedor" | "entregador";
+export type Role = "owner" | "superadmin" | "admin" | "vendedor" | "entregador";
 export type Periodo = "manha" | "tarde" | "noite";
 export type StatusEntrega = "entrega_final" | "entrega_parcial";
 
@@ -7,6 +7,8 @@ export interface Profile {
   nome: string;
   role: Role;
   vendedor_id: number | null;
+  /** Conta à qual o usuário está vinculado. null = acesso a todas as contas. */
+  conta_id: string | null;
   created_at: string;
 }
 

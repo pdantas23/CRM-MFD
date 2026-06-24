@@ -3,6 +3,7 @@ import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { ehSuperadmin } from "@/lib/auth/roles";
 import { listarUsuarios, listarVendedoresVhsys } from "@/lib/usuarios/acoes";
 import { UsuariosClient } from "@/components/configuracoes/UsuariosClient";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +14,10 @@ export default async function ConfiguracoesPage() {
     redirect("/entregas");
   }
 
-  const [resUsuarios, resVendedores] = await Promise.all([
+  const [resUsuarios, resVendedores, conta] = await Promise.all([
     listarUsuarios(),
     listarVendedoresVhsys(),
+    getContaAtiva(),
   ]);
 
   const usuarios = resUsuarios.ok ? resUsuarios.usuarios : [];
@@ -43,6 +45,9 @@ export default async function ConfiguracoesPage() {
         usuarios={usuarios}
         vendedores={vendedores}
         currentUserId={profile.id}
+        corAtual={conta.themeColor}
+        nomeEmpresa={conta.nomeEmpresa ?? "Conta"}
+        slugConta={conta.slug}
       />
     </div>
   );

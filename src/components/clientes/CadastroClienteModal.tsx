@@ -201,7 +201,7 @@ export function CadastroClienteModal({ onClose, onCriado }: Props) {
                     type="button"
                     onClick={buscarCnpj}
                     disabled={buscandoCnpj}
-                    className="rounded-md bg-blue-600 px-3 text-white hover:bg-blue-700 disabled:opacity-50"
+                    className="rounded-md bg-primary-600 px-3 text-white hover:bg-primary-700 disabled:opacity-50"
                     title="Buscar dados do CNPJ"
                     aria-label="Buscar dados do CNPJ"
                   >
@@ -307,7 +307,7 @@ export function CadastroClienteModal({ onClose, onCriado }: Props) {
                     type="button"
                     onClick={buscarCep}
                     disabled={buscandoCep}
-                    className="rounded-md bg-blue-600 px-3 text-white hover:bg-blue-700 disabled:opacity-50"
+                    className="rounded-md bg-primary-600 px-3 text-white hover:bg-primary-700 disabled:opacity-50"
                     title="Buscar endereço pelo CEP"
                     aria-label="Buscar endereço pelo CEP"
                   >

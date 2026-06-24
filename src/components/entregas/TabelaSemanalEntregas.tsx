@@ -183,16 +183,16 @@ export function TabelaSemanalEntregas({ entregas, inicioSemana, isAdmin }: Props
             return (
               <div
                 key={dia}
-                className={`px-2 py-2 text-center ${isHoje ? "bg-blue-50" : "bg-gray-50"}`}
+                className={`px-2 py-2 text-center ${isHoje ? "bg-primary-50" : "bg-gray-50"}`}
               >
                 <p
                   className={`text-sm font-semibold ${
-                    isHoje ? "text-blue-700" : "text-gray-900"
+                    isHoje ? "text-primary-700" : "text-gray-900"
                   }`}
                 >
                   {DIAS_LABEL[idx]}
                   {isHoje && (
-                    <span className="ml-1 text-xs font-normal text-blue-600">· hoje</span>
+                    <span className="ml-1 text-xs font-normal text-primary-600">· hoje</span>
                   )}
                 </p>
                 <p className="text-xs text-gray-500">{formatarDiaMes(dia)}</p>
@@ -233,7 +233,7 @@ export function TabelaSemanalEntregas({ entregas, inicioSemana, isAdmin }: Props
                   <div
                     key={chaveCelula}
                     className={`flex flex-col ${celula} ${
-                      isDropTarget ? "ring-2 ring-inset ring-blue-400" : ""
+                      isDropTarget ? "ring-2 ring-inset ring-primary-400" : ""
                     }`}
                     onDragOver={
                       isAdmin

@@ -68,7 +68,7 @@ export function DropdownFiltro({
         aria-controls={listboxId}
         className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
           ativo
-            ? "border-blue-600 bg-blue-50 text-blue-700"
+            ? "border-primary-600 bg-primary-50 text-primary-700"
             : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
         }`}
       >
@@ -98,7 +98,7 @@ export function DropdownFiltro({
             aria-selected={!valorAtual}
             onClick={() => { onChange(undefined); setAberto(false); }}
             className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
-              !valorAtual ? "font-semibold text-blue-700" : "text-gray-700"
+              !valorAtual ? "font-semibold text-primary-700" : "text-gray-700"
             }`}
           >
             {placeholder}
@@ -111,7 +111,7 @@ export function DropdownFiltro({
               aria-selected={valorAtual === op.valor}
               onClick={() => { onChange(op.valor); setAberto(false); }}
               className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
-                valorAtual === op.valor ? "font-semibold text-blue-700" : "text-gray-700"
+                valorAtual === op.valor ? "font-semibold text-primary-700" : "text-gray-700"
               }`}
             >
               {op.label}

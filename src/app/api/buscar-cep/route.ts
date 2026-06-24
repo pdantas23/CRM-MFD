@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`, {
+    const base = process.env.CEP_API_BASE ?? "https://viacep.com.br/ws/";
+    const res = await fetch(`${base}${cep}/json/`, {
       signal: controller.signal,
       cache: "no-store",
     });

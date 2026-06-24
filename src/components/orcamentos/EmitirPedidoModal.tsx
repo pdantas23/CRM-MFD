@@ -747,7 +747,7 @@ export function EmitirPedidoModal({
                 <button
                   type="button"
                   onClick={adicionarItem}
-                  className="mt-3 text-sm text-blue-600 hover:text-blue-800"
+                  className="mt-3 text-sm text-primary-600 hover:text-primary-800"
                 >
                   + adicionar outro produto
                 </button>
@@ -1031,7 +1031,7 @@ export function EmitirPedidoModal({
                       maxLength={500}
                       rows={3}
                       placeholder="Esta informação será impressa nas observações da nota."
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                     />
                     <MensagensPadrao
                       onSelecionar={(texto) =>
@@ -1051,7 +1051,7 @@ export function EmitirPedidoModal({
                       maxLength={500}
                       rows={3}
                       placeholder="Esta informação é de uso interno e não será impressa."
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                     />
                   </div>
                 </div>

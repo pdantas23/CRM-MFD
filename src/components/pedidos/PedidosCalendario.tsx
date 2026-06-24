@@ -41,7 +41,7 @@ function PedidoChip({
       type="button"
       onClick={onClick}
       title={`${pedido.nome_cliente} — #${pedido.numero} — ${formatBRL(pedido.valor_total ?? 0)}`}
-      className="block w-full truncate rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-left text-xs font-medium text-blue-800 transition-opacity hover:opacity-75"
+      className="block w-full truncate rounded border border-primary-200 bg-primary-50 px-1.5 py-0.5 text-left text-xs font-medium text-primary-800 transition-opacity hover:opacity-75"
     >
       {pedido.nome_cliente} #{pedido.numero}
     </button>
@@ -191,13 +191,13 @@ export function PedidosCalendario({
                 key={idx}
                 className={`min-h-24 border-b border-r border-gray-100 p-1.5 ${
                   dia === null ? "bg-gray-50" : ""
-                } ${ehHoje ? "bg-blue-50" : ""}`}
+                } ${ehHoje ? "bg-primary-50" : ""}`}
               >
                 {dia !== null && (
                   <>
                     <span
                       className={`mb-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
-                        ehHoje ? "bg-blue-700 text-white" : "text-gray-700"
+                        ehHoje ? "bg-primary-700 text-white" : "text-gray-700"
                       }`}
                     >
                       {dia}
@@ -230,7 +230,7 @@ export function PedidosCalendario({
           const ehHoje = isoDe(ano, mes, dia) === hojeISO;
           return (
             <div key={dia} className="px-4 py-3">
-              <p className={`mb-2 text-xs font-semibold uppercase tracking-wider ${ehHoje ? "text-blue-700" : "text-gray-500"}`}>
+              <p className={`mb-2 text-xs font-semibold uppercase tracking-wider ${ehHoje ? "text-primary-700" : "text-gray-500"}`}>
                 {String(dia).padStart(2, "0")} de {mesesAno[mes - 1]}
                 {ehHoje && " — Hoje"}
               </p>

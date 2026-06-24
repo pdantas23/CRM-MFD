@@ -1,8 +1,26 @@
 // Cliente HTTP da API VHSYS v2 — SERVER-ONLY.
 // Contratos documentados em docs/vhsys/API_NOTES.md (specs em docs/vhsys/raw/).
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
 const RETRIES = 3;
 const BACKOFF_BASE_MS = 500;
+
+// User-Agent enviado à API VHSYS. Genérico por padrão (não embute nome de empresa);
+// sobrescrevível por ambiente para identificar a aplicação consumidora.
+const USER_AGENT = process.env.APP_USER_AGENT ?? "CRM/0.1";
+
+// ── Redação de segredos em logs/erros ───────────────────────────────────────
+// Garante que tokens (headers access-token/secret-access-token) NUNCA apareçam
+// em mensagens de erro, logs ou no corpo armazenado em VhsysApiError.
+/** Mascara, em qualquer string, ocorrências dos tokens fornecidos. */
+function redigirSegredos(texto: string, ...segredos: (string | undefined)[]): string {
+  let out = texto;
+  for (const s of segredos) {
+    if (s && s.length >= 4) out = out.split(s).join("[REDACTED]");
+  }
+  return out;
+}
 
 export interface VhsysPaging {
   total_count: number;
@@ -31,15 +49,43 @@ export class VhsysApiError extends Error {
   }
 }
 
+// Credenciais da conta VHSYS ativa, injetadas por requisição via AsyncLocalStorage.
+// Permite que as funções livres (vhsysGet/vhsysPost/...) operem com as credenciais
+// da conta resolvida sem precisar threadá-las por todas as assinaturas.
+export interface VhsysTokens {
+  accessToken: string;
+  secretToken: string;
+  apiBase: string;
+}
+
+const contextoTokens = new AsyncLocalStorage<VhsysTokens>();
+
+/**
+ * Executa `fn` com as credenciais da conta fornecida ativas no contexto.
+ * Toda chamada VHSYS feita dentro de `fn` usará esses tokens.
+ */
+export function runComTokensVhsys<T>(tokens: VhsysTokens, fn: () => Promise<T>): Promise<T> {
+  return contextoTokens.run(tokens, fn);
+}
+
 function config() {
   if (typeof window !== "undefined") {
     throw new Error("Cliente VHSYS não pode ser usado no browser (tokens server-side)");
   }
+  // 1) Contexto da conta ativa (multi-conta) tem prioridade.
+  const ctx = contextoTokens.getStore();
+  if (ctx) {
+    return { base: ctx.apiBase, accessToken: ctx.accessToken, secretToken: ctx.secretToken };
+  }
+  // 2) Fallback: env global (scripts de manutenção / operação single-conta legada).
   const base = process.env.VHSYS_API_BASE ?? "https://api.vhsys.com/v2";
   const accessToken = process.env.VHSYS_ACCESS_TOKEN;
   const secretToken = process.env.VHSYS_SECRET_ACCESS_TOKEN;
   if (!accessToken || !secretToken) {
-    throw new Error("VHSYS_ACCESS_TOKEN / VHSYS_SECRET_ACCESS_TOKEN ausentes no ambiente");
+    throw new Error(
+      "Credenciais VHSYS ausentes: nenhuma conta ativa no contexto e " +
+        "VHSYS_ACCESS_TOKEN / VHSYS_SECRET_ACCESS_TOKEN não definidos no ambiente"
+    );
   }
   return { base, accessToken, secretToken };
 }
@@ -90,7 +136,7 @@ export async function vhsysGet<T>(
         headers: {
           "access-token": accessToken,
           "secret-access-token": secretToken,
-          "User-Agent": "MFD-CRM/0.1",
+          "User-Agent": USER_AGENT,
           "Content-Type": "application/json",
           "Cache-Control": "no-cache",
         },
@@ -201,7 +247,7 @@ function headersEscrita(accessToken: string, secretToken: string): Record<string
   return {
     "access-token": accessToken,
     "secret-access-token": secretToken,
-    "User-Agent": "MFD-CRM/0.1",
+    "User-Agent": USER_AGENT,
     "Content-Type": "application/json",
     "Cache-Control": "no-cache",
   };
@@ -229,7 +275,9 @@ async function vhsysEscrever<T>(
   } catch (err) {
     clearTimeout(timer);
     const msg = err instanceof Error ? err.message : String(err);
-    throw new VhsysApiError(`VHSYS ${method} ${path} — erro de rede: ${msg}`, 0, err);
+    // Defesa em profundidade: caso a mensagem de rede ecoe algum token, mascara.
+    const msgSeguro = redigirSegredos(msg, accessToken, secretToken);
+    throw new VhsysApiError(`VHSYS ${method} ${path} — erro de rede: ${msgSeguro}`, 0, err);
   }
   clearTimeout(timer);
 

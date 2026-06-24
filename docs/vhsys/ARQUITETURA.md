@@ -41,8 +41,10 @@
 ## Camadas
 
 ### 1. Cliente VHSYS — `src/lib/vhsys/`
-- `client.ts`: `fetch` tipado com base URL `https://api.vhsys.com/v2`, headers de auth +
-  `User-Agent: MFD-CRM/<versão>`, parse do envelope `{code, status, data, paging}`.
+- `client.ts`: `fetch` tipado com base URL por conta (default `https://api.vhsys.com/v2`),
+  credenciais da conta ativa injetadas via AsyncLocalStorage (`runComTokensVhsys`),
+  `User-Agent` configurável (`APP_USER_AGENT`, default `CRM/<versão>`), parse do envelope
+  `{code, status, data, paging}`.
   - Trata o contrato real de erro: **403 com "Nenhum … encontrado" = resultado vazio**, não exceção.
   - Retry com backoff exponencial para 429/5xx/erros de rede (❓ rate limits — pergunta g).
 - `paginacao.ts`: iterador que percorre `limit=250`/`offset` até `paging.total_count`.

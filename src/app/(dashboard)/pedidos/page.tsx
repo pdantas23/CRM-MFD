@@ -4,9 +4,10 @@ import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { PedidosView } from "@/components/pedidos/PedidosView";
 import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
-import { pedidosOnda0, pedidosOnda1, pedidosOnda2 } from "@/lib/crm/carregar";
+import { pedidosOnda0, pedidosOnda1, pedidosOnda2, carregarModeloSituacoes } from "@/lib/crm/carregar";
 import { comCache } from "@/lib/crm/cache";
 import { ehAdmin } from "@/lib/auth/roles";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 import type {
   PedidoKanban,
   SituacaoRow,
@@ -32,7 +33,9 @@ export default async function PedidosPage({
   const podeEscrever = ehAdmin(role) || role === "vendedor";
   const vendedorId = profile?.vendedor_id ?? null;
 
-  const escopo: Escopo = { role: role ?? "", vendedorId };
+  const conta = await getContaAtiva();
+  const modelo = await carregarModeloSituacoes(supabase, conta.id);
+  const escopo: Escopo = { role: role ?? "", vendedorId, contaId: conta.id, modelo };
   const filtros = parseFiltros(searchParams, "pedidos");
 
   // ── Onda 0 (apenas quando "Contas sem dar baixa" ligado) ──────────────────
@@ -47,7 +50,7 @@ export default async function PedidosPage({
 
   // Chave de cache inclui rota, filtros, página-kanban e escopo do usuário
   // (obrigatório para não vazar dados entre usuários em instâncias quentes).
-  const chavePedidos = `pedidos|${escopo.role}|${escopo.vendedorId ?? ""}|${JSON.stringify(filtros)}`;
+  const chavePedidos = `pedidos|${conta.slug}|${escopo.role}|${escopo.vendedorId ?? ""}|${JSON.stringify(filtros)}`;
 
   // ── Ondas 1+2 juntas no mesmo comCache ────────────────────────────────────
   // Cache hit pula AMBAS as ondas (kanban + financeiro/clientes/entregas).
@@ -56,7 +59,7 @@ export default async function PedidosPage({
   // function não existir). dadosPedidos === null → RPC; senão → in-memory.
   const { onda1, onda2 } = await comCache(chavePedidos, 30_000, async () => {
     const onda1 = await pedidosOnda1(supabase, filtros, escopo, dadosPedidos, numerosSaldo);
-    const onda2 = await pedidosOnda2(supabase, onda1.pedidos);
+    const onda2 = await pedidosOnda2(supabase, onda1.pedidos, escopo.contaId);
     return { onda1, onda2 };
   });
 
@@ -111,6 +114,7 @@ export default async function PedidosPage({
         mostrarFiltroVendedor={role !== "vendedor"}
         filtros={filtros}
         metricas={metricas}
+        modelo={modelo}
       />
     </div>
   );

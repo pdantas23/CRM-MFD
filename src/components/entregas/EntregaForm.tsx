@@ -438,11 +438,11 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
         </h2>
         <div className="space-y-5">
           {mode === "create" && (
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-              <label className="mb-1.5 block text-sm font-medium text-blue-900">
+            <div className="rounded-lg border border-primary-100 bg-primary-50 p-4">
+              <label className="mb-1.5 block text-sm font-medium text-primary-900">
                 Puxar de um orçamento <span className="text-red-500">*</span>
               </label>
-              <p className="mb-2 text-xs text-blue-800/80">
+              <p className="mb-2 text-xs text-primary-800/80">
                 Informe o número do orçamento. Ele precisa já ter virado pedido
                 para gerar a entrega.
               </p>
@@ -486,7 +486,7 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
 
               {/* Preview dos produtos do orçamento. */}
               {orcamentoVinc && (carregandoItens || itensOrc) && (
-                <div className="mt-3 rounded-md border border-blue-200 bg-white p-3">
+                <div className="mt-3 rounded-md border border-primary-200 bg-white p-3">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
                     Produtos do orçamento
                   </p>
@@ -662,7 +662,7 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
                 href={existingAnexo.url ?? "#"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-blue-600 hover:underline"
+                className="text-sm text-primary-600 hover:underline"
               >
                 {existingAnexo.nome}
               </a>
@@ -680,7 +680,7 @@ export function EntregaForm({ entrega, mode, prefill }: EntregaFormProps) {
 
         <div
           onClick={() => fileRef.current?.click()}
-          className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-center transition-colors hover:border-blue-400 hover:bg-blue-50"
+          className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-center transition-colors hover:border-primary-400 hover:bg-primary-50"
         >
           <svg
             className="mb-3 h-8 w-8 text-gray-400"

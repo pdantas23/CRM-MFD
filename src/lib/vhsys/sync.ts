@@ -6,6 +6,7 @@
 //   corrigir o que o incremental perdeu e propagar exclusões.
 
 import { createAdminClient } from "../supabase/admin";
+import { runComTokensVhsys, type VhsysTokens } from "./client";
 import { listarProdutos, listarClientes, listarVendedores, listarSituacoes } from "./catalogos";
 import {
   listarPedidos,
@@ -14,7 +15,13 @@ import {
   listarNotasFiscais,
   buscarDataUltimoStatusPedido,
 } from "./vendas";
-import { situacaoEfetiva } from "./fluxo";
+import {
+  construirModeloSituacoes,
+  situacaoEfetiva,
+  type ModeloSituacoes,
+  type SituacaoBase,
+} from "./situacoes-modelo";
+import { corrigirEncoding } from "./client";
 import { situacaoEfetivaOrcamento } from "./fluxo-orcamentos";
 import type {
   VhsysProduto,
@@ -28,6 +35,13 @@ import type {
 } from "./types";
 
 export type ModoSync = "incremental" | "completo";
+
+/** Conta VHSYS para a qual o sync roda (id do espelho + credenciais). */
+export interface ContaSync {
+  id: string;
+  slug: string;
+  tokens: VhsysTokens;
+}
 
 export interface ResultadoEntidade {
   entidade: string;
@@ -146,9 +160,9 @@ function paraLinhaVendedor(registro: unknown) {
   };
 }
 
-function paraLinhaPedido(registro: unknown) {
+function paraLinhaPedido(registro: unknown, modelo: ModeloSituacoes) {
   const p = registro as VhsysPedido;
-  const efetiva = situacaoEfetiva(p.situacao || null, p.status_pedido || null);
+  const efetiva = situacaoEfetiva(modelo, p.situacao || null, p.status_pedido || null);
   return {
     id_vhsys: p.id_ped,
     numero: p.id_pedido,
@@ -185,7 +199,8 @@ function paraLinhaPedido(registro: unknown) {
 async function enriquecerPedidos(
   ativos: unknown[],
   modo: ModoSync,
-  supabase: ReturnType<typeof createAdminClient>
+  supabase: ReturnType<typeof createAdminClient>,
+  contaId: string
 ): Promise<Map<number, Record<string, unknown>>> {
   const pedidos = ativos as VhsysPedido[];
   const ids = pedidos.map((p) => p.id_ped);
@@ -198,6 +213,7 @@ async function enriquecerPedidos(
     const { data, error } = await supabase
       .from("vhsys_pedidos")
       .select("id_vhsys, data_situacao")
+      .eq("conta_id", contaId)
       .in("id_vhsys", lote);
     if (error) throw new Error(`ler data_situacao: ${error.message}`);
     for (const row of data ?? []) {
@@ -347,7 +363,8 @@ async function upsertLotes(
 ) {
   for (let i = 0; i < linhas.length; i += LOTE_UPSERT) {
     const lote = linhas.slice(i, i + LOTE_UPSERT);
-    const { error } = await supabase.from(tabela).upsert(lote, { onConflict: "id_vhsys" });
+    // Chave de conflito composta: id_vhsys é único POR CONTA (não global).
+    const { error } = await supabase.from(tabela).upsert(lote, { onConflict: "conta_id,id_vhsys" });
     if (error) throw new Error(`upsert ${tabela}: ${error.message}`);
   }
 }
@@ -368,20 +385,39 @@ interface EntidadeSync {
   enriquecer?: (
     ativos: unknown[],
     modo: ModoSync,
-    supabase: ReturnType<typeof createAdminClient>
+    supabase: ReturnType<typeof createAdminClient>,
+    contaId: string
   ) => Promise<Map<number, Record<string, unknown>>>;
 }
 
-const ENTIDADES: EntidadeSync[] = [
-  { entidade: "situacoes", tabela: "vhsys_situacoes", listar: listarSituacoesFlat, paraLinha: paraLinhaSituacao, semIncremental: true },
-  { entidade: "produtos", tabela: "vhsys_produtos", listar: listarProdutos, paraLinha: paraLinhaProduto },
-  { entidade: "clientes", tabela: "vhsys_clientes", listar: listarClientes, paraLinha: paraLinhaCliente },
-  { entidade: "vendedores", tabela: "vhsys_vendedores", listar: listarVendedores, paraLinha: paraLinhaVendedor },
-  { entidade: "pedidos", tabela: "vhsys_pedidos", listar: listarPedidos, paraLinha: paraLinhaPedido, enriquecer: enriquecerPedidos },
-  { entidade: "orcamentos", tabela: "vhsys_orcamentos", listar: listarOrcamentos, paraLinha: paraLinhaOrcamento },
-  { entidade: "contas_receber", tabela: "vhsys_contas_receber", listar: listarContasReceber, paraLinha: paraLinhaContaReceber },
-  { entidade: "notas_fiscais", tabela: "vhsys_notas_fiscais", listar: listarNotasFiscais, paraLinha: paraLinhaNotaFiscal },
-];
+// Constrói a lista de entidades p/ a conta. O paraLinha de pedidos fecha sobre o
+// modelo de situações da conta (mapeamento legado data-driven).
+function construirEntidades(modeloPedidos: ModeloSituacoes): EntidadeSync[] {
+  return [
+    { entidade: "situacoes", tabela: "vhsys_situacoes", listar: listarSituacoesFlat, paraLinha: paraLinhaSituacao, semIncremental: true },
+    { entidade: "produtos", tabela: "vhsys_produtos", listar: listarProdutos, paraLinha: paraLinhaProduto },
+    { entidade: "clientes", tabela: "vhsys_clientes", listar: listarClientes, paraLinha: paraLinhaCliente },
+    { entidade: "vendedores", tabela: "vhsys_vendedores", listar: listarVendedores, paraLinha: paraLinhaVendedor },
+    { entidade: "pedidos", tabela: "vhsys_pedidos", listar: listarPedidos, paraLinha: (r) => paraLinhaPedido(r, modeloPedidos), enriquecer: enriquecerPedidos },
+    { entidade: "orcamentos", tabela: "vhsys_orcamentos", listar: listarOrcamentos, paraLinha: paraLinhaOrcamento },
+    { entidade: "contas_receber", tabela: "vhsys_contas_receber", listar: listarContasReceber, paraLinha: paraLinhaContaReceber },
+    { entidade: "notas_fiscais", tabela: "vhsys_notas_fiscais", listar: listarNotasFiscais, paraLinha: paraLinhaNotaFiscal },
+  ];
+}
+
+/** Modelo de situações de pedidos a partir das situações cruas do VHSYS. */
+async function carregarModeloPedidosVhsys(): Promise<ModeloSituacoes> {
+  const flat = await listarSituacoesFlat();
+  const base: SituacaoBase[] = flat
+    .filter((s) => s.entidade === "pedidos" && s.lixeira !== "Sim")
+    .map((s) => ({
+      id_vhsys: s.id_situacao,
+      nome: corrigirEncoding(s.nome_situacao),
+      tipo_status: s.tipo_status,
+      ordem: s.ordem,
+    }));
+  return construirModeloSituacoes(base);
+}
 
 /**
  * Sincroniza o espelho VHSYS (situações, catálogos, pedidos, orçamentos,
@@ -389,18 +425,34 @@ const ENTIDADES: EntidadeSync[] = [
  * Incremental usa o cursor de vhsys_sync_estado; sem cursor = pull inicial.
  * Completo ignora o cursor e inclui a lixeira (propaga exclusões).
  */
-export async function sincronizarEspelho(modo: ModoSync): Promise<ResultadoEntidade[]> {
+export async function sincronizarEspelho(
+  modo: ModoSync,
+  conta: ContaSync
+): Promise<ResultadoEntidade[]> {
+  // Todas as chamadas VHSYS abaixo usam as credenciais DESTA conta (contexto).
+  return runComTokensVhsys(conta.tokens, () => sincronizarEspelhoInterno(modo, conta));
+}
+
+async function sincronizarEspelhoInterno(
+  modo: ModoSync,
+  conta: ContaSync
+): Promise<ResultadoEntidade[]> {
   const supabase = createAdminClient();
   const resultados: ResultadoEntidade[] = [];
   const inicioExecucao = new Date();
 
-  for (const { entidade, tabela, listar, paraLinha, semIncremental, enriquecer } of ENTIDADES) {
+  // Modelo de situações da conta (colunas/legado) — usado no paraLinha de pedidos.
+  const modeloPedidos = await carregarModeloPedidosVhsys();
+  const entidades = construirEntidades(modeloPedidos);
+
+  for (const { entidade, tabela, listar, paraLinha, semIncremental, enriquecer } of entidades) {
     try {
       let modificadosApos: Date | undefined;
       if (modo === "incremental" && !semIncremental) {
         const { data: estado } = await supabase
           .from("vhsys_sync_estado")
           .select("ultima_sync_em")
+          .eq("conta_id", conta.id)
           .eq("entidade", entidade)
           .maybeSingle();
         if (estado?.ultima_sync_em) {
@@ -409,13 +461,16 @@ export async function sincronizarEspelho(modo: ModoSync): Promise<ResultadoEntid
       }
 
       const ativos = await listar({ modificadosApos });
-      let linhas = ativos.map(paraLinha);
+      // Injeta conta_id em toda linha (chave composta do upsert + isolamento).
+      let linhas = ativos
+        .map(paraLinha)
+        .map((l): Record<string, unknown> => ({ ...l, conta_id: conta.id }));
 
       // Enriquecimento por entidade (só os ATIVOS; a lixeira nunca é enriquecida):
       // aplica sobrescritas por id_vhsys após paraLinha. Ex.: data_situacao exata
       // do histórico de status dos pedidos no incremental (não rebaixa).
       if (enriquecer) {
-        const over = await enriquecer(ativos, modo, supabase);
+        const over = await enriquecer(ativos, modo, supabase, conta.id);
         linhas = linhas.map((l) =>
           over.has(l.id_vhsys as number)
             ? { ...l, ...over.get(l.id_vhsys as number) }
@@ -432,7 +487,11 @@ export async function sincronizarEspelho(modo: ModoSync): Promise<ResultadoEntid
       // custo é baixo; se algum dia crescer muito, throttlar por tempo.
       if (!semIncremental) {
         const excluidos = await listar({ lixeira: "Sim" });
-        linhas.push(...excluidos.map(paraLinha));
+        linhas.push(
+          ...excluidos
+            .map(paraLinha)
+            .map((l): Record<string, unknown> => ({ ...l, conta_id: conta.id }))
+        );
       }
 
       // Algumas listagens (ex.: produtos) já incluem itens da lixeira, e a
@@ -447,12 +506,13 @@ export async function sincronizarEspelho(modo: ModoSync): Promise<ResultadoEntid
 
       const { error: erroEstado } = await supabase.from("vhsys_sync_estado").upsert(
         {
+          conta_id: conta.id,
           entidade,
           ultima_sync_em: inicioExecucao.toISOString(),
           ...(modo === "completo" ? { ultima_reconciliacao_em: inicioExecucao.toISOString() } : {}),
           ultimo_resultado: { modo, registros: linhasUnicas.length, em: inicioExecucao.toISOString() },
         },
-        { onConflict: "entidade" }
+        { onConflict: "conta_id,entidade" }
       );
       if (erroEstado) throw new Error(`estado ${entidade}: ${erroEstado.message}`);
 

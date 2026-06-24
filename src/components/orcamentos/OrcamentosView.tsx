@@ -32,7 +32,7 @@ type ViewAtual = "lista" | "kanban";
 // Cores por situação (ids da conta — 860, 768, 769 — e virtual -2)
 const corSituacao: Record<number, string> = {
   860: "bg-amber-100 text-amber-800 border-amber-200",
-  [-2]: "bg-blue-100 text-blue-800 border-blue-200",
+  [-2]: "bg-primary-100 text-primary-800 border-primary-200",
   768: "bg-green-100 text-green-800 border-green-200",
   769: "bg-red-100 text-red-800 border-red-200",
 };
@@ -164,7 +164,7 @@ function OrcamentosViewInner({
   // resolve o nome via NOME_COLUNA_ORC como fallback.
   const corBordaSituacao: Record<number, string> = {
     860: "border-amber-300",
-    [-2]: "border-blue-300",
+    [-2]: "border-primary-300",
     768: "border-green-300",
     769: "border-red-300",
   };

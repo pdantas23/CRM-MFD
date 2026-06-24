@@ -3,7 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatBRL, formatarData } from "@/lib/format";
-import { entregaHabilitada, COLUNAS_KANBAN, SITUACAO, SEGMENTO_ENTREGA } from "@/lib/vhsys/fluxo";
+import {
+  entregaHabilitada,
+  ehSegmentoEntrega,
+  ehColuna,
+  type ModeloSituacoes,
+} from "@/lib/vhsys/situacoes-modelo";
 import { moverSituacaoPedido } from "@/lib/vhsys/acoes";
 import { hrefNovaEntrega } from "./PedidoCard";
 import type { PedidoKanban, SituacaoRow } from "@/lib/types/pedidos";
@@ -14,9 +19,10 @@ interface PedidoModalProps {
   onClose: () => void;
   /** Se true, exibe controles de mover situação (admin ou vendedor). */
   podeEscrever?: boolean;
+  modelo: ModeloSituacoes;
 }
 
-export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: PedidoModalProps) {
+export function PedidoModal({ pedido, situacoes, onClose, podeEscrever, modelo }: PedidoModalProps) {
   const router = useRouter();
   const situacao = situacoes.find((s) => s.id_vhsys === pedido.situacao_id);
   const fin = pedido.financeiro;
@@ -25,8 +31,7 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
   // Verde = quitado. (A regra de "não conciliado" depende do Open Finance, ainda
   // não implementado — por ora o proxy é a cobrança à vista pendente.)
   const saldoPedido = fin?.saldo ?? 0;
-  const emEntrega =
-    pedido.situacao_id !== null && SEGMENTO_ENTREGA.has(pedido.situacao_id);
+  const emEntrega = ehSegmentoEntrega(modelo, pedido.situacao_id);
   const cobrarNaEntrega = emEntrega && pedido.cobrancaNaEntrega;
   const saldoCor =
     saldoPedido <= 0
@@ -35,7 +40,7 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
         ? "text-red-700"
         : "text-amber-700";
   // Entregue é situação final — não pode mais mover.
-  const entregue = pedido.situacao_id === SITUACAO.ENTREGUE;
+  const entregue = pedido.situacao_id === modelo.entregueId;
 
   // Controle de mover situação — só visível para admin
   const [erroMover, setErroMover] = useState<string | null>(null);
@@ -45,8 +50,8 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
   // Opções de destino: situações do Kanban excluindo Cancelado e a atual
   const opcoesDestino = situacoes.filter(
     (s) =>
-      COLUNAS_KANBAN.includes(s.id_vhsys) &&
-      s.id_vhsys !== SITUACAO.CANCELADO &&
+      ehColuna(modelo, s.id_vhsys) &&
+      s.id_vhsys !== modelo.canceladoId &&
       s.id_vhsys !== pedido.situacao_id
   );
 
@@ -203,8 +208,8 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
 
           {/* Painel de mover situação — admin ou vendedor, sem drag-and-drop */}
           {podeEscrever && !entregue && opcoesDestino.length > 0 && (
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-700">
+            <div className="rounded-lg border border-primary-100 bg-primary-50 p-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary-700">
                 Mover situação
               </p>
               {erroMover && (
@@ -222,7 +227,7 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
                       type="button"
                       disabled={algumPendente}
                       onClick={() => handleMoverSituacao(s.id_vhsys)}
-                      className="rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-800 transition-colors hover:bg-blue-100 disabled:opacity-50"
+                      className="rounded-md border border-primary-200 bg-white px-3 py-1.5 text-xs font-medium text-primary-800 transition-colors hover:bg-primary-100 disabled:opacity-50"
                     >
                       {esteEstaPendente ? "Movendo..." : `-> ${s.nome}`}
                     </button>
@@ -238,7 +243,7 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
             <span className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
               Entrega registrada
             </span>
-          ) : entregaHabilitada(pedido.situacao_id) ? (
+          ) : entregaHabilitada(modelo, pedido.situacao_id) ? (
             <button
               type="button"
               onClick={() => router.push(hrefNovaEntrega(pedido))}
@@ -248,7 +253,7 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever }: Pedido
             </button>
           ) : (
             <span className="inline-flex flex-1 items-center justify-center rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
-              {pedido.situacao_id === SITUACAO.ENTREGUE
+              {pedido.situacao_id === modelo.entregueId
                 ? "Entrega bloqueada — pedido já entregue"
                 : "Entrega disponível apenas em separação ou entrega parcial"}
             </span>

@@ -22,7 +22,7 @@ export function MensagensPadrao({ onSelecionar }: Props) {
         type="button"
         ref={btnRef}
         onClick={() => setAberto((prev) => !prev)}
-        className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2"
+        className="mt-1 text-xs text-primary-600 hover:text-primary-800 underline underline-offset-2"
       >
         Mensagens padrões
       </button>
@@ -45,7 +45,7 @@ export function MensagensPadrao({ onSelecionar }: Props) {
                 <button
                   type="button"
                   onClick={() => handleSelecionar(msg)}
-                  className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-800"
+                  className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-800"
                 >
                   {msg}
                 </button>

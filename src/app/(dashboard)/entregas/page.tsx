@@ -10,6 +10,7 @@ import { EntregasAdminView } from "@/components/entregas/EntregasAdminView";
 import { Suspense } from "react";
 import type { Entrega } from "@/lib/types/database";
 import { ehAdmin } from "@/lib/auth/roles";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,8 @@ export default async function EntregasPage({
   const role = profile?.role;
   const isAdmin = ehAdmin(role);
 
+  const conta = await getContaAtiva();
+
   const today = getTodayISO();
   const filtros = parseFiltros(searchParams, "entregas");
 
@@ -82,6 +85,7 @@ export default async function EntregasPage({
     const { data: entregasHojeData } = await admin
       .from("entregas")
       .select("*")
+      .eq("conta_id", conta.id)
       .eq("data", today)
       .order("ordem", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: true });
@@ -108,6 +112,7 @@ export default async function EntregasPage({
     const { data: semanaData } = await admin
       .from("entregas")
       .select("*")
+      .eq("conta_id", conta.id)
       .gte("data", inicioSemana)
       .lte("data", sabadoSemana)
       .order("data", { ascending: true })
@@ -128,6 +133,7 @@ export default async function EntregasPage({
       const { data: finRows } = await supabase
         .from("vhsys_pedidos_financeiro")
         .select("pedido_id, saldo")
+        .eq("conta_id", conta.id)
         .gt("saldo", 0)
         .limit(MAX_IDS_IN);
       pedidoIdsComSaldo = (finRows ?? [])
@@ -138,7 +144,7 @@ export default async function EntregasPage({
     // Monta query de entregas com todos os filtros.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const comFiltros = (query: any): any => {
-      let q = aplicarEntregas(query, filtros);
+      let q = aplicarEntregas(query, filtros, conta.id);
       if (pedidoIdsComSaldo !== null) {
         q = q.in(
           "pedido_id",
@@ -148,7 +154,7 @@ export default async function EntregasPage({
       return q;
     };
 
-    const chaveEntregas = `entregas|${role ?? ""}|${JSON.stringify(filtros)}`;
+    const chaveEntregas = `entregas|${conta.slug}|${role ?? ""}|${JSON.stringify(filtros)}`;
 
     const [{ data: entregasData }, metricas] = await comCache(
       chaveEntregas,
@@ -163,7 +169,7 @@ export default async function EntregasPage({
               .order("created_at", { ascending: false })
               .limit(500) // cap defensivo; tabela tem poucas linhas hoje
           ),
-          metricasEntregas(supabase, filtros),
+          metricasEntregas(supabase, filtros, conta.id),
         ])
     );
 

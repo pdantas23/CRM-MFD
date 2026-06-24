@@ -8,7 +8,7 @@
 -- ============================================================
 
 -- 1. SITUAÇÕES (GET /situacoes — Kanban dinâmico por id + ordem)
-create table public.vhsys_situacoes (
+create table if not exists public.vhsys_situacoes (
   id uuid primary key default gen_random_uuid(),
   id_vhsys bigint not null unique,          -- id_situacao
   entidade text not null check (entidade in ('pedidos', 'orcamentos', 'ordem_servico')),
@@ -20,10 +20,10 @@ create table public.vhsys_situacoes (
   sincronizado_em timestamptz not null default now()
 );
 
-create index vhsys_situacoes_entidade_ordem_idx on public.vhsys_situacoes (entidade, ordem);
+create index if not exists vhsys_situacoes_entidade_ordem_idx on public.vhsys_situacoes (entidade, ordem);
 
 -- 2. PEDIDOS
-create table public.vhsys_pedidos (
+create table if not exists public.vhsys_pedidos (
   id uuid primary key default gen_random_uuid(),
   id_vhsys bigint not null unique,          -- id_ped (PK p/ sub-recursos da API)
   numero bigint not null,                   -- id_pedido (sequencial exibível; liga contas a receber)
@@ -48,14 +48,14 @@ create table public.vhsys_pedidos (
   sincronizado_em timestamptz not null default now()
 );
 
-create index vhsys_pedidos_numero_idx on public.vhsys_pedidos (numero);
-create index vhsys_pedidos_situacao_idx on public.vhsys_pedidos (situacao_id);
-create index vhsys_pedidos_vendedor_idx on public.vhsys_pedidos (vendedor_id_vhsys);
-create index vhsys_pedidos_cliente_idx on public.vhsys_pedidos (cliente_id_vhsys);
-create index vhsys_pedidos_data_mod_idx on public.vhsys_pedidos (data_mod_vhsys desc);
+create index if not exists vhsys_pedidos_numero_idx on public.vhsys_pedidos (numero);
+create index if not exists vhsys_pedidos_situacao_idx on public.vhsys_pedidos (situacao_id);
+create index if not exists vhsys_pedidos_vendedor_idx on public.vhsys_pedidos (vendedor_id_vhsys);
+create index if not exists vhsys_pedidos_cliente_idx on public.vhsys_pedidos (cliente_id_vhsys);
+create index if not exists vhsys_pedidos_data_mod_idx on public.vhsys_pedidos (data_mod_vhsys desc);
 
 -- 3. ORÇAMENTOS
-create table public.vhsys_orcamentos (
+create table if not exists public.vhsys_orcamentos (
   id uuid primary key default gen_random_uuid(),
   id_vhsys bigint not null unique,          -- id_orcamento
   numero bigint not null,                   -- id_pedido ("ID sequência orçamento")
@@ -79,13 +79,13 @@ create table public.vhsys_orcamentos (
   sincronizado_em timestamptz not null default now()
 );
 
-create index vhsys_orcamentos_numero_idx on public.vhsys_orcamentos (numero);
-create index vhsys_orcamentos_situacao_idx on public.vhsys_orcamentos (situacao_id);
-create index vhsys_orcamentos_vendedor_idx on public.vhsys_orcamentos (vendedor_id_vhsys);
-create index vhsys_orcamentos_data_mod_idx on public.vhsys_orcamentos (data_mod_vhsys desc);
+create index if not exists vhsys_orcamentos_numero_idx on public.vhsys_orcamentos (numero);
+create index if not exists vhsys_orcamentos_situacao_idx on public.vhsys_orcamentos (situacao_id);
+create index if not exists vhsys_orcamentos_vendedor_idx on public.vhsys_orcamentos (vendedor_id_vhsys);
+create index if not exists vhsys_orcamentos_data_mod_idx on public.vhsys_orcamentos (data_mod_vhsys desc);
 
 -- 4. CONTAS A RECEBER (display-only; vínculo: id_registro = pedidos.numero)
-create table public.vhsys_contas_receber (
+create table if not exists public.vhsys_contas_receber (
   id uuid primary key default gen_random_uuid(),
   id_vhsys bigint not null unique,          -- id_conta_rec
   pedido_numero bigint,                     -- id_registro (= vhsys_pedidos.numero)
@@ -107,17 +107,17 @@ create table public.vhsys_contas_receber (
   sincronizado_em timestamptz not null default now()
 );
 
-create index vhsys_contas_receber_pedido_idx on public.vhsys_contas_receber (pedido_numero);
-create index vhsys_contas_receber_data_mod_idx on public.vhsys_contas_receber (data_mod_vhsys desc);
+create index if not exists vhsys_contas_receber_pedido_idx on public.vhsys_contas_receber (pedido_numero);
+create index if not exists vhsys_contas_receber_data_mod_idx on public.vhsys_contas_receber (data_mod_vhsys desc);
 
 -- 5. FK ENTREGA → PEDIDO (exigida pelo RLS futuro do vendedor)
 alter table public.entregas
-  add column pedido_id uuid references public.vhsys_pedidos (id);
+  add column if not exists pedido_id uuid references public.vhsys_pedidos (id);
 
-create index entregas_pedido_id_idx on public.entregas (pedido_id);
+create index if not exists entregas_pedido_id_idx on public.entregas (pedido_id);
 
 -- 6. VIEW FINANCEIRA POR PEDIDO (Total/Recebido/Saldo — aritmético)
-create view public.vhsys_pedidos_financeiro
+create or replace view public.vhsys_pedidos_financeiro
 with (security_invoker = true) as
 select
   p.id as pedido_id,
@@ -139,11 +139,11 @@ alter table public.vhsys_pedidos enable row level security;
 alter table public.vhsys_orcamentos enable row level security;
 alter table public.vhsys_contas_receber enable row level security;
 
-create policy "Autenticados leem situacoes"
-  on public.vhsys_situacoes for select using (auth.role() = 'authenticated');
-create policy "Autenticados leem pedidos"
-  on public.vhsys_pedidos for select using (auth.role() = 'authenticated');
-create policy "Autenticados leem orcamentos"
-  on public.vhsys_orcamentos for select using (auth.role() = 'authenticated');
-create policy "Autenticados leem contas receber"
-  on public.vhsys_contas_receber for select using (auth.role() = 'authenticated');
+drop policy if exists "Autenticados leem situacoes" on public.vhsys_situacoes;
+create policy "Autenticados leem situacoes" on public.vhsys_situacoes for select using (auth.role() = 'authenticated');
+drop policy if exists "Autenticados leem pedidos" on public.vhsys_pedidos;
+create policy "Autenticados leem pedidos" on public.vhsys_pedidos for select using (auth.role() = 'authenticated');
+drop policy if exists "Autenticados leem orcamentos" on public.vhsys_orcamentos;
+create policy "Autenticados leem orcamentos" on public.vhsys_orcamentos for select using (auth.role() = 'authenticated');
+drop policy if exists "Autenticados leem contas receber" on public.vhsys_contas_receber;
+create policy "Autenticados leem contas receber" on public.vhsys_contas_receber for select using (auth.role() = 'authenticated');

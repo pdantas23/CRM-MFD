@@ -11,23 +11,26 @@
 -- ============================================================
 
 -- 1. Role 'vendedor'
-alter table public.profiles drop constraint profiles_role_check;
+-- Inclui 'superadmin' no check (definido formalmente em 0018) para que esta
+-- migration seja re-aplicável sobre um banco que JÁ tenha linhas superadmin
+-- (idempotência sobre dados existentes). O estado final é idêntico ao de 0018.
+alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles
   add constraint profiles_role_check
-  check (role in ('admin', 'vendedor', 'entregador'));
+  check (role in ('superadmin', 'admin', 'vendedor', 'entregador'));
 
 -- 2. Vínculo com o vendedor do VHSYS (null = sem vínculo; obrigatório
 --    apenas para roles 'vendedor' — validado na aplicação)
 alter table public.profiles
-  add column vendedor_id bigint references public.vhsys_vendedores (id_vhsys);
+  add column if not exists vendedor_id bigint references public.vhsys_vendedores (id_vhsys);
 
-create index profiles_vendedor_id_idx on public.profiles (vendedor_id);
+create index if not exists profiles_vendedor_id_idx on public.profiles (vendedor_id);
 
 -- 3. Admin gerencia profiles (a criação de usuário em si acontece via
 --    service role no servidor — Auth Admin API; o trigger
 --    handle_new_user cria o profile)
-create policy "Admin atualiza profiles"
-  on public.profiles for update
+drop policy if exists "Admin atualiza profiles" on public.profiles;
+create policy "Admin atualiza profiles" on public.profiles for update
   using (public.is_admin(auth.uid()));
 
 -- Helper para as futuras policies restritivas: vendedor_id do usuário

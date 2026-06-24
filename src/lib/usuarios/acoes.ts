@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ehSuperadmin } from "@/lib/auth/roles";
+import { aplicarSufixoLogin } from "@/lib/accounts/login-nome";
 
 // ── Tipos públicos ───────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ type Resultado<T = Record<never, never>> =
   | ({ ok: true } & T)
   | { ok: false; erro: string };
 
-const ROLES_VALIDOS = ["superadmin", "admin", "vendedor", "entregador"] as const;
+const ROLES_VALIDOS = ["owner", "superadmin", "admin", "vendedor", "entregador"] as const;
 type RoleValido = (typeof ROLES_VALIDOS)[number];
 
 function roleValido(r: string): r is RoleValido {
@@ -39,27 +40,51 @@ function roleValido(r: string): r is RoleValido {
 
 // ── Helper de permissão ────────────────────────────────────────────────────
 
-async function exigirSuperadmin(): Promise<{ userId: string | null; erro: string | null }> {
+interface GuardSuperadmin {
+  userId: string | null;
+  /** Conta do superadmin chamador (null = global/legado). */
+  contaId: string | null;
+  /** Slug da conta do chamador (para o sufixo de login). */
+  contaSlug: string | null;
+  erro: string | null;
+}
+
+async function exigirSuperadmin(): Promise<GuardSuperadmin> {
+  const base: GuardSuperadmin = { userId: null, contaId: null, contaSlug: null, erro: null };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { userId: null, erro: "Não autenticado." };
+  if (!user) return { ...base, erro: "Não autenticado." };
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, conta_id")
     .eq("id", user.id)
     .single();
+  const p = profile as { role: string; conta_id: string | null } | null;
 
-  if (!ehSuperadmin((profile as { role: string } | null)?.role)) {
-    return { userId: null, erro: "Permissão negada: somente superadmin." };
+  if (!ehSuperadmin(p?.role)) {
+    return { ...base, erro: "Permissão negada: somente superadmin." };
   }
-  return { userId: user.id, erro: null };
+
+  // Resolve o slug da conta do chamador (accounts só é legível via service role).
+  let contaSlug: string | null = null;
+  if (p?.conta_id) {
+    const admin = createAdminClient();
+    const { data: conta } = await admin
+      .from("accounts")
+      .select("slug")
+      .eq("id", p.conta_id)
+      .maybeSingle();
+    contaSlug = (conta as { slug: string } | null)?.slug ?? null;
+  }
+
+  return { userId: user.id, contaId: p?.conta_id ?? null, contaSlug, erro: null };
 }
 
 // ── Listagens ──────────────────────────────────────────────────────────────
 
 export async function listarUsuarios(): Promise<Resultado<{ usuarios: UsuarioRow[] }>> {
-  const { erro } = await exigirSuperadmin();
+  const { erro, contaId } = await exigirSuperadmin();
   if (erro) return { ok: false, erro };
 
   const admin = createAdminClient();
@@ -75,10 +100,11 @@ export async function listarUsuarios(): Promise<Resultado<{ usuarios: UsuarioRow
     if (u.email) emailPorId.set(u.id, u.email);
   }
 
-  const { data: profilesData, error: profErro } = await admin
-    .from("profiles")
-    .select("id, nome, role, vendedor_id")
-    .order("nome");
+  // Escopo por conta: superadmin de uma conta vê só os usuários daquela conta.
+  // (contaId null = superadmin global/legado → vê todos.)
+  let query = admin.from("profiles").select("id, nome, role, vendedor_id").order("nome");
+  if (contaId) query = query.eq("conta_id", contaId);
+  const { data: profilesData, error: profErro } = await query;
   if (profErro) return { ok: false, erro: profErro.message };
 
   const { data: vendedoresData } = await admin
@@ -133,14 +159,16 @@ export async function criarUsuario(dados: {
   role: string;
   vendedorId?: number | null;
 }): Promise<Resultado<{ id: string }>> {
-  const { erro } = await exigirSuperadmin();
+  const { erro, contaId, contaSlug } = await exigirSuperadmin();
   if (erro) return { ok: false, erro };
 
-  const nome = (dados.nome ?? "").trim();
   const email = (dados.email ?? "").trim().toLowerCase();
   const senha = dados.senha ?? "";
   const role = dados.role;
   const vendedorId = dados.vendedorId ?? null;
+
+  // Nome de login = nome digitado + sufixo da conta do superadmin (ex.: joao-sa).
+  const nome = aplicarSufixoLogin((dados.nome ?? "").trim(), contaSlug ?? "");
 
   // Validações
   if (!nome) return { ok: false, erro: "Nome é obrigatório." };
@@ -159,7 +187,7 @@ export async function criarUsuario(dados: {
     .select("id")
     .ilike("nome", nome)
     .maybeSingle();
-  if (existente) return { ok: false, erro: "Já existe um usuário com esse nome." };
+  if (existente) return { ok: false, erro: `Já existe um usuário com o nome "${nome}".` };
 
   // Cria o usuário no Auth — o trigger handle_new_user cria o profile.
   const { data: criado, error: criarErro } = await admin.auth.admin.createUser({
@@ -178,10 +206,16 @@ export async function criarUsuario(dados: {
   const novoId = criado.user?.id;
   if (!novoId) return { ok: false, erro: "Usuário criado mas id não retornado." };
 
-  // Garante role e vínculo de vendedor no profile (o trigger só semeia o básico).
+  // Garante nome, role, vínculo de vendedor e CONTA no profile (o trigger só
+  // semeia o básico). O usuário criado pertence à conta do superadmin.
   const { error: updErro } = await admin
     .from("profiles")
-    .update({ role, vendedor_id: role === "vendedor" ? vendedorId : null })
+    .update({
+      nome,
+      role,
+      vendedor_id: role === "vendedor" ? vendedorId : null,
+      conta_id: contaId,
+    })
     .eq("id", novoId);
   if (updErro) return { ok: false, erro: updErro.message };
 
@@ -199,12 +233,13 @@ export async function atualizarUsuario(
     vendedorId: number | null;
   }
 ): Promise<Resultado> {
-  const { erro } = await exigirSuperadmin();
+  const { erro, contaSlug } = await exigirSuperadmin();
   if (erro) return { ok: false, erro };
 
   if (!id) return { ok: false, erro: "Usuário inválido." };
 
-  const nome = (dados.nome ?? "").trim();
+  // Reaplica o sufixo da conta ao nome editado (idempotente).
+  const nome = aplicarSufixoLogin((dados.nome ?? "").trim(), contaSlug ?? "");
   const email = (dados.email ?? "").trim().toLowerCase();
   const senha = dados.senha ?? "";
   const role = dados.role;

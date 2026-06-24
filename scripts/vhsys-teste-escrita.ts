@@ -34,7 +34,7 @@ if (!ACCESS || !SECRET) {
 const HEADERS: Record<string, string> = {
   "access-token": ACCESS,
   "secret-access-token": SECRET,
-  "User-Agent": "MFD-CRM/0.1",
+  "User-Agent": process.env.APP_USER_AGENT ?? "CRM/0.1",
   "Content-Type": "application/json",
   "Cache-Control": "no-cache",
 };

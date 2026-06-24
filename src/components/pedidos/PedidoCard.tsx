@@ -2,12 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { formatBRL, formatarData } from "@/lib/format";
-import { entregaHabilitada, SEGMENTO_ENTREGA } from "@/lib/vhsys/fluxo";
+import {
+  entregaHabilitada,
+  ehSegmentoEntrega,
+  type ModeloSituacoes,
+} from "@/lib/vhsys/situacoes-modelo";
 import type { PedidoKanban } from "@/lib/types/pedidos";
 
 interface PedidoCardProps {
   pedido: PedidoKanban;
   onClick: (pedido: PedidoKanban) => void;
+  modelo: ModeloSituacoes;
 }
 
 export function hrefNovaEntrega(pedido: PedidoKanban): string {
@@ -25,11 +30,10 @@ export function hrefNovaEntrega(pedido: PedidoKanban): string {
   return `/entregas/nova?${params.toString()}`;
 }
 
-export function PedidoCard({ pedido, onClick }: PedidoCardProps) {
+export function PedidoCard({ pedido, onClick, modelo }: PedidoCardProps) {
   const router = useRouter();
   const saldo = pedido.financeiro?.saldo ?? 0;
-  const emEntrega =
-    pedido.situacao_id !== null && SEGMENTO_ENTREGA.has(pedido.situacao_id);
+  const emEntrega = ehSegmentoEntrega(modelo, pedido.situacao_id);
   // Só é cobrança na entrega quando está em entrega E o saldo é à vista.
   // Vendas a prazo (boleto/faturado) em entrega são apenas saldo a prazo.
   const cobrarNaEntrega = emEntrega && pedido.cobrancaNaEntrega;
@@ -101,14 +105,14 @@ export function PedidoCard({ pedido, onClick }: PedidoCardProps) {
           </svg>
           Entrega registrada
         </span>
-      ) : entregaHabilitada(pedido.situacao_id) ? (
+      ) : entregaHabilitada(modelo, pedido.situacao_id) ? (
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             router.push(hrefNovaEntrega(pedido));
           }}
-          className="mt-3 w-full rounded-md bg-blue-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-800"
+          className="mt-3 w-full rounded-md bg-primary-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary-800"
         >
           Cadastrar Entrega
         </button>

@@ -72,7 +72,7 @@ export function MultiSelectFiltro({
         aria-controls={listboxId}
         className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors ${
           ativo
-            ? "border-blue-600 bg-blue-50 text-blue-700"
+            ? "border-primary-600 bg-primary-50 text-primary-700"
             : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
         }`}
       >
@@ -100,7 +100,7 @@ export function MultiSelectFiltro({
             <button
               type="button"
               onClick={() => onChange([])}
-              className="w-full border-b border-gray-100 px-4 py-2 text-left text-xs font-medium text-blue-700 hover:bg-gray-50"
+              className="w-full border-b border-gray-100 px-4 py-2 text-left text-xs font-medium text-primary-700 hover:bg-gray-50"
             >
               Limpar seleção
             </button>
@@ -118,7 +118,7 @@ export function MultiSelectFiltro({
                   type="checkbox"
                   checked={marcado}
                   onChange={() => alternar(op.valor)}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
                 <span>{op.label}</span>
               </label>

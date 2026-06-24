@@ -14,7 +14,7 @@
 --   - Concluídas = entregue_em preenchido
 --   - Pendentes  = entregue_em IS NULL E data >= hoje
 --
--- Idempotente (add column / create index if not exists).
+-- Idempotente (add column if not exists / create index if not exists).
 -- ============================================================
 
 alter table public.entregas add column if not exists entregue_em timestamptz;

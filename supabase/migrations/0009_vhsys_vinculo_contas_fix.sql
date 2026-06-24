@@ -14,13 +14,13 @@
 
 -- 1. Colunas novas: valor cru + vínculo por PK
 alter table public.vhsys_contas_receber
-  add column id_registro bigint,           -- valor cru da API (sem semântica de vínculo)
-  add column pedido_id_vhsys bigint;       -- id_ped extraído de identificacao "Ped_<id>"
+  add column if not exists id_registro bigint,           -- valor cru da API (sem semântica de vínculo)
+  add column if not exists pedido_id_vhsys bigint;       -- id_ped extraído de identificacao "Ped_<id>"
 
 comment on column public.vhsys_contas_receber.pedido_numero is
   'Número do pedido RESOLVIDO (extraído de nome_conta "Pedido N"); null = conta sem vínculo';
 
-create index vhsys_contas_receber_pedido_pk_idx
+create index if not exists vhsys_contas_receber_pedido_pk_idx
   on public.vhsys_contas_receber (pedido_id_vhsys);
 
 -- 2. Zera os vínculos antigos (estavam contaminados pelo id_registro)

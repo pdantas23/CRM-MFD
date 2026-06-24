@@ -21,7 +21,7 @@ export function EntityMetrics({ metricas }: EntityMetricsProps) {
           <p className="truncate text-xs text-gray-500">{m.label}</p>
           <p
             className={`mt-0.5 break-words text-base font-semibold sm:text-lg ${
-              m.destaque ? "text-blue-600" : "text-gray-900"
+              m.destaque ? "text-primary-600" : "text-gray-900"
             }`}
           >
             {m.valor}

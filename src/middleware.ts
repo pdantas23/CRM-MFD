@@ -51,6 +51,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Usuário autenticado mas sem CONTA ATIVA selecionada → força a seleção.
+  // (cookie "conta_ativa" — nome literal para não arrastar libs server-only ao
+  // bundle do middleware/edge.) Não aplica a /api/*, à seleção/login nem à área
+  // de gerenciamento (owner não opera contas, não tem conta ativa).
+  if (
+    user &&
+    pathname !== "/selecionar-conta" &&
+    pathname !== "/login" &&
+    pathname !== "/gerenciamento" &&
+    !pathname.startsWith("/api/") &&
+    !request.cookies.get("conta_ativa")
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/selecionar-conta";
+    return NextResponse.redirect(url);
+  }
+
   return supabaseResponse;
 }
 

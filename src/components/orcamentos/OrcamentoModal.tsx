@@ -190,8 +190,8 @@ export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profil
 
           {/* Painel de mover situação */}
           {mostrarMoverSituacao && podeEscrever && !orcamento.pedido_emitido && opcoesDestino.length > 0 && (
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-blue-700">
+            <div className="rounded-lg border border-primary-100 bg-primary-50 p-4">
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary-700">
                 Mover situação
               </label>
               {erroMover && (

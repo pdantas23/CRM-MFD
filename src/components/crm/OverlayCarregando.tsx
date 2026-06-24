@@ -23,7 +23,7 @@ export function OverlayCarregando({ children }: { children: ReactNode }) {
       {isPending && (
         <div className="absolute inset-0 z-20 flex items-start justify-center bg-white/60 backdrop-blur-[1px]">
           <div className="mt-16">
-            <Spinner className="h-7 w-7 text-blue-600" />
+            <Spinner className="h-7 w-7 text-primary-600" />
           </div>
         </div>
       )}

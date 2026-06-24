@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cacheInvalidate } from "@/lib/crm/cache";
 import { ehAdmin } from "@/lib/auth/roles";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 import { moverSituacaoPedido } from "@/lib/vhsys/acoes";
 import { SITUACAO } from "@/lib/vhsys/fluxo";
 import type { Periodo, StatusEntrega } from "@/lib/types/database";
@@ -141,9 +142,12 @@ export async function criarEntregaDeOrcamento(
   const { supabase, userId, erro } = await exigirAdmin();
   if (erro) return { ok: false, erro };
 
+  const conta = await getContaAtiva();
+
   const { data: orcData } = await supabase
     .from("vhsys_orcamentos")
     .select("id, pedido_emitido")
+    .eq("conta_id", conta.id)
     .eq("numero", numeroOrcamento)
     .eq("lixeira", false)
     .limit(1)
@@ -170,6 +174,7 @@ export async function criarEntregaDeOrcamento(
       bairro: dados.bairro,
       endereco: dados.endereco,
       orcamento_id: orc.id,
+      conta_id: conta.id,
       created_by: userId,
     })
     .select("id")
@@ -201,9 +206,12 @@ export async function vincularEntregaOrcamento(
   const { supabase, erro } = await exigirAdmin();
   if (erro) return { ok: false, erro };
 
+  const conta = await getContaAtiva();
+
   const { data: orcData } = await supabase
     .from("vhsys_orcamentos")
     .select("id")
+    .eq("conta_id", conta.id)
     .eq("numero", numeroOrcamento)
     .eq("lixeira", false)
     .limit(1)

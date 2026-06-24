@@ -4,9 +4,10 @@ import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { OrcamentosView } from "@/components/orcamentos/OrcamentosView";
 import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
-import { orcamentosOnda, orcamentosKanbanOnda, POR_PAGINA } from "@/lib/crm/carregar";
+import { orcamentosOnda, orcamentosKanbanOnda, POR_PAGINA, carregarModeloSituacoes } from "@/lib/crm/carregar";
 import { comCache } from "@/lib/crm/cache";
 import { ehAdmin } from "@/lib/auth/roles";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 
 export const dynamic = "force-dynamic";
 
@@ -31,14 +32,19 @@ export default async function OrcamentosPage({
   const filtros = parseFiltros(searchParams, "orcamentos");
   const pagina = Math.max(1, Number(paramStr(searchParams?.pagina) ?? "1") || 1);
 
+  const conta = await getContaAtiva();
+  // Orçamentos não usam o modelo de PEDIDOS, mas o Escopo o exige (compartilhado).
+  const modelo = await carregarModeloSituacoes(supabase, conta.id);
   const escopo: Escopo = {
     role: profile?.role ?? "",
     vendedorId: profile?.vendedor_id ?? null,
+    contaId: conta.id,
+    modelo,
   };
 
-  // Chave de cache inclui rota, filtros, página e escopo (evita vazamento entre usuários).
-  const chaveCache = `orcamentos|${escopo.role}|${escopo.vendedorId ?? ""}|${JSON.stringify(filtros)}|p${pagina}`;
-  const chaveCacheKanban = `orcamentos-kanban|${escopo.role}|${escopo.vendedorId ?? ""}|${JSON.stringify(filtros)}`;
+  // Chave de cache inclui rota, conta, filtros, página e escopo (evita vazamento entre usuários/contas).
+  const chaveCache = `orcamentos|${conta.slug}|${escopo.role}|${escopo.vendedorId ?? ""}|${JSON.stringify(filtros)}|p${pagina}`;
+  const chaveCacheKanban = `orcamentos-kanban|${conta.slug}|${escopo.role}|${escopo.vendedorId ?? ""}|${JSON.stringify(filtros)}`;
 
   // Onda lista (count + métricas + situações + vendedores) e onda Kanban em paralelo.
   // Cada uma é cacheada por 30s para navegações rápidas.

@@ -12,7 +12,7 @@ import { OverlayCarregando } from "@/components/crm/OverlayCarregando";
 import { ViewToggle } from "@/components/crm/ViewToggle";
 import { EntityTable, type ColunaTabela } from "@/components/crm/EntityTable";
 import { formatBRL, formatarData } from "@/lib/format";
-import { SITUACAO } from "@/lib/vhsys/fluxo";
+import type { ModeloSituacoes } from "@/lib/vhsys/situacoes-modelo";
 import type { Metrica } from "@/lib/crm/metricas";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import type { PedidoKanban, PedidoRow, SituacaoRow } from "@/lib/types/pedidos";
@@ -34,6 +34,8 @@ interface PedidosViewProps {
   filtros: FiltrosCrm;
   /** Métricas agregadas do conjunto filtrado. */
   metricas: Metrica[];
+  /** Modelo de situações da conta (colunas/segmentos/gate data-driven). */
+  modelo: ModeloSituacoes;
 }
 
 export function PedidosView({
@@ -45,6 +47,7 @@ export function PedidosView({
   mostrarFiltroVendedor = false,
   filtros,
   metricas,
+  modelo,
 }: PedidosViewProps) {
   const [selecionado, setSelecionado] = useState<PedidoKanban | null>(null);
   const [viewAtual, setViewAtual] = useState<ViewAtual>("kanban");
@@ -119,7 +122,7 @@ export function PedidosView({
         const emAberto = temContas ? saldo : (p.valor_total ?? 0);
         // ALERTA (vermelho): pagamento aprovado, mas o VHSYS ainda não confirmou
         // a liquidação — sinaliza ao admin que falta dar baixa no pagamento.
-        if (p.situacao_id === SITUACAO.PAGAMENTO_APROVADO && emAberto > 0) {
+        if (p.situacao_id === modelo.pagamentoAprovadoId && emAberto > 0) {
           return <span className="font-semibold text-red-700">{formatBRL(emAberto)}</span>;
         }
         // Sem contas lançadas e fora do estado aprovado: nada a exibir.
@@ -166,6 +169,7 @@ export function PedidosView({
             onCardClick={setSelecionado}
             atingiuLimitePorSituacao={atingiuLimitePorSituacao}
             podeEscrever={podeEscrever}
+            modelo={modelo}
           />
         )}
 
@@ -196,6 +200,7 @@ export function PedidosView({
           situacoes={situacoes}
           onClose={() => setSelecionado(null)}
           podeEscrever={podeEscrever}
+          modelo={modelo}
         />
       )}
     </FiltrosUrlProvider>
