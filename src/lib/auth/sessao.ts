@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { cookies } from "next/headers";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { Profile } from "@/lib/types/database";
 import { medir } from "@/lib/perf/boot";
 
@@ -72,8 +73,11 @@ const getSessaoComProfileInternal = cache(
       return { user: null, profile: null };
     }
 
-    const supabase = await createClient();
-    const { data: profile } = await supabase
+    // Lê o profile via service role (id já validado por getUser): evita que um
+    // hiccup de RLS/timing retorne 0 linhas logo após o login — o que faria o
+    // layout do dashboard chamar signOut() e jogar o usuário de volta ao /login.
+    const admin = createAdminClient();
+    const { data: profile } = await admin
       .from("profiles")
       .select("*")
       .eq("id", user.id)

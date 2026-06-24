@@ -40,15 +40,24 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Redirect que PRESERVA os cookies de sessão escritos por getUser (refresh/
+  // normalização). Sem isso, um redirect logo após o login descarta a sessão
+  // recém-estabelecida e o próximo request volta ao /login (bug "loga e volta").
+  function redirecionar(para: string): NextResponse {
+    const url = request.nextUrl.clone();
+    url.pathname = para;
+    const res = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((c) => res.cookies.set(c));
+    return res;
+  }
+
   // /api/cron/* tem autenticação própria (Bearer CRON_SECRET), sem sessão
   if (pathname.startsWith("/api/cron/")) {
     return supabaseResponse;
   }
 
   if (!user && pathname !== "/login" && !pathname.startsWith("/api/auth/")) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+    return redirecionar("/login");
   }
 
   // Usuário autenticado mas sem CONTA ATIVA selecionada → força a seleção.
@@ -63,9 +72,7 @@ export async function middleware(request: NextRequest) {
     !pathname.startsWith("/api/") &&
     !request.cookies.get("conta_ativa")
   ) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/selecionar-conta";
-    return NextResponse.redirect(url);
+    return redirecionar("/selecionar-conta");
   }
 
   return supabaseResponse;
