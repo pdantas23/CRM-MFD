@@ -14,7 +14,7 @@ import { cacheInvalidate } from "@/lib/crm/cache";
 import { ehAdmin } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import { moverSituacaoPedido } from "@/lib/vhsys/acoes";
-import { SITUACAO } from "@/lib/vhsys/fluxo";
+import { construirModeloSituacoes, type SituacaoBase } from "@/lib/vhsys/situacoes-modelo";
 import type { Periodo, StatusEntrega } from "@/lib/types/database";
 
 /** Dados do orçamento úteis para preencher e vincular uma entrega. */
@@ -69,9 +69,12 @@ export async function buscarOrcamentoParaEntrega(
   const { supabase, erro } = await exigirAdmin();
   if (erro) return { ok: false, erro };
 
+  const conta = await getContaAtiva();
+
   const { data: orcData } = await supabase
     .from("vhsys_orcamentos")
     .select("id, id_vhsys, numero, nome_cliente, cliente_id_vhsys, pedido_emitido")
+    .eq("conta_id", conta.id)
     .eq("numero", numeroOrcamento)
     .eq("lixeira", false)
     .limit(1)
@@ -92,6 +95,7 @@ export async function buscarOrcamentoParaEntrega(
     const { data } = await supabase
       .from("vhsys_clientes")
       .select("cnpj_cpf, bairro, endereco, numero")
+      .eq("conta_id", conta.id)
       .eq("id_vhsys", orc.cliente_id_vhsys)
       .maybeSingle();
     cli = (data as unknown as ClienteEntrega | null) ?? null;
@@ -366,6 +370,7 @@ type ResultadoMarcar =
  */
 async function resolverPedidoIdVhsys(
   admin: ReturnType<typeof createAdminClient>,
+  contaId: string,
   orcamentoId: string | null,
   numeroOrcamentoTexto: string | null
 ): Promise<number | null> {
@@ -388,6 +393,7 @@ async function resolverPedidoIdVhsys(
       const { data } = await admin
         .from("vhsys_orcamentos")
         .select("id_vhsys, numero")
+        .eq("conta_id", contaId)
         .eq("numero", n)
         .eq("lixeira", false)
         .limit(1)
@@ -410,6 +416,7 @@ async function resolverPedidoIdVhsys(
   const { data: ped } = await admin
     .from("vhsys_pedidos")
     .select("id_vhsys")
+    .eq("conta_id", contaId)
     .or(filtros.join(","))
     .eq("lixeira", false)
     .limit(1)
@@ -470,8 +477,10 @@ export async function marcarEntregaEntregue(
 
   // Move o pedido no VHSYS — best-effort. Falha NÃO reverte a baixa.
   const admin = createAdminClient();
+  const conta = await getContaAtiva();
   const idVhsys = await resolverPedidoIdVhsys(
     admin,
+    conta.id,
     entrega.orcamento_id,
     entrega.numero_orcamento
   );
@@ -484,8 +493,25 @@ export async function marcarEntregaEntregue(
     };
   }
 
+  // Situação destino derivada do modelo da CONTA ATIVA (IDs por conta).
+  const { data: sits } = await admin
+    .from("vhsys_situacoes")
+    .select("id_vhsys, nome, tipo_status, ordem")
+    .eq("conta_id", conta.id)
+    .eq("entidade", "pedidos")
+    .eq("lixeira", false)
+    .order("ordem");
+  const modelo = construirModeloSituacoes((sits ?? []) as SituacaoBase[]);
   const novaSituacao =
-    entrega.status === "entrega_final" ? SITUACAO.ENTREGUE : SITUACAO.ENTREGA_PARCIAL;
+    entrega.status === "entrega_final"
+      ? modelo.entregueId
+      : (modelo.entregaParcialId ?? modelo.entregueId);
+  if (novaSituacao === null) {
+    return {
+      ok: true,
+      aviso: "Entrega marcada, mas a conta não tem situação de 'Entregue' mapeada.",
+    };
+  }
   const res = await moverSituacaoPedido(idVhsys, novaSituacao, "Baixa de entrega");
 
   // moverSituacaoPedido já gravou a nova situação no espelho (vhsys_pedidos),

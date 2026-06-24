@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +23,12 @@ export async function GET(req: NextRequest) {
   }
 
   const term = q.trim();
+  const conta = await getContaAtiva();
 
   let queryBuilder = supabase
     .from("vhsys_clientes")
     .select("id_vhsys, razao, fantasia, cnpj_cpf, endereco, numero, bairro")
+    .eq("conta_id", conta.id)
     .eq("lixeira", false)
     .order("razao")
     .limit(20);

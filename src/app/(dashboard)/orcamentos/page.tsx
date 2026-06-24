@@ -4,7 +4,7 @@ import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { OrcamentosView } from "@/components/orcamentos/OrcamentosView";
 import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
-import { orcamentosOnda, orcamentosKanbanOnda, POR_PAGINA, carregarModeloSituacoes } from "@/lib/crm/carregar";
+import { orcamentosOnda, orcamentosKanbanOnda, POR_PAGINA, carregarModeloSituacoes, carregarModeloOrcamento } from "@/lib/crm/carregar";
 import { comCache } from "@/lib/crm/cache";
 import { ehAdmin } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
@@ -33,8 +33,11 @@ export default async function OrcamentosPage({
   const pagina = Math.max(1, Number(paramStr(searchParams?.pagina) ?? "1") || 1);
 
   const conta = await getContaAtiva();
-  // Orçamentos não usam o modelo de PEDIDOS, mas o Escopo o exige (compartilhado).
-  const modelo = await carregarModeloSituacoes(supabase, conta.id);
+  // modelo (pedidos) é exigido pelo Escopo compartilhado; modeloOrc é o de orçamentos.
+  const [modelo, modeloOrc] = await Promise.all([
+    carregarModeloSituacoes(supabase, conta.id),
+    carregarModeloOrcamento(supabase, conta.id),
+  ]);
   const escopo: Escopo = {
     role: profile?.role ?? "",
     vendedorId: profile?.vendedor_id ?? null,
@@ -50,10 +53,10 @@ export default async function OrcamentosPage({
   // Cada uma é cacheada por 30s para navegações rápidas.
   const [resultado, kanban] = await Promise.all([
     comCache(chaveCache, 30_000, () =>
-      orcamentosOnda(supabase, filtros, escopo, pagina, ehAdmin(profile?.role))
+      orcamentosOnda(supabase, filtros, escopo, pagina, ehAdmin(profile?.role), modeloOrc)
     ),
     comCache(chaveCacheKanban, 30_000, () =>
-      orcamentosKanbanOnda(supabase, filtros, escopo)
+      orcamentosKanbanOnda(supabase, filtros, escopo, modeloOrc)
     ),
   ]);
 
@@ -96,6 +99,7 @@ export default async function OrcamentosPage({
         filtros={filtros}
         metricas={metricas}
         podeEscrever={podeEscrever}
+        modeloOrc={modeloOrc}
       />
     </div>
   );

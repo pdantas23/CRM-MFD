@@ -23,6 +23,7 @@ export interface ModeloSituacoes {
   colunas: number[];
   canceladoId: number | null;
   entregueId: number | null;
+  entregaParcialId: number | null;
   pagamentoAprovadoId: number | null;
   emSeparacaoId: number | null;
   aguardandoPagamentoId: number | null;
@@ -70,6 +71,9 @@ export function construirModeloSituacoes(situacoes: SituacaoBase[]): ModeloSitua
     null;
   const emSeparacaoId = emSeparacao ? emSeparacao.id_vhsys : null;
 
+  // "Entrega parcial": ancorada no nome COMPLETO (não casar "Pagamento Parcial").
+  const entregaParcialId = sorted.find((s) => /entrega\s*parcial/i.test(s.nome))?.id_vhsys ?? null;
+
   // Gate de entrega: da ordem do "pagamento aprovado" em diante, sem Entregue/Cancelado.
   const ordemAprovado = pagamentoAprovadoId
     ? (sorted.find((s) => s.id_vhsys === pagamentoAprovadoId)?.ordem ?? Infinity)
@@ -93,6 +97,7 @@ export function construirModeloSituacoes(situacoes: SituacaoBase[]): ModeloSitua
     colunas,
     canceladoId,
     entregueId,
+    entregaParcialId,
     pagamentoAprovadoId,
     emSeparacaoId,
     aguardandoPagamentoId,

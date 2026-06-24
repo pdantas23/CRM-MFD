@@ -22,7 +22,11 @@ import {
   type SituacaoBase,
 } from "./situacoes-modelo";
 import { corrigirEncoding } from "./client";
-import { situacaoEfetivaOrcamento } from "./fluxo-orcamentos";
+import {
+  construirModeloOrcamento,
+  situacaoEfetivaOrcamento,
+  type ModeloOrcamento,
+} from "./situacoes-orcamento";
 import type {
   VhsysProduto,
   VhsysCliente,
@@ -248,9 +252,9 @@ async function enriquecerPedidos(
   return over;
 }
 
-function paraLinhaOrcamento(registro: unknown) {
+function paraLinhaOrcamento(registro: unknown, modeloOrc: ModeloOrcamento) {
   const o = registro as VhsysOrcamento;
-  const efetiva = situacaoEfetivaOrcamento(o.situacao || null, o.status_pedido || null);
+  const efetiva = situacaoEfetivaOrcamento(modeloOrc, o.situacao || null, o.status_pedido || null);
   return {
     id_vhsys: o.id_orcamento,
     numero: o.id_pedido,
@@ -392,14 +396,14 @@ interface EntidadeSync {
 
 // Constrói a lista de entidades p/ a conta. O paraLinha de pedidos fecha sobre o
 // modelo de situações da conta (mapeamento legado data-driven).
-function construirEntidades(modeloPedidos: ModeloSituacoes): EntidadeSync[] {
+function construirEntidades(modeloPedidos: ModeloSituacoes, modeloOrc: ModeloOrcamento): EntidadeSync[] {
   return [
     { entidade: "situacoes", tabela: "vhsys_situacoes", listar: listarSituacoesFlat, paraLinha: paraLinhaSituacao, semIncremental: true },
     { entidade: "produtos", tabela: "vhsys_produtos", listar: listarProdutos, paraLinha: paraLinhaProduto },
     { entidade: "clientes", tabela: "vhsys_clientes", listar: listarClientes, paraLinha: paraLinhaCliente },
     { entidade: "vendedores", tabela: "vhsys_vendedores", listar: listarVendedores, paraLinha: paraLinhaVendedor },
     { entidade: "pedidos", tabela: "vhsys_pedidos", listar: listarPedidos, paraLinha: (r) => paraLinhaPedido(r, modeloPedidos), enriquecer: enriquecerPedidos },
-    { entidade: "orcamentos", tabela: "vhsys_orcamentos", listar: listarOrcamentos, paraLinha: paraLinhaOrcamento },
+    { entidade: "orcamentos", tabela: "vhsys_orcamentos", listar: listarOrcamentos, paraLinha: (r) => paraLinhaOrcamento(r, modeloOrc) },
     { entidade: "contas_receber", tabela: "vhsys_contas_receber", listar: listarContasReceber, paraLinha: paraLinhaContaReceber },
     { entidade: "notas_fiscais", tabela: "vhsys_notas_fiscais", listar: listarNotasFiscais, paraLinha: paraLinhaNotaFiscal },
   ];
@@ -417,6 +421,20 @@ async function carregarModeloPedidosVhsys(): Promise<ModeloSituacoes> {
       ordem: s.ordem,
     }));
   return construirModeloSituacoes(base);
+}
+
+/** Modelo de situações de orçamentos a partir das situações cruas do VHSYS. */
+async function carregarModeloOrcamentoVhsys(): Promise<ModeloOrcamento> {
+  const flat = await listarSituacoesFlat();
+  const base: SituacaoBase[] = flat
+    .filter((s) => s.entidade === "orcamentos" && s.lixeira !== "Sim")
+    .map((s) => ({
+      id_vhsys: s.id_situacao,
+      nome: corrigirEncoding(s.nome_situacao),
+      tipo_status: s.tipo_status,
+      ordem: s.ordem,
+    }));
+  return construirModeloOrcamento(base);
 }
 
 /**
@@ -441,9 +459,13 @@ async function sincronizarEspelhoInterno(
   const resultados: ResultadoEntidade[] = [];
   const inicioExecucao = new Date();
 
-  // Modelo de situações da conta (colunas/legado) — usado no paraLinha de pedidos.
-  const modeloPedidos = await carregarModeloPedidosVhsys();
-  const entidades = construirEntidades(modeloPedidos);
+  // Modelos de situações da conta (colunas/legado) — usados no paraLinha de
+  // pedidos e orçamentos (mapeamento legado data-driven, sem ids fixos).
+  const [modeloPedidos, modeloOrc] = await Promise.all([
+    carregarModeloPedidosVhsys(),
+    carregarModeloOrcamentoVhsys(),
+  ]);
+  const entidades = construirEntidades(modeloPedidos, modeloOrc);
 
   for (const { entidade, tabela, listar, paraLinha, semIncremental, enriquecer } of entidades) {
     try {

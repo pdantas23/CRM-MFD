@@ -9,7 +9,7 @@
 //   zero linhas (o que tornaria a medição irrealista).
 
 import type { Cenario } from "./harness";
-import { criarClienteTeste, escopoAdminTeste, filtrosDeURL, CONTA_ID_TESTE } from "./client";
+import { criarClienteTeste, escopoAdminTeste, filtrosDeURL, CONTA_ID_TESTE, MODELO_ORC_TESTE } from "./client";
 import {
   pedidosOnda1,
   pedidosOnda2,
@@ -247,7 +247,7 @@ export const ondaOrcamentos30d: Cenario = {
   nome: "onda:orcamentos:30d",
   async rodar() {
     const filtros = filtrosDeURL("periodo=30d", "orcamentos");
-    await orcamentosOnda(supabase, filtros, escopoAdminTeste, 1, true);
+    await orcamentosOnda(supabase, filtros, escopoAdminTeste, 1, true, MODELO_ORC_TESTE);
   },
 };
 

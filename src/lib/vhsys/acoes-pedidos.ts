@@ -3,6 +3,7 @@
 // Extraído de acoes.ts para manter aquele arquivo abaixo de 500 linhas.
 
 import { createClient } from "@/lib/supabase/server";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 import type { PedidoRow } from "@/lib/types/pedidos";
 
 // Colunas mínimas para Kanban (excluindo dados jsonb e campos não usados)
@@ -54,12 +55,14 @@ export async function buscarMaisPedidos(
       return { pedidos: [] };
     }
 
+    const conta = await getContaAtiva();
     const supabase = await createClient();
     const LIMITE = 50;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let query: any = supabase
       .from("vhsys_pedidos")
       .select(COLS_PEDIDO)
+      .eq("conta_id", conta.id)
       .eq("lixeira", false)
       .eq("situacao_id", situacaoId)
       .order("data_pedido", { ascending: false })
@@ -105,6 +108,7 @@ export async function buscarPedidosDoMes(
       return { pedidos: [] };
     }
 
+    const conta = await getContaAtiva();
     const supabase = await createClient();
     const mesPad = String(mes).padStart(2, "0");
     const ultimoDia = new Date(ano, mes, 0).getDate();
@@ -115,6 +119,7 @@ export async function buscarPedidosDoMes(
     let query: any = supabase
       .from("vhsys_pedidos")
       .select(COLS_PEDIDO)
+      .eq("conta_id", conta.id)
       .eq("lixeira", false)
       .gte("data_pedido", inicio)
       .lte("data_pedido", fim)

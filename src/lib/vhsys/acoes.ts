@@ -8,9 +8,23 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cacheInvalidate } from "@/lib/crm/cache";
-import { vhsysPost, vhsysPut, vhsysGet, vhsysDelete } from "./client";
-import { tipoStatusParaSituacao, transicaoPermitida, SITUACAO } from "./fluxo";
-import { tipoStatusOrcamento, transicaoOrcamentoPermitida, situacaoEfetivaOrcamento } from "./fluxo-orcamentos";
+import { vhsysPost, vhsysPut, vhsysGet, vhsysDelete, runComTokensVhsys, type VhsysTokens } from "./client";
+import { getContaAtiva } from "@/lib/accounts/contexto";
+import {
+  construirModeloSituacoes,
+  situacaoEfetiva,
+  tipoStatusDe,
+  transicaoPermitida,
+  type ModeloSituacoes,
+  type SituacaoBase,
+} from "./situacoes-modelo";
+import {
+  construirModeloOrcamento,
+  tipoStatusOrcamentoDe,
+  transicaoOrcamentoPermitida,
+  situacaoEfetivaOrcamento,
+  type ModeloOrcamento,
+} from "./situacoes-orcamento";
 import type {
   PayloadStatusPedido,
   PayloadStatusOrcamento,
@@ -62,6 +76,37 @@ export async function exigirAdminOuVendedor(): Promise<ContextoAcao> {
 }
 
 
+/** Conta ativa para ESCRITA: id (espelho), tokens (VHSYS) e modelos de situações. */
+interface ContaEscrita {
+  id: string;
+  tokens: VhsysTokens;
+  modelo: ModeloSituacoes;
+  modeloOrc: ModeloOrcamento;
+}
+
+/**
+ * Resolve a conta ativa para as ações de escrita: credenciais VHSYS (para
+ * runComTokensVhsys) + modelos de situações (pedidos e orçamentos) da conta,
+ * ambos data-driven das situações sincronizadas. SERVER-ONLY.
+ */
+async function contaEscrita(): Promise<ContaEscrita> {
+  const conta = await getContaAtiva();
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("vhsys_situacoes")
+    .select("id_vhsys, nome, tipo_status, ordem, entidade")
+    .eq("conta_id", conta.id)
+    .eq("lixeira", false)
+    .order("ordem");
+  const todas = (data ?? []) as (SituacaoBase & { entidade: string })[];
+  return {
+    id: conta.id,
+    tokens: { ...conta.tokens, apiBase: conta.apiBase },
+    modelo: construirModeloSituacoes(todas.filter((s) => s.entidade === "pedidos")),
+    modeloOrc: construirModeloOrcamento(todas.filter((s) => s.entidade === "orcamentos")),
+  };
+}
+
 /** Formata Date como YYYY-MM-DD no fuso de Brasília. */
 function hojeISO(): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -100,22 +145,12 @@ function dataSituacaoPedido(p: VhsysPedido): string | null {
   return soDataOuNull(ds) ?? soDataOuNull(p.data_mod_pedido) ?? dataOuNull(p.data_pedido);
 }
 
-function situacaoEfetivaInline(situacaoId: number | null, statusBase: string | null) {
-  if (situacaoId) return { situacaoId, origem: "vhsys" as const };
-  const map: Record<string, number> = {
-    "Em Aberto": SITUACAO.AGUARDANDO_PAGAMENTO,
-    "Em Andamento": SITUACAO.PAGAMENTO_APROVADO,
-    "Atendido": SITUACAO.ENTREGUE,
-    "Cancelado": SITUACAO.CANCELADO,
-  };
-  const id = statusBase ? (map[statusBase] ?? null) : null;
-  return { situacaoId: id, origem: "legado" as const };
-}
 
-async function upsertPedidoNoEspelho(pedido: VhsysPedido): Promise<void> {
+async function upsertPedidoNoEspelho(pedido: VhsysPedido, conta: ContaEscrita): Promise<void> {
   const admin = createAdminClient();
-  const efetiva = situacaoEfetivaInline(pedido.situacao || null, pedido.status_pedido || null);
+  const efetiva = situacaoEfetiva(conta.modelo, pedido.situacao || null, pedido.status_pedido || null);
   const linha = {
+    conta_id: conta.id,
     id_vhsys: pedido.id_ped,
     numero: pedido.id_pedido,
     cliente_id_vhsys: pedido.id_cliente || null,
@@ -141,14 +176,15 @@ async function upsertPedidoNoEspelho(pedido: VhsysPedido): Promise<void> {
   };
   const { error } = await admin
     .from("vhsys_pedidos")
-    .upsert(linha, { onConflict: "id_vhsys" });
+    .upsert(linha, { onConflict: "conta_id,id_vhsys" });
   if (error) throw new Error(`upsert pedido no espelho: ${error.message}`);
 }
 
-async function upsertOrcamentoNoEspelho(orc: VhsysOrcamento): Promise<void> {
+async function upsertOrcamentoNoEspelho(orc: VhsysOrcamento, conta: ContaEscrita): Promise<void> {
   const admin = createAdminClient();
-  const efetiva = situacaoEfetivaOrcamento(orc.situacao || null, orc.status_pedido || null);
+  const efetiva = situacaoEfetivaOrcamento(conta.modeloOrc, orc.situacao || null, orc.status_pedido || null);
   const linha = {
+    conta_id: conta.id,
     id_vhsys: orc.id_orcamento,
     numero: orc.id_pedido,
     cliente_id_vhsys: orc.id_cliente || null,
@@ -172,7 +208,7 @@ async function upsertOrcamentoNoEspelho(orc: VhsysOrcamento): Promise<void> {
   };
   const { error } = await admin
     .from("vhsys_orcamentos")
-    .upsert(linha, { onConflict: "id_vhsys" });
+    .upsert(linha, { onConflict: "conta_id,id_vhsys" });
   if (error) throw new Error(`upsert orçamento no espelho: ${error.message}`);
 }
 
@@ -198,12 +234,13 @@ export async function moverSituacaoPedido(
 ): Promise<ResultadoAcao> {
   try {
     const ctx = await exigirAdminOuVendedor();
+    const conta = await contaEscrita();
 
     // Validação de entrada
     if (!Number.isInteger(idVhsys) || idVhsys <= 0) {
       throw new Error("idVhsys inválido.");
     }
-    const tipoStatus = tipoStatusParaSituacao(novaSituacaoId);
+    const tipoStatus = tipoStatusDe(conta.modelo, novaSituacaoId);
     if (!tipoStatus) throw new Error(`Situação ${novaSituacaoId} desconhecida.`);
 
     // Busca situação atual no espelho para validar transição
@@ -211,6 +248,7 @@ export async function moverSituacaoPedido(
     const { data: pedidoEspelho } = await admin
       .from("vhsys_pedidos")
       .select("situacao_id, vendedor_id_vhsys")
+      .eq("conta_id", conta.id)
       .eq("id_vhsys", idVhsys)
       .single();
 
@@ -224,7 +262,7 @@ export async function moverSituacaoPedido(
 
     const situacaoAtual = (pedidoEspelho as { situacao_id: number | null } | null)?.situacao_id ?? null;
 
-    if (!transicaoPermitida(situacaoAtual, novaSituacaoId)) {
+    if (!transicaoPermitida(conta.modelo, situacaoAtual, novaSituacaoId)) {
       throw new Error(
         `Transição de ${situacaoAtual} para ${novaSituacaoId} não é permitida.`
       );
@@ -242,7 +280,9 @@ export async function moverSituacaoPedido(
       situacao: novaSituacaoId, // testar se a API aceita — documentar resultado
     };
 
-    await vhsysPost<RespostaStatusPedido>(`/pedidos/${idVhsys}/status`, payload);
+    await runComTokensVhsys(conta.tokens, () =>
+      vhsysPost<RespostaStatusPedido>(`/pedidos/${idVhsys}/status`, payload)
+    );
 
     // Atualiza o espelho DIRETO com a situação enviada — NÃO faz refetch (GET):
     // evita a race em que o GET imediato retorna o estado antigo e grava um
@@ -258,7 +298,13 @@ export async function moverSituacaoPedido(
         data_situacao: payload.data_status,
         sincronizado_em: new Date().toISOString(),
       })
+      .eq("conta_id", conta.id)
       .eq("id_vhsys", idVhsys);
+
+    // Invalida o cache da tela para a mudança aparecer na hora (sem esperar o
+    // TTL do comCache de 30s — senão o card "volta" e o retry dá de===para).
+    cacheInvalidate("pedidos");
+    revalidatePath("/pedidos");
 
     return { ok: true };
   } catch (err) {
@@ -277,6 +323,10 @@ export async function registrarEntregaEmSeparacao(
 ): Promise<ResultadoAcao> {
   try {
     const ctx = await exigirAdminOuVendedor();
+    const conta = await contaEscrita();
+    const emSeparacaoId = conta.modelo.emSeparacaoId;
+    // Conta sem etapa "Em separação" → nada a mover.
+    if (emSeparacaoId === null) return { ok: true };
 
     if (!Number.isInteger(idVhsysPedido) || idVhsysPedido <= 0) {
       throw new Error("idVhsysPedido inválido.");
@@ -287,6 +337,7 @@ export async function registrarEntregaEmSeparacao(
     const { data: espelho } = await admin
       .from("vhsys_pedidos")
       .select("situacao_id, vendedor_id_vhsys")
+      .eq("conta_id", conta.id)
       .eq("id_vhsys", idVhsysPedido)
       .single();
 
@@ -301,26 +352,28 @@ export async function registrarEntregaEmSeparacao(
     const situacaoAtual = (espelho as { situacao_id: number | null } | null)?.situacao_id ?? null;
 
     // Já em separação ou mais avançado — sem ação necessária
-    if (situacaoAtual === SITUACAO.EM_SEPARACAO) return { ok: true };
-    if (!transicaoPermitida(situacaoAtual, SITUACAO.EM_SEPARACAO)) return { ok: true };
+    if (situacaoAtual === emSeparacaoId) return { ok: true };
+    if (!transicaoPermitida(conta.modelo, situacaoAtual, emSeparacaoId)) return { ok: true };
 
     const payload: PayloadStatusPedido = {
       data_status: hojeISO(),
       tipo_status: "Em Andamento",
       obs_status: "Entrega cadastrada no CRM.",
-      situacao: SITUACAO.EM_SEPARACAO,
+      situacao: emSeparacaoId,
     };
 
-    await vhsysPost<RespostaStatusPedido>(
-      `/pedidos/${idVhsysPedido}/status`,
-      payload
-    );
-
-    // Refetch e upsert no espelho
-    const { data: pedidoAtualizado } = await vhsysGet<VhsysPedido>(`/pedidos/${idVhsysPedido}`);
+    const pedidoAtualizado = await runComTokensVhsys(conta.tokens, async () => {
+      await vhsysPost<RespostaStatusPedido>(`/pedidos/${idVhsysPedido}/status`, payload);
+      // Refetch para upsert no espelho.
+      const { data } = await vhsysGet<VhsysPedido>(`/pedidos/${idVhsysPedido}`);
+      return data;
+    });
     if (pedidoAtualizado[0]) {
-      await upsertPedidoNoEspelho(pedidoAtualizado[0]);
+      await upsertPedidoNoEspelho(pedidoAtualizado[0], conta);
     }
+
+    cacheInvalidate("pedidos");
+    revalidatePath("/pedidos");
 
     return { ok: true };
   } catch (err) {
@@ -342,12 +395,13 @@ export async function moverSituacaoOrcamento(
 ): Promise<ResultadoAcao> {
   try {
     const ctx = await exigirAdminOuVendedor();
+    const conta = await contaEscrita();
 
     // Validação de entrada
     if (!Number.isInteger(idOrcamentoVhsys) || idOrcamentoVhsys <= 0) {
       throw new Error("idOrcamentoVhsys inválido.");
     }
-    const tipoStatus = tipoStatusOrcamento(novaSituacaoId);
+    const tipoStatus = tipoStatusOrcamentoDe(conta.modeloOrc, novaSituacaoId);
     if (!tipoStatus) throw new Error(`Situação ${novaSituacaoId} desconhecida para orçamentos.`);
 
     // Busca situação atual no espelho para validar transição e autoria
@@ -355,6 +409,7 @@ export async function moverSituacaoOrcamento(
     const { data: orcEspelho } = await admin
       .from("vhsys_orcamentos")
       .select("situacao_id, vendedor_id_vhsys, pedido_emitido")
+      .eq("conta_id", conta.id)
       .eq("id_vhsys", idOrcamentoVhsys)
       .single();
 
@@ -373,7 +428,7 @@ export async function moverSituacaoOrcamento(
 
     const situacaoAtual = (orcEspelho as { situacao_id: number | null } | null)?.situacao_id ?? null;
 
-    if (!transicaoOrcamentoPermitida(situacaoAtual, novaSituacaoId)) {
+    if (!transicaoOrcamentoPermitida(conta.modeloOrc, situacaoAtual, novaSituacaoId)) {
       throw new Error(
         `Transição de ${situacaoAtual} para ${novaSituacaoId} não é permitida.`
       );
@@ -393,7 +448,9 @@ export async function moverSituacaoOrcamento(
       ...(novaSituacaoId > 0 ? { situacao: novaSituacaoId } : {}),
     };
 
-    await vhsysPost(`/orcamentos/${idOrcamentoVhsys}/status`, payload);
+    await runComTokensVhsys(conta.tokens, () =>
+      vhsysPost(`/orcamentos/${idOrcamentoVhsys}/status`, payload)
+    );
 
     // Atualiza o espelho DIRETO com a situação enviada — NÃO faz refetch (GET):
     // a API pode não ter propagado a mudança ainda, e o GET imediato retornaria
@@ -407,7 +464,12 @@ export async function moverSituacaoOrcamento(
         origem_situacao: novaSituacaoId < 0 ? "legado" : "vhsys",
         sincronizado_em: new Date().toISOString(),
       })
+      .eq("conta_id", conta.id)
       .eq("id_vhsys", idOrcamentoVhsys);
+
+    // Invalida o cache da tela de orçamentos (mesmo motivo da move de pedidos).
+    cacheInvalidate("orcamentos");
+    revalidatePath("/orcamentos");
 
     return { ok: true };
   } catch (err) {
@@ -416,7 +478,7 @@ export async function moverSituacaoOrcamento(
 }
 
 /**
- * Cria pedido a partir de orçamento aprovado (situacao 768) usando os dados
+ * Cria pedido a partir de orçamento aprovado (situação "Aprovado" da conta) usando os dados
  * EDITADOS no formulário do EmitirPedidoModal (cabeçalho, itens e parcelas).
  *
  * Fluxo: POST /pedidos + POST /pedidos/{id}/produtos (array) +
@@ -434,6 +496,8 @@ export async function criarPedidoDeOrcamento(
 ): Promise<ResultadoAcao & { idPedidoVhsys?: number; aviso?: string }> {
   try {
     const ctx = await exigirAdminOuVendedor();
+    const conta = await contaEscrita();
+    const aguardandoId = conta.modelo.aguardandoPagamentoId;
 
     if (!Number.isInteger(idOrcamentoVhsys) || idOrcamentoVhsys <= 0) {
       throw new Error("idOrcamentoVhsys inválido.");
@@ -445,6 +509,7 @@ export async function criarPedidoDeOrcamento(
     const { data: orcEspelho } = await admin
       .from("vhsys_orcamentos")
       .select("pedido_emitido, situacao_id, vendedor_id_vhsys, numero")
+      .eq("conta_id", conta.id)
       .eq("id_vhsys", idOrcamentoVhsys)
       .single();
 
@@ -463,9 +528,9 @@ export async function criarPedidoDeOrcamento(
       return { ok: false, erro: "Pedido já emitido para este orçamento." };
     }
 
-    // Só orçamentos com situacao_id=768 (Aprovado) podem ser emitidos
+    // Só orçamentos na situação "Aprovado" da conta podem ser emitidos.
     const situacaoOrc = (orcEspelho as { situacao_id: number | null }).situacao_id;
-    if (situacaoOrc !== 768) {
+    if (conta.modeloOrc.aprovadoId === null || situacaoOrc !== conta.modeloOrc.aprovadoId) {
       throw new Error(
         `Orçamento não está na situação Aprovado (situacao_id=${situacaoOrc}). Emissão bloqueada.`
       );
@@ -555,6 +620,7 @@ export async function criarPedidoDeOrcamento(
       const { data: existentes } = await admin
         .from("vhsys_pedidos")
         .select("id_vhsys")
+        .eq("conta_id", conta.id)
         .ilike("obs", `%${marcadorOrc}%`)
         .eq("lixeira", false)
         .limit(1);
@@ -563,6 +629,7 @@ export async function criarPedidoDeOrcamento(
         await admin
           .from("vhsys_orcamentos")
           .update({ pedido_emitido: true, sincronizado_em: new Date().toISOString() })
+          .eq("conta_id", conta.id)
           .eq("id_vhsys", idOrcamentoVhsys);
         return { ok: true, idPedidoVhsys: jaEmitido.id_vhsys };
       }
@@ -596,7 +663,9 @@ export async function criarPedidoDeOrcamento(
     // Cria o pedido, depois adiciona produtos e parcelas. Se qualquer um falhar,
     // EXCLUI o pedido recém-criado (rollback) para nunca deixar um pedido sem
     // itens. Só após o sucesso total marcamos o orçamento como emitido.
-    const respostaPedido = await vhsysPost<RespostaCriarPedido[]>("/pedidos", payloadFinal);
+    const respostaPedido = await runComTokensVhsys(conta.tokens, () =>
+      vhsysPost<RespostaCriarPedido[]>("/pedidos", payloadFinal)
+    );
 
     const idPedido = Array.isArray(respostaPedido)
       ? respostaPedido[0]?.id_ped
@@ -605,34 +674,36 @@ export async function criarPedidoDeOrcamento(
     if (!idPedido) throw new Error("Pedido criado mas id_ped não retornado pela API.");
 
     try {
-      // O endpoint de produtos do PEDIDO espera um ARRAY de itens (POST único),
-      // diferente do de orçamento que tolera um objeto por vez.
-      await vhsysPost(`/pedidos/${idPedido}/produtos`, itens);
+      await runComTokensVhsys(conta.tokens, async () => {
+        // O endpoint de produtos do PEDIDO espera um ARRAY de itens (POST único),
+        // diferente do de orçamento que tolera um objeto por vez.
+        await vhsysPost(`/pedidos/${idPedido}/produtos`, itens);
 
-      // Parcelas (substitui anteriores — POST único com array)
-      if (parcelas && parcelas.length > 0) {
-        await vhsysPost(`/pedidos/${idPedido}/parcelas`, parcelas);
-      }
+        // Parcelas (substitui anteriores — POST único com array)
+        if (parcelas && parcelas.length > 0) {
+          await vhsysPost(`/pedidos/${idPedido}/parcelas`, parcelas);
+        }
 
-      // Situação inicial: sem isso o pedido nasce SEM situação personalizada
-      // (situacao=""), o espelho o marca como origem "legado" e a aba Pedidos o
-      // ESCONDE (filtro "Ocultar legado" ligado por padrão). Atribui 858
-      // (Aguardando pagamento) — mesmo protocolo de moverSituacaoPedido.
-      const payloadSituacaoInicial: PayloadStatusPedido = {
-        data_status: hojeISO(),
-        tipo_status: "Em Aberto",
-        situacao: SITUACAO.AGUARDANDO_PAGAMENTO,
-      };
-      await vhsysPost<RespostaStatusPedido>(
-        `/pedidos/${idPedido}/status`,
-        payloadSituacaoInicial
-      );
+        // Situação inicial: sem isso o pedido nasce SEM situação personalizada
+        // (situacao=""), o espelho o marca como origem "legado" e a aba Pedidos o
+        // ESCONDE (filtro "Ocultar legado" ligado por padrão). Atribui a situação
+        // "Aguardando pagamento" da conta — mesmo protocolo de moverSituacaoPedido.
+        const payloadSituacaoInicial: PayloadStatusPedido = {
+          data_status: hojeISO(),
+          tipo_status: "Em Aberto",
+          ...(aguardandoId ? { situacao: aguardandoId } : {}),
+        };
+        await vhsysPost<RespostaStatusPedido>(
+          `/pedidos/${idPedido}/status`,
+          payloadSituacaoInicial
+        );
+      });
     } catch (errItens) {
       // Rollback: remove o pedido recém-criado (ainda não espelhado) para não
       // deixar pedido órfão sem produtos. "Ou vai tudo, ou nada é emitido."
       const detalhe = errItens instanceof Error ? errItens.message : String(errItens);
       try {
-        await vhsysDelete(`/pedidos/${idPedido}`);
+        await runComTokensVhsys(conta.tokens, () => vhsysDelete(`/pedidos/${idPedido}`));
         return {
           ok: false,
           erro: `Não foi possível adicionar os produtos ao pedido (${detalhe}). Nenhum pedido foi emitido; tente novamente.`,
@@ -654,7 +725,9 @@ export async function criarPedidoDeOrcamento(
     let pedidoEspelho: VhsysPedido | undefined;
     for (let tentativa = 0; tentativa < 3 && !pedidoEspelho; tentativa++) {
       if (tentativa > 0) await new Promise((r) => setTimeout(r, 600));
-      const { data } = await vhsysGet<VhsysPedido>(`/pedidos/${idPedido}`);
+      const { data } = await runComTokensVhsys(conta.tokens, () =>
+        vhsysGet<VhsysPedido>(`/pedidos/${idPedido}`)
+      );
       pedidoEspelho = data[0];
     }
     if (!pedidoEspelho) {
@@ -670,7 +743,7 @@ export async function criarPedidoDeOrcamento(
           `tente novamente; se persistir, a integração de emissão precisa de ajuste.`,
       };
     }
-    await upsertPedidoNoEspelho(pedidoEspelho);
+    await upsertPedidoNoEspelho(pedidoEspelho, conta);
 
     // Fixa a situação inicial no espelho de forma AUTORITATIVA. O GET acima pode
     // ter trazido a situação antes do POST /status propagar (situacao=""), o que
@@ -679,26 +752,30 @@ export async function criarPedidoDeOrcamento(
     await admin
       .from("vhsys_pedidos")
       .update({
-        situacao_id: SITUACAO.AGUARDANDO_PAGAMENTO,
+        situacao_id: aguardandoId,
         status_base: "Em Aberto",
         origem_situacao: "vhsys",
         data_situacao: hojeISO(),
         sincronizado_em: new Date().toISOString(),
       })
+      .eq("conta_id", conta.id)
       .eq("id_vhsys", idPedido);
 
     // Marca o orçamento como Atendido na VHSYS (best-effort: o pedido já está
     // criado e espelhado; o status "Atendido" é cosmético e o sync reconcilia).
     try {
-      await vhsysPut(`/orcamentos/${idOrcamentoVhsys}`, { status_pedido: "Atendido" });
-      const payloadStatusOrc: PayloadStatusOrcamento = {
-        data_status: hojeISO(),
-        tipo_status: "Atendido",
-        obs_status: "Pedido emitido via CRM.",
-      };
-      await vhsysPost(`/orcamentos/${idOrcamentoVhsys}/status`, payloadStatusOrc);
-      const { data: orcAtualizado } = await vhsysGet<VhsysOrcamento>(`/orcamentos/${idOrcamentoVhsys}`);
-      if (orcAtualizado[0]) await upsertOrcamentoNoEspelho(orcAtualizado[0]);
+      const orcAtualizado = await runComTokensVhsys(conta.tokens, async () => {
+        await vhsysPut(`/orcamentos/${idOrcamentoVhsys}`, { status_pedido: "Atendido" });
+        const payloadStatusOrc: PayloadStatusOrcamento = {
+          data_status: hojeISO(),
+          tipo_status: "Atendido",
+          obs_status: "Pedido emitido via CRM.",
+        };
+        await vhsysPost(`/orcamentos/${idOrcamentoVhsys}/status`, payloadStatusOrc);
+        const { data } = await vhsysGet<VhsysOrcamento>(`/orcamentos/${idOrcamentoVhsys}`);
+        return data;
+      });
+      if (orcAtualizado[0]) await upsertOrcamentoNoEspelho(orcAtualizado[0], conta);
     } catch {
       // Status no VHSYS não pôde ser atualizado — não reverte o pedido (é válido).
     }
@@ -708,6 +785,7 @@ export async function criarPedidoDeOrcamento(
     await admin
       .from("vhsys_orcamentos")
       .update({ pedido_emitido: true, sincronizado_em: new Date().toISOString() })
+      .eq("conta_id", conta.id)
       .eq("id_vhsys", idOrcamentoVhsys);
 
     // Invalida os caches para o pedido recém-emitido aparecer já na tela de

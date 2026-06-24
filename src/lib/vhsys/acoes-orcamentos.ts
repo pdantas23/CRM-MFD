@@ -3,10 +3,13 @@
 // Tokens NUNCA chegam ao browser. Valida admin ou vendedor antes de agir.
 // Fluxo: POST /orcamentos → POST /orcamentos/{id}/produtos → upsert no espelho.
 
+import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { vhsysPost, vhsysPut, vhsysDelete, vhsysGet } from "./client";
+import { vhsysPost, vhsysPut, vhsysDelete, vhsysGet, runComTokensVhsys, type VhsysTokens } from "./client";
 import { exigirAdminOuVendedor } from "./acoes";
+import { cacheInvalidate } from "@/lib/crm/cache";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 import type {
   PayloadCriarOrcamento,
   PayloadItemOrcamento,
@@ -15,7 +18,12 @@ import type {
   RespostaCriarOrcamento,
   VhsysOrcamento,
 } from "./types";
-import { situacaoEfetivaOrcamento } from "./fluxo-orcamentos";
+import {
+  construirModeloOrcamento,
+  situacaoEfetivaOrcamento,
+  type ModeloOrcamento,
+} from "./situacoes-orcamento";
+import type { SituacaoBase } from "./situacoes-modelo";
 import type { OrcamentoRow } from "@/lib/types/pedidos";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -31,10 +39,36 @@ function numeroOuNull(s: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-async function upsertOrcamento(orc: VhsysOrcamento): Promise<void> {
+/** Conta ativa para escrita (id, tokens VHSYS + modelo de situações de orçamento). */
+async function contaAtivaEscrita(): Promise<{
+  id: string;
+  tokens: VhsysTokens;
+  modeloOrc: ModeloOrcamento;
+}> {
+  const conta = await getContaAtiva();
   const admin = createAdminClient();
-  const efetiva = situacaoEfetivaOrcamento(orc.situacao || null, orc.status_pedido || null);
+  const { data } = await admin
+    .from("vhsys_situacoes")
+    .select("id_vhsys, nome, tipo_status, ordem")
+    .eq("conta_id", conta.id)
+    .eq("entidade", "orcamentos")
+    .eq("lixeira", false)
+    .order("ordem");
+  return {
+    id: conta.id,
+    tokens: { ...conta.tokens, apiBase: conta.apiBase },
+    modeloOrc: construirModeloOrcamento((data ?? []) as SituacaoBase[]),
+  };
+}
+
+async function upsertOrcamento(
+  orc: VhsysOrcamento,
+  conta: { id: string; modeloOrc: ModeloOrcamento }
+): Promise<void> {
+  const admin = createAdminClient();
+  const efetiva = situacaoEfetivaOrcamento(conta.modeloOrc, orc.situacao || null, orc.status_pedido || null);
   const linha = {
+    conta_id: conta.id,
     id_vhsys: orc.id_orcamento,
     numero: orc.id_pedido,
     cliente_id_vhsys: orc.id_cliente || null,
@@ -58,7 +92,7 @@ async function upsertOrcamento(orc: VhsysOrcamento): Promise<void> {
   };
   const { error } = await admin
     .from("vhsys_orcamentos")
-    .upsert(linha, { onConflict: "id_vhsys" });
+    .upsert(linha, { onConflict: "conta_id,id_vhsys" });
   if (error) throw new Error(`upsert orçamento no espelho: ${error.message}`);
 }
 
@@ -208,12 +242,14 @@ export async function buscarMaisOrcamentos(
       return { orcamentos: [] };
     }
 
+    const conta = await getContaAtiva();
     const supabase = await createClient();
     const LIMITE = 50;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let query: any = supabase
       .from("vhsys_orcamentos")
       .select(COLS_ORCAMENTO)
+      .eq("conta_id", conta.id)
       .eq("lixeira", false)
       .eq("situacao_id", situacaoId)
       .order("data_orcamento", { ascending: false })
@@ -254,6 +290,7 @@ export async function criarOrcamento(
 ): Promise<ResultadoCriarOrcamento> {
   try {
     const ctx = await exigirAdminOuVendedor();
+    const conta = await contaAtivaEscrita();
 
     validarPayload(payload);
     validarItens(itens);
@@ -267,23 +304,31 @@ export async function criarOrcamento(
       // nome do vendedor não validamos aqui; o VHSYS resolve pelo id
     }
 
-    const novoOrc = await vhsysPost<RespostaCriarOrcamento>("/orcamentos", payloadFinal);
-    const idVhsys = novoOrc.id_orcamento;
-    if (!idVhsys) throw new Error("VHSYS não retornou id_orcamento.");
+    const { idVhsys, lista } = await runComTokensVhsys(conta.tokens, async () => {
+      const novoOrc = await vhsysPost<RespostaCriarOrcamento>("/orcamentos", payloadFinal);
+      const idVhsys = novoOrc.id_orcamento;
+      if (!idVhsys) throw new Error("VHSYS não retornou id_orcamento.");
 
-    // Adiciona itens sequencialmente (API não suporta batch real)
-    for (const item of itens) {
-      await vhsysPost(`/orcamentos/${idVhsys}/produtos`, item);
-    }
+      // Adiciona itens sequencialmente (API não suporta batch real)
+      for (const item of itens) {
+        await vhsysPost(`/orcamentos/${idVhsys}/produtos`, item);
+      }
 
-    // Registra parcelas (substitui anteriores — POST único com array)
-    if (parcelas && parcelas.length > 0) {
-      await vhsysPost(`/orcamentos/${idVhsys}/parcelas`, parcelas);
-    }
+      // Registra parcelas (substitui anteriores — POST único com array)
+      if (parcelas && parcelas.length > 0) {
+        await vhsysPost(`/orcamentos/${idVhsys}/parcelas`, parcelas);
+      }
 
-    // Refetch e upsert no espelho
-    const { data: lista } = await vhsysGet<VhsysOrcamento>(`/orcamentos/${idVhsys}`);
-    if (lista[0]) await upsertOrcamento(lista[0]);
+      const { data: lista } = await vhsysGet<VhsysOrcamento>(`/orcamentos/${idVhsys}`);
+      return { idVhsys, lista };
+    });
+
+    if (lista[0]) await upsertOrcamento(lista[0], conta);
+
+    // Invalida o cache da tela de orçamentos para o novo registro aparecer
+    // sem esperar o TTL (mesmo padrão das ações de mover situação/emitir).
+    cacheInvalidate("orcamentos");
+    revalidatePath("/orcamentos");
 
     return { ok: true, idOrcamentoVhsys: idVhsys };
   } catch (err) {
@@ -311,6 +356,7 @@ export async function editarOrcamento(
 ): Promise<ResultadoAcao> {
   try {
     const ctx = await exigirAdminOuVendedor();
+    const conta = await contaAtivaEscrita();
 
     if (!Number.isInteger(idVhsys) || idVhsys <= 0) {
       throw new Error("idVhsys inválido.");
@@ -331,6 +377,7 @@ export async function editarOrcamento(
       const { data: orc } = await admin
         .from("vhsys_orcamentos")
         .select("vendedor_id_vhsys")
+        .eq("conta_id", conta.id)
         .eq("id_vhsys", idVhsys)
         .single();
       const vendedorOrc = (orc as { vendedor_id_vhsys: number | null } | null)?.vendedor_id_vhsys ?? null;
@@ -342,32 +389,40 @@ export async function editarOrcamento(
       delete payload.vendedor_pedido;
     }
 
-    // PUT campos principais
-    if (Object.keys(payload).length > 0) {
-      await vhsysPut(`/orcamentos/${idVhsys}`, payload);
-    }
-
-    // Deletar itens removidos
-    for (const idPedProduto of itensDiff.deletar) {
-      if (!Number.isInteger(idPedProduto) || idPedProduto <= 0) {
-        throw new Error(`id_ped_produto inválido: ${idPedProduto}`);
+    const lista = await runComTokensVhsys(conta.tokens, async () => {
+      // PUT campos principais
+      if (Object.keys(payload).length > 0) {
+        await vhsysPut(`/orcamentos/${idVhsys}`, payload);
       }
-      await vhsysDelete(`/orcamentos/${idVhsys}/produtos/${idPedProduto}`);
-    }
 
-    // Inserir itens novos
-    for (const item of itensDiff.inserir) {
-      await vhsysPost(`/orcamentos/${idVhsys}/produtos`, item);
-    }
+      // Deletar itens removidos
+      for (const idPedProduto of itensDiff.deletar) {
+        if (!Number.isInteger(idPedProduto) || idPedProduto <= 0) {
+          throw new Error(`id_ped_produto inválido: ${idPedProduto}`);
+        }
+        await vhsysDelete(`/orcamentos/${idVhsys}/produtos/${idPedProduto}`);
+      }
 
-    // Registra parcelas (substitui anteriores — POST único com array)
-    if (parcelas && parcelas.length > 0) {
-      await vhsysPost(`/orcamentos/${idVhsys}/parcelas`, parcelas);
-    }
+      // Inserir itens novos
+      for (const item of itensDiff.inserir) {
+        await vhsysPost(`/orcamentos/${idVhsys}/produtos`, item);
+      }
 
-    // Refetch e upsert no espelho
-    const { data: lista } = await vhsysGet<VhsysOrcamento>(`/orcamentos/${idVhsys}`);
-    if (lista[0]) await upsertOrcamento(lista[0]);
+      // Registra parcelas (substitui anteriores — POST único com array)
+      if (parcelas && parcelas.length > 0) {
+        await vhsysPost(`/orcamentos/${idVhsys}/parcelas`, parcelas);
+      }
+
+      const { data } = await vhsysGet<VhsysOrcamento>(`/orcamentos/${idVhsys}`);
+      return data;
+    });
+
+    if (lista[0]) await upsertOrcamento(lista[0], conta);
+
+    // Invalida o cache da tela de orçamentos para a edição refletir
+    // imediatamente (mesmo padrão das demais ações de escrita).
+    cacheInvalidate("orcamentos");
+    revalidatePath("/orcamentos");
 
     return { ok: true };
   } catch (err) {

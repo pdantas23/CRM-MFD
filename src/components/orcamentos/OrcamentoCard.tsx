@@ -1,7 +1,6 @@
 "use client";
 
 import { formatBRL, formatarData } from "@/lib/format";
-import { SITUACAO_APROVADO } from "@/lib/vhsys/fluxo-orcamentos";
 import type { OrcamentoRow } from "@/lib/types/pedidos";
 
 interface OrcamentoCardProps {
@@ -9,11 +8,14 @@ interface OrcamentoCardProps {
   onClick: (orcamento: OrcamentoRow) => void;
   /** Abre o formulário de emissão de pedido (orçamentos aprovados, não emitidos). */
   onEmitir?: (orcamento: OrcamentoRow) => void;
+  /** Situação "Aprovado" da conta (data-driven). */
+  aprovadoId: number | null;
 }
 
-export function OrcamentoCard({ orcamento, onClick, onEmitir }: OrcamentoCardProps) {
+export function OrcamentoCard({ orcamento, onClick, onEmitir, aprovadoId }: OrcamentoCardProps) {
   const podeEmitir =
-    orcamento.situacao_id === SITUACAO_APROVADO &&
+    aprovadoId !== null &&
+    orcamento.situacao_id === aprovadoId &&
     !orcamento.pedido_emitido &&
     !!onEmitir;
 

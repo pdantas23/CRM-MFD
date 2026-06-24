@@ -8,7 +8,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { vhsysGet } from "@/lib/vhsys/client";
+import { vhsysGet, runComTokensVhsys } from "@/lib/vhsys/client";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 
 export const dynamic = "force-dynamic";
 
@@ -29,10 +30,13 @@ export async function GET(
     return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
   }
 
-  // Verifica visibilidade via RLS (mesmo padrão de orcamento-itens)
+  const conta = await getContaAtiva();
+
+  // Verifica visibilidade via RLS + conta ativa (mesmo padrão de orcamento-itens)
   const { data: espelho, error: espelhoError } = await supabase
     .from("vhsys_orcamentos")
     .select("id_vhsys")
+    .eq("conta_id", conta.id)
     .eq("id_vhsys", idVhsys)
     .single();
 
@@ -42,7 +46,10 @@ export async function GET(
 
   // Busca parcelas direto no VHSYS — o espelho não as armazena
   try {
-    const { data: parcelas } = await vhsysGet(`/orcamentos/${idVhsys}/parcelas`);
+    const { data: parcelas } = await runComTokensVhsys(
+      { ...conta.tokens, apiBase: conta.apiBase },
+      () => vhsysGet(`/orcamentos/${idVhsys}/parcelas`)
+    );
     return NextResponse.json(parcelas);
   } catch {
     return NextResponse.json([]);

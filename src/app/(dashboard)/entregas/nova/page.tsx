@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { EntregaForm, type EntregaPrefill } from "@/components/entregas/EntregaForm";
 import { ehAdmin } from "@/lib/auth/roles";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -54,9 +55,11 @@ export default async function NovaEntregaPage({
     const obsMatch = ped?.obs?.match(/or[çc]amento\s*#\s*(\d+)/i);
     if (refMatch) {
       // referencia guarda o id_vhsys do orçamento → buscar o número.
+      const conta = await getContaAtiva();
       const { data: orcRow } = await supabase
         .from("vhsys_orcamentos")
         .select("numero")
+        .eq("conta_id", conta.id)
         .eq("id_vhsys", Number(refMatch[1]))
         .maybeSingle();
       orcamentoNumero = (orcRow as { numero: number } | null)?.numero;

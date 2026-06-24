@@ -20,7 +20,7 @@ import { OrcamentoCard } from "./OrcamentoCard";
 import { EmitirPedidoModal } from "./EmitirPedidoModal";
 import { buscarMaisOrcamentos } from "@/lib/vhsys/acoes-orcamentos";
 import { moverSituacaoOrcamento } from "@/lib/vhsys/acoes";
-import { COLUNAS_KANBAN_ORCAMENTO, NOME_COLUNA_ORC } from "@/lib/vhsys/fluxo-orcamentos";
+import type { ModeloOrcamento } from "@/lib/vhsys/situacoes-orcamento";
 import type { Metrica } from "@/lib/crm/metricas";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import type { OrcamentoRow, SituacaoRow } from "@/lib/types/pedidos";
@@ -29,13 +29,14 @@ import { ehAdmin } from "@/lib/auth/roles";
 
 type ViewAtual = "lista" | "kanban";
 
-// Cores por situação (ids da conta — 860, 768, 769 — e virtual -2)
-const corSituacao: Record<number, string> = {
-  860: "bg-amber-100 text-amber-800 border-amber-200",
-  [-2]: "bg-primary-100 text-primary-800 border-primary-200",
-  768: "bg-green-100 text-green-800 border-green-200",
-  769: "bg-red-100 text-red-800 border-red-200",
-};
+// Cor por situação — derivada da SEMÂNTICA do modelo da conta (sem ids fixos).
+function corSituacaoDe(m: ModeloOrcamento, id: number | null): string {
+  if (id === m.emNegociacaoId) return "bg-amber-100 text-amber-800 border-amber-200";
+  if (id === m.emAndamentoVirtual) return "bg-primary-100 text-primary-800 border-primary-200";
+  if (id === m.aprovadoId) return "bg-green-100 text-green-800 border-green-200";
+  if (id === m.perdidoId) return "bg-red-100 text-red-800 border-red-200";
+  return "bg-gray-100 text-gray-700 border-gray-200";
+}
 
 interface Props {
   // ── Lista ──
@@ -53,6 +54,8 @@ interface Props {
   filtros: FiltrosCrm;
   metricas: Metrica[];
   podeEscrever?: boolean;
+  /** Modelo de situações de orçamento da conta (colunas/cores/nomes data-driven). */
+  modeloOrc: ModeloOrcamento;
 }
 
 export function OrcamentosView(props: Props) {
@@ -76,6 +79,7 @@ function OrcamentosViewInner({
   filtros,
   metricas,
   podeEscrever,
+  modeloOrc,
 }: Props) {
   const router = useRouter();
   const { aplicar } = useFiltrosUrl();
@@ -132,15 +136,15 @@ function OrcamentosViewInner({
       render: (o) => {
         const nomeSituacao =
           (o.situacao_id != null ? situacaoPorId.get(o.situacao_id)?.nome : undefined) ??
-          (o.situacao_id != null ? NOME_COLUNA_ORC[o.situacao_id] : undefined) ??
+          (o.situacao_id != null ? modeloOrc.nomePorId[o.situacao_id] : undefined) ??
           o.status_base ??
           "—";
         return (
           <span
-            className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-              (o.situacao_id != null && corSituacao[o.situacao_id]) ||
-              "bg-gray-100 text-gray-700 border-gray-200"
-            }`}
+            className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${corSituacaoDe(
+              modeloOrc,
+              o.situacao_id
+            )}`}
           >
             {nomeSituacao}
           </span>
@@ -159,20 +163,20 @@ function OrcamentosViewInner({
     },
   ];
 
-  // ── Colunas do Kanban ─────────────────────────────────────────────────────
-  // ids negativos (ex: -2) são virtuais e não estão em vhsys_situacoes;
-  // resolve o nome via NOME_COLUNA_ORC como fallback.
-  const corBordaSituacao: Record<number, string> = {
-    860: "border-amber-300",
-    [-2]: "border-primary-300",
-    768: "border-green-300",
-    769: "border-red-300",
-  };
+  // ── Colunas do Kanban (data-driven pelo modelo da conta) ──────────────────
+  // ids virtuais (ex: -2) não estão em vhsys_situacoes; o nome vem do modelo.
+  function corBordaSituacaoDe(id: number): string {
+    if (id === modeloOrc.emNegociacaoId) return "border-amber-300";
+    if (id === modeloOrc.emAndamentoVirtual) return "border-primary-300";
+    if (id === modeloOrc.aprovadoId) return "border-green-300";
+    if (id === modeloOrc.perdidoId) return "border-red-300";
+    return "border-gray-300";
+  }
 
-  const colunasKanban: KanbanColuna[] = COLUNAS_KANBAN_ORCAMENTO.map((id) => ({
+  const colunasKanban: KanbanColuna[] = modeloOrc.colunas.map((id) => ({
     id,
-    nome: situacaoPorId.get(id)?.nome ?? NOME_COLUNA_ORC[id] ?? String(id),
-    segmentoCor: corBordaSituacao[id] ?? "border-gray-300",
+    nome: situacaoPorId.get(id)?.nome ?? modeloOrc.nomePorId[id] ?? String(id),
+    segmentoCor: corBordaSituacaoDe(id),
   }));
 
   async function handleCarregarMais(
@@ -274,6 +278,7 @@ function OrcamentosViewInner({
               orcamento={o.situacao_id === colunaId ? o : { ...o, situacao_id: colunaId }}
               onClick={setOrcamentoAberto}
               onEmitir={abrirEmissao}
+              aprovadoId={modeloOrc.aprovadoId}
             />
           )}
           atingiuLimitePorColuna={atingiuLimitePorSituacao}
@@ -300,7 +305,7 @@ function OrcamentosViewInner({
           situacaoNome={
             orcamentoAberto.situacao_id != null
               ? (situacaoPorId.get(orcamentoAberto.situacao_id)?.nome ??
-                 NOME_COLUNA_ORC[orcamentoAberto.situacao_id] ??
+                 modeloOrc.nomePorId[orcamentoAberto.situacao_id] ??
                  null)
               : null
           }
@@ -310,6 +315,7 @@ function OrcamentosViewInner({
           mostrarMoverSituacao={viewAtual === "lista"}
           onEmitir={abrirEmissao}
           onClose={() => setOrcamentoAberto(null)}
+          modeloOrc={modeloOrc}
         />
       )}
 

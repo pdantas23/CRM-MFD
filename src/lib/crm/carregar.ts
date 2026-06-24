@@ -15,7 +15,10 @@ import {
   type ModeloSituacoes,
   type SituacaoBase,
 } from "@/lib/vhsys/situacoes-modelo";
-import { COLUNAS_KANBAN_ORCAMENTO } from "@/lib/vhsys/fluxo-orcamentos";
+import {
+  construirModeloOrcamento,
+  type ModeloOrcamento,
+} from "@/lib/vhsys/situacoes-orcamento";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import {
   aplicarPedidos,
@@ -54,6 +57,21 @@ export async function carregarModeloSituacoes(
     .eq("lixeira", false)
     .order("ordem");
   return construirModeloSituacoes((data ?? []) as SituacaoBase[]);
+}
+
+/** Carrega o modelo de situações de ORÇAMENTOS da conta (data-driven). */
+export async function carregarModeloOrcamento(
+  supabase: DB,
+  contaId: string
+): Promise<ModeloOrcamento> {
+  const { data } = await supabase
+    .from("vhsys_situacoes")
+    .select("id_vhsys, nome, tipo_status, ordem")
+    .eq("conta_id", contaId)
+    .eq("entidade", "orcamentos")
+    .eq("lixeira", false)
+    .order("ordem");
+  return construirModeloOrcamento((data ?? []) as SituacaoBase[]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -455,7 +473,8 @@ export async function orcamentosOnda(
   filtros: FiltrosCrm,
   escopo: Escopo,
   pagina: number,
-  ehAdmin: boolean
+  ehAdmin: boolean,
+  modeloOrc: ModeloOrcamento
 ): Promise<OrcamentosOnda> {
   /** Aplica todos os filtros de orçamento a uma query encadeada. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -509,7 +528,7 @@ export async function orcamentosOnda(
   ] = await Promise.all([
     countQuery,
     queryDados,
-    metricasOrcamentos(supabase, filtros, escopo),
+    metricasOrcamentos(supabase, filtros, escopo, modeloOrc.aprovadoId),
     supabase
       .from("vhsys_situacoes")
       .select("id_vhsys, entidade, nome, tipo_status, ordem, lixeira")
@@ -560,7 +579,8 @@ export interface OrcamentosKanbanOnda {
 export async function orcamentosKanbanOnda(
   supabase: DB,
   filtros: FiltrosCrm,
-  escopo: Escopo
+  escopo: Escopo,
+  modeloOrc: ModeloOrcamento
 ): Promise<OrcamentosKanbanOnda> {
   /** Aplica os mesmos filtros de orcamentosOnda a uma query encadeada. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -589,8 +609,8 @@ export async function orcamentosKanbanOnda(
   // Filtra as colunas que o multi-select de situação restringe
   const colunasFiltradas =
     filtros.situacoes.length > 0
-      ? COLUNAS_KANBAN_ORCAMENTO.filter((id) => filtros.situacoes.includes(id))
-      : COLUNAS_KANBAN_ORCAMENTO;
+      ? modeloOrc.colunas.filter((id) => filtros.situacoes.includes(id))
+      : modeloOrc.colunas;
 
   const consultasColunas = colunasFiltradas.map((situacaoId) =>
     aplicar(

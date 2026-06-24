@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buscarTransportadoras } from "@/lib/vhsys/catalogos";
+import { runComTokensVhsys } from "@/lib/vhsys/client";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 import type { VhsysTransportadora } from "@/lib/vhsys/types";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +26,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const transportadoras: VhsysTransportadora[] = await buscarTransportadoras(q.trim(), 20);
+    const conta = await getContaAtiva();
+    const transportadoras: VhsysTransportadora[] = await runComTokensVhsys(
+      { ...conta.tokens, apiBase: conta.apiBase },
+      () => buscarTransportadoras(q.trim(), 20)
+    );
 
     // Retorna apenas campos mínimos para autocomplete
     const resultado = transportadoras.map((t) => ({

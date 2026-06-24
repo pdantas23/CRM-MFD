@@ -18,6 +18,7 @@ import { createClient as createSupabaseClient, type SupabaseClient } from "@supa
 import { parseFiltros, type Entidade, type FiltrosCrm } from "@/lib/crm/filtros";
 import type { Escopo } from "@/lib/crm/metricas";
 import { construirModeloSituacoes } from "@/lib/vhsys/situacoes-modelo";
+import { construirModeloOrcamento } from "@/lib/vhsys/situacoes-orcamento";
 
 /** Modelo de situações fixo (situações da conta SA, base da suíte de perf). */
 const MODELO_TESTE = construirModeloSituacoes([
@@ -28,6 +29,13 @@ const MODELO_TESTE = construirModeloSituacoes([
   { id_vhsys: 1180, nome: "Entrega Parcial", tipo_status: "Em Aberto", ordem: 5 },
   { id_vhsys: 777, nome: "Entregue", tipo_status: "Atendido", ordem: 6 },
   { id_vhsys: 778, nome: "Cancelado", tipo_status: "Cancelado", ordem: 7 },
+]);
+
+/** Modelo de situações de ORÇAMENTO fixo (situações da conta SA). */
+export const MODELO_ORC_TESTE = construirModeloOrcamento([
+  { id_vhsys: 860, nome: "Em negociação", tipo_status: "Em Aberto", ordem: 1 },
+  { id_vhsys: 768, nome: "Aprovado", tipo_status: "Atendido", ordem: 2 },
+  { id_vhsys: 769, nome: "Perdido", tipo_status: "Cancelado", ordem: 3 },
 ]);
 
 // Raiz do projeto (este arquivo está em tests/perf/).

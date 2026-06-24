@@ -7,7 +7,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { vhsysGet } from "@/lib/vhsys/client";
+import { vhsysGet, runComTokensVhsys } from "@/lib/vhsys/client";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 
 export const dynamic = "force-dynamic";
 
@@ -28,10 +29,13 @@ export async function GET(
     return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
   }
 
-  // Tenta extrair itens do jsonb dados no espelho (RLS garante visibilidade)
+  const conta = await getContaAtiva();
+
+  // Tenta extrair itens do jsonb dados no espelho (RLS + conta ativa)
   const { data: espelho, error: espelhoError } = await supabase
     .from("vhsys_pedidos")
     .select("dados")
+    .eq("conta_id", conta.id)
     .eq("id_vhsys", idVhsys)
     .single();
 
@@ -50,7 +54,10 @@ export async function GET(
   // Fallback: buscar direto na API VHSYS (server-side).
   // Só chega aqui se o usuário já passou no RLS acima.
   try {
-    const { data: itens } = await vhsysGet(`/pedidos/${idVhsys}/produtos`);
+    const { data: itens } = await runComTokensVhsys(
+      { ...conta.tokens, apiBase: conta.apiBase },
+      () => vhsysGet(`/pedidos/${idVhsys}/produtos`)
+    );
     return NextResponse.json(itens);
   } catch {
     return NextResponse.json([]);

@@ -4,6 +4,7 @@ import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { NovoOrcamentoPageForm } from "@/components/orcamentos/NovoOrcamentoPageForm";
 import type { IniciaisOrcamento } from "@/components/orcamentos/NovoOrcamentoPageForm";
 import { ehAdmin } from "@/lib/auth/roles";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 
 export const dynamic = "force-dynamic";
 
@@ -28,10 +29,13 @@ export default async function EditarOrcamentoPage({ params }: PageProps) {
     notFound();
   }
 
-  // Carrega o orçamento do espelho com RLS
+  const conta = await getContaAtiva();
+
+  // Carrega o orçamento do espelho (RLS + conta ativa)
   const { data: orc, error } = await supabase
     .from("vhsys_orcamentos")
     .select("*, dados")
+    .eq("conta_id", conta.id)
     .eq("id_vhsys", idVhsys)
     .single();
 
@@ -59,6 +63,7 @@ export default async function EditarOrcamentoPage({ params }: PageProps) {
           await supabase
             .from("vhsys_vendedores")
             .select("id_vhsys, nome")
+            .eq("conta_id", conta.id)
             .eq("lixeira", false)
             .order("nome")
         ).data ?? [])

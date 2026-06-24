@@ -105,9 +105,6 @@ interface OrcAgg {
   pedido_emitido: boolean | null;
 }
 
-/** Situação "Aprovado" de orçamentos. */
-const SITUACAO_APROVADO = 768;
-
 /** Linha de retorno da RPC orcamentos_metricas. */
 interface OrcMetricasRpc {
   n: number;
@@ -155,11 +152,13 @@ function montarMetricasOrcamentos(
 export async function metricasOrcamentos(
   supabase: DB,
   filtros: FiltrosCrm,
-  escopo: Escopo
+  escopo: Escopo,
+  /** Situação "Aprovado" da conta (data-driven). */
+  aprovadoId: number | null
 ): Promise<Metrica[]> {
   // Caminho rápido: RPC agrega tudo num roundtrip. Fallback silencioso para
   // a varredura em lotes se a function não existir / der qualquer erro.
-  const rpc = await tentarRpcOrcamentos(supabase, filtros, escopo);
+  const rpc = await tentarRpcOrcamentos(supabase, filtros, escopo, aprovadoId);
   if (rpc) {
     return montarMetricasOrcamentos(
       rpc.n,
@@ -183,7 +182,7 @@ export async function metricasOrcamentos(
 
   const n = linhas.length;
   const soma = linhas.reduce((a, r) => a + (r.valor_total ?? 0), 0);
-  const aprov = linhas.filter((r) => r.situacao_id === SITUACAO_APROVADO);
+  const aprov = linhas.filter((r) => aprovadoId !== null && r.situacao_id === aprovadoId);
   const somaAprov = aprov.reduce((a, r) => a + (r.valor_total ?? 0), 0);
   const convertidos = linhas.filter((r) => r.pedido_emitido === true).length;
 
@@ -207,11 +206,13 @@ function avisarFallbackRpc(nome: string): void {
 async function tentarRpcOrcamentos(
   supabase: DB,
   filtros: FiltrosCrm,
-  escopo: Escopo
+  escopo: Escopo,
+  aprovadoId: number | null
 ): Promise<OrcMetricasRpc | null> {
   const { data, error } = await supabase
     .rpc("orcamentos_metricas", {
       p_conta_id: escopo.contaId,
+      p_aprovado_id: aprovadoId,
       p_busca: filtros.buscaNumero === null && filtros.busca ? filtros.busca : null,
       p_numero: filtros.buscaNumero,
       p_situacoes: filtros.situacoes.length > 0 ? filtros.situacoes : null,

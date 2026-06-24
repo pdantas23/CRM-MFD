@@ -7,12 +7,10 @@ import { useRouter } from "next/navigation";
 import { moverSituacaoOrcamento } from "@/lib/vhsys/acoes";
 import { BotaoNavegacao } from "@/components/ui/BotaoNavegacao";
 import { formatBRL, formatarData } from "@/lib/format";
-import { COLUNAS_KANBAN_ORCAMENTO, NOME_COLUNA_ORC } from "@/lib/vhsys/fluxo-orcamentos";
+import type { ModeloOrcamento } from "@/lib/vhsys/situacoes-orcamento";
 import type { OrcamentoRow, SituacaoRow } from "@/lib/types/pedidos";
 import type { Profile } from "@/lib/types/database";
 import { ehAdmin } from "@/lib/auth/roles";
-
-const SITUACAO_APROVADO = 768;
 
 interface ItemApi {
   id_ped_produto: number;
@@ -44,9 +42,11 @@ interface Props {
   /** Abre o formulário de emissão de pedido (em vez de emitir direto). */
   onEmitir?: (orcamento: OrcamentoRow) => void;
   onClose: () => void;
+  /** Modelo de situações de orçamento da conta (colunas/nomes/aprovado). */
+  modeloOrc: ModeloOrcamento;
 }
 
-export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profile, podeEscrever, mostrarMoverSituacao, onEmitir, onClose }: Props) {
+export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profile, podeEscrever, mostrarMoverSituacao, onEmitir, onClose, modeloOrc }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -60,11 +60,11 @@ export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profil
 
   // Opções de destino para mover situação: todas as colunas do Kanban excluindo a atual.
   const situacoesPorId = new Map(situacoes.map((s) => [s.id_vhsys, s]));
-  const opcoesDestino = COLUNAS_KANBAN_ORCAMENTO
+  const opcoesDestino = modeloOrc.colunas
     .filter((id) => id !== orcamento.situacao_id)
     .map((id) => ({
       id_vhsys: id,
-      nome: situacoesPorId.get(id)?.nome ?? NOME_COLUNA_ORC[id] ?? String(id),
+      nome: situacoesPorId.get(id)?.nome ?? modeloOrc.nomePorId[id] ?? String(id),
     }));
 
   function handleMoverSituacao(novaSituacaoId: number) {
@@ -87,7 +87,8 @@ export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profil
     (profile.role === "vendedor" && profile.vendedor_id === orcamento.vendedor_id_vhsys);
   const podeEmitir =
     !orcamento.pedido_emitido &&
-    orcamento.situacao_id === SITUACAO_APROVADO &&
+    modeloOrc.aprovadoId !== null &&
+    orcamento.situacao_id === modeloOrc.aprovadoId &&
     (ehAdmin(profile.role) ||
       (profile.role === "vendedor" && profile.vendedor_id === orcamento.vendedor_id_vhsys));
 

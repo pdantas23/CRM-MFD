@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +23,13 @@ export async function GET(req: NextRequest) {
   }
 
   const term = q.trim();
+  const conta = await getContaAtiva();
 
   // Seleciona apenas campos necessários — NÃO expõe dados (jsonb)
   let queryBuilder = supabase
     .from("vhsys_produtos")
     .select("id_vhsys, descricao, codigo, unidade, valor")
+    .eq("conta_id", conta.id)
     .eq("lixeira", false)
     .eq("status", "Ativo")
     .order("descricao")

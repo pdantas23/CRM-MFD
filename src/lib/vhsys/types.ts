@@ -241,8 +241,8 @@ export interface PayloadStatusOrcamento {
    * Campo extra VALIDADO em teste controlado (2026-06-15, orçamento descartável
    * id 11525812): /orcamentos/status aceita "situacao" e o registra (a resposta
    * ecoa o id enviado). Em orçamentos o tipo_status já é 1:1 com a situação
-   * (860=Em Aberto, 768=Atendido, 769=Cancelado), mas enviar situacao é inócuo
-   * e mantém o padrão de /pedidos/status.
+   * (ex. na SA: 860=Em Aberto, 768=Atendido, 769=Cancelado), mas enviar
+   * situacao é inócuo e mantém o padrão de /pedidos/status.
    */
   situacao?: number;
 }

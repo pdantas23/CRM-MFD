@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 
 export const dynamic = "force-dynamic";
 
@@ -83,9 +84,11 @@ export async function GET(
     return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
   }
 
+  const conta = await getContaAtiva();
   const { data: espelho, error } = await supabase
     .from("vhsys_orcamentos")
     .select("dados, cliente_id_vhsys, nome_cliente, vendedor_id_vhsys, vendedor_nome, referencia, obs")
+    .eq("conta_id", conta.id)
     .eq("id_vhsys", idVhsys)
     .single();
 

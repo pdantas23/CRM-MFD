@@ -4,8 +4,9 @@
 // Fluxo: POST /clientes → upsert imediato no espelho vhsys_clientes.
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { vhsysPost } from "./client";
+import { vhsysPost, runComTokensVhsys } from "./client";
 import { exigirAdminOuVendedor } from "./acoes";
+import { getContaAtiva } from "@/lib/accounts/contexto";
 import type { PayloadCriarCliente, VhsysCliente } from "./types";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -107,6 +108,7 @@ export async function criarCliente(
 ): Promise<ResultadoCriarCliente> {
   try {
     await exigirAdminOuVendedor();
+    const conta = await getContaAtiva();
     validarPayloadCliente(payload);
 
     // Monta payload com defaults; ignora campos vazios para não enviar lixo.
@@ -130,15 +132,18 @@ export async function criarCliente(
       ...(payload.complemento_cliente?.trim() ? { complemento_cliente: payload.complemento_cliente.trim() } : {}),
     };
 
-    const novo = await vhsysPost<VhsysCliente>("/clientes", payloadFinal);
+    const novo = await runComTokensVhsys(
+      { ...conta.tokens, apiBase: conta.apiBase },
+      () => vhsysPost<VhsysCliente>("/clientes", payloadFinal)
+    );
     const idVhsys = novo.id_cliente;
     if (!idVhsys) throw new Error("VHSYS não retornou id_cliente.");
 
-    // Upsert no espelho
+    // Upsert no espelho (com conta_id; chave composta).
     const admin = createAdminClient();
     const { error } = await admin
       .from("vhsys_clientes")
-      .upsert(paraLinhaCliente(novo), { onConflict: "id_vhsys" });
+      .upsert({ ...paraLinhaCliente(novo), conta_id: conta.id }, { onConflict: "conta_id,id_vhsys" });
     if (error) throw new Error(`upsert cliente no espelho: ${error.message}`);
 
     return { ok: true, cliente: { id_vhsys: idVhsys, razao: novo.razao_cliente } };
