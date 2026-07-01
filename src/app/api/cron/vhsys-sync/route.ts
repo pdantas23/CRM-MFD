@@ -47,16 +47,19 @@ export async function GET(request: NextRequest) {
   const modo: ModoSync =
     request.nextUrl.searchParams.get("modo") === "completo" ? "completo" : "incremental";
 
+  const inicio = Date.now();
   try {
     // Sincroniza TODAS as contas ativas EM SÉRIE (evita estourar o rate-limit
     // da VHSYS rodando múltiplas contas em paralelo).
     const contas = await listarContasAtivas();
+    console.info(`[cron vhsys-sync] início modo=${modo} contas=${contas.length}`);
     const porConta: Array<{ conta: string; resultados: unknown[]; erro?: string }> = [];
 
     for (const conta of contas) {
       try {
         const tokens = await getTokensPorSlug(conta.slug);
         if (!tokens) {
+          console.error(`[cron vhsys-sync] conta=${conta.slug} credenciais ausentes`);
           porConta.push({ conta: conta.slug, resultados: [], erro: "credenciais ausentes" });
           continue;
         }
@@ -67,22 +70,54 @@ export async function GET(request: NextRequest) {
         });
         // Atualiza o nome da empresa (cacheado em accounts) a partir do VHSYS.
         await atualizarNomeEmpresa({ id: conta.id, tokens });
+
+        // Erros por entidade não estouram exceção (sync.ts os coleta em cada
+        // ResultadoEntidade) — logamos cada um para diagnóstico nos logs Vercel.
+        const errosEntidade = (resultados as { entidade: string; erro?: string }[]).filter(
+          (r) => r.erro
+        );
+        for (const e of errosEntidade) {
+          console.error(
+            `[cron vhsys-sync] conta=${conta.slug} entidade=${e.entidade} erro: ${e.erro}`
+          );
+        }
+        if (!errosEntidade.length) {
+          console.info(`[cron vhsys-sync] conta=${conta.slug} ok (${resultados.length} entidades)`);
+        }
         porConta.push({ conta: conta.slug, resultados });
       } catch (err) {
-        porConta.push({
-          conta: conta.slug,
-          resultados: [],
-          erro: err instanceof Error ? err.message : String(err),
-        });
+        const mensagem = err instanceof Error ? err.message : String(err);
+        console.error(`[cron vhsys-sync] conta=${conta.slug} FALHOU: ${mensagem}`);
+        porConta.push({ conta: conta.slug, resultados: [], erro: mensagem });
       }
     }
 
-    const comErro = porConta.some(
+    const contasComErro = porConta.filter(
       (c) => c.erro || (c.resultados as { erro?: string }[]).some((r) => r.erro)
     );
-    return NextResponse.json({ modo, contas: porConta }, { status: comErro ? 500 : 200 });
+    // Sucesso parcial NÃO derruba o job: uma conta com credencial inválida/expirada
+    // não deve marcar todo o cron como falho (as demais sincronizaram). Só devolve
+    // 500 (alerta real) se TODAS as contas falharem. O motivo de cada falha fica
+    // registrado acima nos logs e no corpo da resposta (campo `erro` por conta).
+    const todasFalharam = contas.length > 0 && contasComErro.length === contas.length;
+    const status = todasFalharam ? 500 : 200;
+    const ms = Date.now() - inicio;
+    console.info(
+      `[cron vhsys-sync] fim modo=${modo} ok=${contas.length - contasComErro.length} ` +
+        `erro=${contasComErro.length} status=${status} ${ms}ms`
+    );
+    return NextResponse.json(
+      {
+        modo,
+        ok: contas.length - contasComErro.length,
+        comErro: contasComErro.length,
+        contas: porConta,
+      },
+      { status }
+    );
   } catch (err) {
     const mensagem = err instanceof Error ? err.message : String(err);
+    console.error(`[cron vhsys-sync] FALHA GERAL modo=${modo}: ${mensagem}`);
     return NextResponse.json({ erro: mensagem }, { status: 500 });
   }
 }
