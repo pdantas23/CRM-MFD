@@ -97,6 +97,33 @@ export async function getContaComTokens(
   };
 }
 
+/**
+ * Conta + tokens decifrados por ID (não por slug). Usado quando a ação opera
+ * sobre um registro de OUTRA conta que não a ativa — ex.: dar baixa no VHSYS de
+ * uma entrega de conta diferente no mural compartilhado. SERVER-ONLY.
+ */
+export async function getContaComTokensPorId(
+  id: string
+): Promise<{ account: Account; tokens: VhsysTokens } | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("accounts")
+    .select(`${COLUNAS_PUBLICAS}, access_token_enc, secret_token_enc`)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`getContaComTokensPorId: ${error.message}`);
+  if (!data) return null;
+  const row = data as AccountRow;
+  return {
+    account: mapAccount(row),
+    tokens: {
+      accessToken: decrypt(row.access_token_enc),
+      secretToken: decrypt(row.secret_token_enc),
+      apiBase: row.api_base,
+    },
+  };
+}
+
 /** Tokens decifrados de uma conta. SERVER-ONLY. */
 export async function getTokensPorSlug(slug: string): Promise<VhsysTokens | null> {
   const res = await getContaComTokens(slug);

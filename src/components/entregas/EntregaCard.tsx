@@ -7,6 +7,7 @@ import { StatusBadge, ehAtrasada } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Select";
 import { hojeISOSaoPaulo } from "@/lib/entregas/hoje";
 import { moverEntrega, excluirEntrega } from "@/lib/entregas/acoes";
+import { ContaBadge, type ContaInfoMap } from "@/components/entregas/ContaBadge";
 import type { Entrega, Periodo } from "@/lib/types/database";
 
 const PERIODO_OPCOES = [
@@ -19,10 +20,12 @@ interface Props {
   entrega: Entrega;
   arrastavel?: boolean;
   isAdmin?: boolean;
+  contas: ContaInfoMap;
+  mostrarConta: boolean;
   onClick?: () => void;
 }
 
-export function EntregaCard({ entrega, isAdmin = false, onClick }: Props) {
+export function EntregaCard({ entrega, isAdmin = false, contas, mostrarConta, onClick }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [remarcando, setRemarcando] = useState(false);
@@ -74,6 +77,11 @@ export function EntregaCard({ entrega, isAdmin = false, onClick }: Props) {
         onClick ? " cursor-pointer" : ""
       }`}
     >
+      {mostrarConta && (
+        <div className="mb-1">
+          <ContaBadge contaId={entrega.conta_id} contas={contas} />
+        </div>
+      )}
       <div className="flex items-start justify-between gap-1.5">
         <p className="truncate text-sm font-semibold text-gray-900">
           {entrega.nome_cliente}

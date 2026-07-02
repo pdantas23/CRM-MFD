@@ -13,6 +13,7 @@ import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import { EntregaCard } from "@/components/entregas/EntregaCard";
 import { EntregaModal } from "@/components/entregas/EntregaModal";
+import { type ContaInfoMap } from "@/components/entregas/ContaBadge";
 import { moverEntrega } from "@/lib/entregas/acoes";
 import type { Entrega, Periodo } from "@/lib/types/database";
 
@@ -20,6 +21,8 @@ interface Props {
   entregas: Entrega[]; // todas as entregas da semana (seg–sáb)
   inicioSemana: string; // segunda-feira "YYYY-MM-DD"
   isAdmin: boolean; // habilita o drag-and-drop
+  contas: ContaInfoMap;
+  mostrarConta: boolean;
 }
 
 const DIAS_LABEL = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -75,7 +78,7 @@ function hojeSaoPaulo(): string {
   }).format(new Date());
 }
 
-export function TabelaSemanalEntregas({ entregas, inicioSemana, isAdmin }: Props) {
+export function TabelaSemanalEntregas({ entregas, inicioSemana, isAdmin, contas, mostrarConta }: Props) {
   const router = useRouter();
 
   // ── DnD: override otimista por id (espelha KanbanBoard) ───────────────────
@@ -302,6 +305,8 @@ export function TabelaSemanalEntregas({ entregas, inicioSemana, isAdmin }: Props
                               entrega={entrega}
                               arrastavel={isAdmin}
                               isAdmin={isAdmin}
+                              contas={contas}
+                              mostrarConta={mostrarConta}
                               onClick={
                                 arrastando ? undefined : () => setModalEntrega(entrega)
                               }
@@ -324,6 +329,8 @@ export function TabelaSemanalEntregas({ entregas, inicioSemana, isAdmin }: Props
           isAdmin={isAdmin}
           onClose={() => setModalEntrega(null)}
           onChanged={() => router.refresh()}
+          contas={contas}
+          mostrarConta={mostrarConta}
         />
       )}
     </div>

@@ -11,6 +11,8 @@ import { Suspense } from "react";
 import type { Entrega } from "@/lib/types/database";
 import { ehAdmin } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
+import { listarContasAtivas } from "@/lib/accounts/repo";
+import type { ContaInfoMap } from "@/components/entregas/ContaBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -63,10 +65,27 @@ export default async function EntregasPage({
   const role = profile?.role;
   const isAdmin = ehAdmin(role);
 
-  const conta = await getContaAtiva();
+  // Garante que há uma conta selecionada (redireciona para /selecionar-conta se
+  // não). O MURAL é compartilhado entre contas, então a conta ativa não recorta
+  // mais a leitura das entregas — só o cadastro (em /entregas/nova) usa-a.
+  await getContaAtiva();
+
+  // Mural compartilhado: metadados de todas as contas para os selos e o filtro.
+  const contas = await listarContasAtivas();
+  const contasMap: ContaInfoMap = Object.fromEntries(
+    contas.map((c) => [c.id, { slug: c.slug, nome: c.nomeEmpresa, cor: c.themeColor }])
+  );
+  const mostrarConta = contas.length > 1;
+  const contasOpcoes = contas.map((c) => ({ slug: c.slug, label: c.nomeEmpresa ?? c.slug }));
 
   const today = getTodayISO();
   const filtros = parseFiltros(searchParams, "entregas");
+
+  // Filtro opcional "Conta" (admin): slug → conta_id. Slug inexistente ou
+  // ausente → null = todas as contas.
+  const contaFiltroId = filtros.contaSlug
+    ? contas.find((c) => c.slug === filtros.contaSlug)?.id ?? null
+    : null;
 
   // Role decide a visão: entregador vê só HOJE (turnos); vendedor/admin veem a
   // TABELA SEMANAL. Carrega-se apenas o que cada visão precisa.
@@ -85,7 +104,6 @@ export default async function EntregasPage({
     const { data: entregasHojeData } = await admin
       .from("entregas")
       .select("*")
-      .eq("conta_id", conta.id)
       .eq("data", today)
       .order("ordem", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: true });
@@ -112,7 +130,6 @@ export default async function EntregasPage({
     const { data: semanaData } = await admin
       .from("entregas")
       .select("*")
-      .eq("conta_id", conta.id)
       .gte("data", inicioSemana)
       .lte("data", sabadoSemana)
       .order("data", { ascending: true })
@@ -130,10 +147,11 @@ export default async function EntregasPage({
     // e restringe a query de entregas ao subconjunto vinculado.
     let pedidoIdsComSaldo: string[] | null = null;
     if (filtros.soComSaldoEntrega) {
+      // pedido_id é uuid global (PK do espelho), único entre contas — sem
+      // recorte por conta: o saldo abrange todas as contas do mural.
       const { data: finRows } = await supabase
         .from("vhsys_pedidos_financeiro")
         .select("pedido_id, saldo")
-        .eq("conta_id", conta.id)
         .gt("saldo", 0)
         .limit(MAX_IDS_IN);
       pedidoIdsComSaldo = (finRows ?? [])
@@ -144,7 +162,7 @@ export default async function EntregasPage({
     // Monta query de entregas com todos os filtros.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const comFiltros = (query: any): any => {
-      let q = aplicarEntregas(query, filtros, conta.id);
+      let q = aplicarEntregas(query, filtros, contaFiltroId);
       if (pedidoIdsComSaldo !== null) {
         q = q.in(
           "pedido_id",
@@ -154,7 +172,10 @@ export default async function EntregasPage({
       return q;
     };
 
-    const chaveEntregas = `entregas|${conta.slug}|${role ?? ""}|${JSON.stringify(filtros)}`;
+    // Mural compartilhado: a chave não segmenta mais por conta ativa (os dados
+    // são os mesmos entre contas). O recorte por conta, quando houver, já está
+    // em `filtros.contaSlug` dentro do JSON abaixo.
+    const chaveEntregas = `entregas|${role ?? ""}|${JSON.stringify(filtros)}`;
 
     const [{ data: entregasData }, metricas] = await comCache(
       chaveEntregas,
@@ -164,12 +185,12 @@ export default async function EntregasPage({
           comFiltros(
             supabase
               .from("entregas")
-              .select("id, data, periodo, status, nome_cliente, cpf_cnpj, numero_orcamento, bairro, endereco, anexo_url, anexo_nome, ordem, pedido_id, orcamento_id, entregue_em, entregue_por, created_at")
+              .select("id, conta_id, data, periodo, status, nome_cliente, cpf_cnpj, numero_orcamento, bairro, endereco, anexo_url, anexo_nome, ordem, pedido_id, orcamento_id, entregue_em, entregue_por, created_at")
               .order("data", { ascending: false })
               .order("created_at", { ascending: false })
               .limit(500) // cap defensivo; tabela tem poucas linhas hoje
           ),
-          metricasEntregas(supabase, filtros, conta.id),
+          metricasEntregas(supabase, filtros, contaFiltroId),
         ])
     );
 
@@ -193,7 +214,14 @@ export default async function EntregasPage({
           - admin → mini-navbar para alternar calendário semanal / lista completa;
           - vendedor → calendário semanal (só leitura). */}
       {isEntregador ? (
-        <DashboardEntregas manha={manha} tarde={tarde} noite={noite} isAdmin={isAdmin} />
+        <DashboardEntregas
+          manha={manha}
+          tarde={tarde}
+          noite={noite}
+          isAdmin={isAdmin}
+          contas={contasMap}
+          mostrarConta={mostrarConta}
+        />
       ) : isAdmin ? (
         <Suspense>
           <EntregasAdminView
@@ -203,6 +231,9 @@ export default async function EntregasPage({
             filtros={filtros}
             metricas={metricasAdmin}
             podeNovaEntrega={isAdmin}
+            contas={contasMap}
+            mostrarConta={mostrarConta}
+            contasOpcoes={contasOpcoes}
           />
         </Suspense>
       ) : (
@@ -210,6 +241,8 @@ export default async function EntregasPage({
           entregas={entregasSemana}
           inicioSemana={inicioSemana}
           isAdmin={false}
+          contas={contasMap}
+          mostrarConta={mostrarConta}
         />
       )}
     </div>

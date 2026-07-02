@@ -445,12 +445,13 @@ export async function marcarEntregaEntregue(
   // Carrega o estado atual da entrega.
   const { data: entregaRow } = await supabase
     .from("entregas")
-    .select("status, orcamento_id, numero_orcamento, entregue_em")
+    .select("status, conta_id, orcamento_id, numero_orcamento, entregue_em")
     .eq("id", entregaId)
     .maybeSingle();
   if (!entregaRow) return { ok: false, erro: "Entrega não encontrada." };
   const entrega = entregaRow as {
     status: string;
+    conta_id: string | null;
     orcamento_id: string | null;
     numero_orcamento: string | null;
     entregue_em: string | null;
@@ -476,11 +477,13 @@ export async function marcarEntregaEntregue(
   revalidatePath("/entregas");
 
   // Move o pedido no VHSYS — best-effort. Falha NÃO reverte a baixa.
+  // Mural compartilhado: usa a conta DONA da entrega (não a ativa), senão o
+  // id_vhsys — que pode colidir entre contas — moveria o pedido errado.
   const admin = createAdminClient();
-  const conta = await getContaAtiva();
+  const contaIdEntrega = entrega.conta_id ?? (await getContaAtiva()).id;
   const idVhsys = await resolverPedidoIdVhsys(
     admin,
-    conta.id,
+    contaIdEntrega,
     entrega.orcamento_id,
     entrega.numero_orcamento
   );
@@ -493,11 +496,11 @@ export async function marcarEntregaEntregue(
     };
   }
 
-  // Situação destino derivada do modelo da CONTA ATIVA (IDs por conta).
+  // Situação destino derivada do modelo da conta DONA da entrega (IDs por conta).
   const { data: sits } = await admin
     .from("vhsys_situacoes")
     .select("id_vhsys, nome, tipo_status, ordem")
-    .eq("conta_id", conta.id)
+    .eq("conta_id", contaIdEntrega)
     .eq("entidade", "pedidos")
     .eq("lixeira", false)
     .order("ordem");
@@ -512,7 +515,12 @@ export async function marcarEntregaEntregue(
       aviso: "Entrega marcada, mas a conta não tem situação de 'Entregue' mapeada.",
     };
   }
-  const res = await moverSituacaoPedido(idVhsys, novaSituacao, "Baixa de entrega");
+  const res = await moverSituacaoPedido(
+    idVhsys,
+    novaSituacao,
+    "Baixa de entrega",
+    entrega.conta_id ?? undefined
+  );
 
   // moverSituacaoPedido já gravou a nova situação no espelho (vhsys_pedidos),
   // mas o cache das telas de Pedidos/Orçamentos precisa ser invalidado para a

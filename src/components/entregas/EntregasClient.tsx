@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Select";
 import { EntregaModal } from "@/components/entregas/EntregaModal";
+import { ContaBadge, type ContaInfoMap } from "@/components/entregas/ContaBadge";
 import {
   marcarEntregaEntregue,
   desmarcarEntregaEntregue,
@@ -37,6 +38,9 @@ interface EntregasClientProps {
   metricas: Metrica[];
   podeNovaEntrega: boolean;
   isAdmin: boolean;
+  contas: ContaInfoMap;
+  mostrarConta: boolean;
+  contasOpcoes: { slug: string; label: string }[];
 }
 
 const STATUS_OPCOES = [
@@ -59,12 +63,16 @@ function LinhaEntrega({
   entrega,
   isAdmin,
   hojeIso,
+  contas,
+  mostrarConta,
   onAbrir,
   onAviso,
 }: {
   entrega: Entrega;
   isAdmin: boolean;
   hojeIso: string;
+  contas: ContaInfoMap;
+  mostrarConta: boolean;
   onAbrir: () => void;
   onAviso: (msg: string | null) => void;
 }) {
@@ -124,7 +132,10 @@ function LinhaEntrega({
         {formatDate(entrega.data)}
       </td>
       <td className="px-4 py-3">
-        <p className="text-sm font-medium text-gray-900">{entrega.nome_cliente}</p>
+        <div className="flex items-center gap-1.5">
+          {mostrarConta && <ContaBadge contaId={entrega.conta_id} contas={contas} />}
+          <p className="text-sm font-medium text-gray-900">{entrega.nome_cliente}</p>
+        </div>
         <p className="text-xs text-gray-500">{entrega.cpf_cnpj}</p>
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
@@ -219,9 +230,13 @@ function LinhaEntrega({
 function TabelaInterna({
   entregas,
   isAdmin,
+  contas,
+  mostrarConta,
 }: {
   entregas: Entrega[];
   isAdmin: boolean;
+  contas: ContaInfoMap;
+  mostrarConta: boolean;
 }) {
   const router = useRouter();
   const [modalEntrega, setModalEntrega] = useState<Entrega | null>(null);
@@ -273,6 +288,8 @@ function TabelaInterna({
               entrega={entrega}
               isAdmin={isAdmin}
               hojeIso={hojeIso}
+              contas={contas}
+              mostrarConta={mostrarConta}
               onAbrir={() => setModalEntrega(entrega)}
               onAviso={setAviso}
             />
@@ -286,6 +303,8 @@ function TabelaInterna({
           isAdmin={isAdmin}
           onClose={() => setModalEntrega(null)}
           onChanged={() => router.refresh()}
+          contas={contas}
+          mostrarConta={mostrarConta}
         />
       )}
     </div>
@@ -298,6 +317,9 @@ export function EntregasClient({
   metricas,
   podeNovaEntrega,
   isAdmin,
+  contas,
+  mostrarConta,
+  contasOpcoes,
 }: EntregasClientProps) {
   return (
     <FiltrosUrlProvider>
@@ -323,7 +345,9 @@ export function EntregasClient({
         }
         filtroEspecifico={
           <Suspense>
-            <FiltrosEntrega />
+            <FiltrosEntrega
+              contasOpcoes={mostrarConta ? contasOpcoes : []}
+            />
           </Suspense>
         }
       />
@@ -332,7 +356,12 @@ export function EntregasClient({
         <EntityMetrics metricas={metricas} />
 
         <div className="card overflow-hidden">
-          <TabelaInterna entregas={entregas} isAdmin={isAdmin} />
+          <TabelaInterna
+            entregas={entregas}
+            isAdmin={isAdmin}
+            contas={contas}
+            mostrarConta={mostrarConta}
+          />
         </div>
       </OverlayCarregando>
     </FiltrosUrlProvider>

@@ -477,11 +477,12 @@ function aplicarEntregas(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
   filtros: FiltrosCrm,
-  contaId: string
+  // Mural compartilhado: null = todas as contas; um id = recorta a essa conta
+  // (usado pelo filtro opcional "Conta" da lista do admin).
+  contaId: string | null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
-  // Isolamento multi-conta: entregas restritas à conta ativa.
-  let q = query.eq("conta_id", contaId);
+  let q = contaId ? query.eq("conta_id", contaId) : query;
 
   if (filtros.busca) {
     // Busca por cliente, bairro, endereço ou número de orçamento.
@@ -509,7 +510,7 @@ export { aplicarEntregas };
 export async function metricasEntregas(
   supabase: DB,
   filtros: FiltrosCrm,
-  contaId: string
+  contaId: string | null
 ): Promise<Metrica[]> {
   // 1. Agrega entregas (colunas mínimas).
   const entregas = await buscarLotes<EntregaAgg>(() =>

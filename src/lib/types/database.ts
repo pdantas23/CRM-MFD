@@ -14,6 +14,8 @@ export interface Profile {
 
 export interface Entrega {
   id: string;
+  /** Conta VHSYS dona da entrega (mural é compartilhado; o dado permanece por conta). */
+  conta_id: string | null;
   data: string;
   periodo: Periodo;
   status: StatusEntrega;

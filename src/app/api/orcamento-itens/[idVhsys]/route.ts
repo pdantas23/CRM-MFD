@@ -9,11 +9,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { vhsysGet, runComTokensVhsys } from "@/lib/vhsys/client";
 import { getContaAtiva } from "@/lib/accounts/contexto";
+import { getContaComTokensPorId } from "@/lib/accounts/repo";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { idVhsys: string } }
 ) {
   const idVhsys = parseInt(params.idVhsys, 10);
@@ -29,13 +30,30 @@ export async function GET(
     return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
   }
 
-  const conta = await getContaAtiva();
+  // Mural compartilhado: `?conta=<conta_id>` escopa a busca à conta DONA da
+  // entrega (o id_vhsys pode colidir entre contas). Sem o param → conta ativa.
+  // A visibilidade continua garantida pela RLS na consulta do espelho abaixo.
+  const contaParam = req.nextUrl.searchParams.get("conta");
+  let contaId: string;
+  let tokens: { accessToken: string; secretToken: string; apiBase: string };
+  if (contaParam) {
+    const res = await getContaComTokensPorId(contaParam);
+    if (!res || !res.account.ativo) {
+      return NextResponse.json({ erro: "Conta inválida." }, { status: 403 });
+    }
+    contaId = res.account.id;
+    tokens = res.tokens;
+  } else {
+    const conta = await getContaAtiva();
+    contaId = conta.id;
+    tokens = { ...conta.tokens, apiBase: conta.apiBase };
+  }
 
-  // Tenta extrair itens do jsonb dados no espelho (RLS + conta ativa)
+  // Tenta extrair itens do jsonb dados no espelho (RLS + conta resolvida)
   const { data: espelho, error: espelhoError } = await supabase
     .from("vhsys_orcamentos")
     .select("dados")
-    .eq("conta_id", conta.id)
+    .eq("conta_id", contaId)
     .eq("id_vhsys", idVhsys)
     .single();
 
@@ -55,7 +73,7 @@ export async function GET(
   // Só chega aqui se o usuário já passou no RLS acima.
   try {
     const { data: itens } = await runComTokensVhsys(
-      { ...conta.tokens, apiBase: conta.apiBase },
+      tokens,
       () => vhsysGet(`/orcamentos/${idVhsys}/produtos`)
     );
     return NextResponse.json(itens);

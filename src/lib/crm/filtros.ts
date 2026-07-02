@@ -58,6 +58,11 @@ export interface FiltrosCrm {
   periodoEntrega: string | null;
   /** Só entregas vinculadas a pedido com saldo a receber. */
   soComSaldoEntrega: boolean;
+  /**
+   * Mural compartilhado: slug da conta selecionada no filtro "Conta" (só admin).
+   * null = todas as contas. A página resolve o slug → conta_id.
+   */
+  contaSlug: string | null;
 }
 
 export type SearchParamsLike = {
@@ -220,6 +225,10 @@ export function parseFiltros(
         : null
       : null;
   const soComSaldoEntrega = entidade === "entregas" && str(sp.com_saldo) === "true";
+  // Slug da conta (mural compartilhado). Sanitiza tamanho; a validação real é a
+  // resolução slug→id na página (slug inexistente cai em "todas as contas").
+  const contaSlug =
+    entidade === "entregas" ? (str(sp.conta)?.slice(0, 50) ?? null) : null;
 
   return {
     busca,
@@ -238,5 +247,6 @@ export function parseFiltros(
     situacoesStr,
     periodoEntrega,
     soComSaldoEntrega,
+    contaSlug,
   };
 }

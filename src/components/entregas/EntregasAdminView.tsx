@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ViewToggle } from "@/components/crm/ViewToggle";
 import { TabelaSemanalEntregas } from "@/components/entregas/TabelaSemanalEntregas";
 import { EntregasClient } from "@/components/entregas/EntregasClient";
+import { type ContaInfoMap } from "@/components/entregas/ContaBadge";
 import type { FiltrosCrm } from "@/lib/crm/filtros";
 import type { Metrica } from "@/lib/crm/metricas";
 import type { Entrega } from "@/lib/types/database";
@@ -19,6 +20,10 @@ interface Props {
   filtros: FiltrosCrm;
   metricas: Metrica[];
   podeNovaEntrega: boolean;
+  contas: ContaInfoMap;
+  mostrarConta: boolean;
+  /** Opções do filtro "Conta" (slug + rótulo). */
+  contasOpcoes: { slug: string; label: string }[];
 }
 
 type Visao = "calendario" | "lista";
@@ -35,6 +40,9 @@ export function EntregasAdminView({
   filtros,
   metricas,
   podeNovaEntrega,
+  contas,
+  mostrarConta,
+  contasOpcoes,
 }: Props) {
   const [visao, setVisao] = useState<Visao>("calendario");
 
@@ -43,7 +51,13 @@ export function EntregasAdminView({
       <ViewToggle opcoes={OPCOES} valor={visao} onChange={(v) => setVisao(v as Visao)} />
 
       {visao === "calendario" ? (
-        <TabelaSemanalEntregas entregas={semana} inicioSemana={inicioSemana} isAdmin />
+        <TabelaSemanalEntregas
+          entregas={semana}
+          inicioSemana={inicioSemana}
+          isAdmin
+          contas={contas}
+          mostrarConta={mostrarConta}
+        />
       ) : (
         <EntregasClient
           entregas={lista}
@@ -51,6 +65,9 @@ export function EntregasAdminView({
           metricas={metricas}
           podeNovaEntrega={podeNovaEntrega}
           isAdmin
+          contas={contas}
+          mostrarConta={mostrarConta}
+          contasOpcoes={contasOpcoes}
         />
       )}
     </div>

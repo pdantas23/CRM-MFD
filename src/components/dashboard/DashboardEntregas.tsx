@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { StatusBadge, statusRowClass } from "@/components/ui/Badge";
 import { EntregaModal } from "@/components/entregas/EntregaModal";
+import { ContaBadge, type ContaInfoMap } from "@/components/entregas/ContaBadge";
 import type { Entrega } from "@/lib/types/database";
 
 interface Props {
@@ -12,9 +13,11 @@ interface Props {
   tarde: Entrega[];
   noite: Entrega[];
   isAdmin: boolean;
+  contas: ContaInfoMap;
+  mostrarConta: boolean;
 }
 
-export function DashboardEntregas({ manha, tarde, noite, isAdmin }: Props) {
+export function DashboardEntregas({ manha, tarde, noite, isAdmin, contas, mostrarConta }: Props) {
   const [manhaList, setManhaList] = useState(manha);
   const [tardeList, setTardeList] = useState(tarde);
   const [noiteList, setNoiteList] = useState(noite);
@@ -31,6 +34,8 @@ export function DashboardEntregas({ manha, tarde, noite, isAdmin }: Props) {
         entregas={manhaList}
         setEntregas={setManhaList}
         isAdmin={isAdmin}
+        contas={contas}
+        mostrarConta={mostrarConta}
       />
       <PeriodoSection
         titulo="Tarde"
@@ -42,6 +47,8 @@ export function DashboardEntregas({ manha, tarde, noite, isAdmin }: Props) {
         entregas={tardeList}
         setEntregas={setTardeList}
         isAdmin={isAdmin}
+        contas={contas}
+        mostrarConta={mostrarConta}
       />
       <PeriodoSection
         titulo="Noite"
@@ -53,6 +60,8 @@ export function DashboardEntregas({ manha, tarde, noite, isAdmin }: Props) {
         entregas={noiteList}
         setEntregas={setNoiteList}
         isAdmin={isAdmin}
+        contas={contas}
+        mostrarConta={mostrarConta}
       />
     </div>
   );
@@ -66,6 +75,8 @@ interface PeriodoSectionProps {
   entregas: Entrega[];
   setEntregas: React.Dispatch<React.SetStateAction<Entrega[]>>;
   isAdmin: boolean;
+  contas: ContaInfoMap;
+  mostrarConta: boolean;
 }
 
 function PeriodoSection({
@@ -76,6 +87,8 @@ function PeriodoSection({
   entregas,
   setEntregas,
   isAdmin,
+  contas,
+  mostrarConta,
 }: PeriodoSectionProps) {
   const router = useRouter();
   const [modalEntrega, setModalEntrega] = useState<Entrega | null>(null);
@@ -138,9 +151,14 @@ function PeriodoSection({
                   </span>
 
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-gray-900">
-                      {entrega.nome_cliente}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      {mostrarConta && (
+                        <ContaBadge contaId={entrega.conta_id} contas={contas} />
+                      )}
+                      <p className="truncate text-sm font-medium text-gray-900">
+                        {entrega.nome_cliente}
+                      </p>
+                    </div>
                     <p className="mt-0.5 truncate text-xs text-gray-500">
                       {entrega.bairro}
                     </p>
@@ -189,6 +207,8 @@ function PeriodoSection({
           isAdmin={isAdmin}
           onClose={() => setModalEntrega(null)}
           onChanged={() => router.refresh()}
+          contas={contas}
+          mostrarConta={mostrarConta}
         />
       )}
     </section>

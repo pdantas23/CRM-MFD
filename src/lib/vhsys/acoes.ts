@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { cacheInvalidate } from "@/lib/crm/cache";
 import { vhsysPost, vhsysPut, vhsysGet, vhsysDelete, runComTokensVhsys, type VhsysTokens } from "./client";
 import { getContaAtiva } from "@/lib/accounts/contexto";
+import { getContaComTokensPorId } from "@/lib/accounts/repo";
 import {
   construirModeloSituacoes,
   situacaoEfetiva,
@@ -89,22 +90,41 @@ interface ContaEscrita {
  * runComTokensVhsys) + modelos de situações (pedidos e orçamentos) da conta,
  * ambos data-driven das situações sincronizadas. SERVER-ONLY.
  */
-async function contaEscrita(): Promise<ContaEscrita> {
-  const conta = await getContaAtiva();
+async function montarContaEscrita(id: string, tokens: VhsysTokens): Promise<ContaEscrita> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("vhsys_situacoes")
     .select("id_vhsys, nome, tipo_status, ordem, entidade")
-    .eq("conta_id", conta.id)
+    .eq("conta_id", id)
     .eq("lixeira", false)
     .order("ordem");
   const todas = (data ?? []) as (SituacaoBase & { entidade: string })[];
   return {
-    id: conta.id,
-    tokens: { ...conta.tokens, apiBase: conta.apiBase },
+    id,
+    tokens,
     modelo: construirModeloSituacoes(todas.filter((s) => s.entidade === "pedidos")),
     modeloOrc: construirModeloOrcamento(todas.filter((s) => s.entidade === "orcamentos")),
   };
+}
+
+async function contaEscrita(): Promise<ContaEscrita> {
+  const conta = await getContaAtiva();
+  return montarContaEscrita(conta.id, { ...conta.tokens, apiBase: conta.apiBase });
+}
+
+/**
+ * Igual a contaEscrita(), mas para uma conta ARBITRÁRIA por id — não a ativa.
+ * Necessário quando a ação atua sobre um registro de outra conta (mural
+ * compartilhado): a baixa precisa dos tokens e do modelo de situações da conta
+ * DONA do registro, senão o `id_vhsys` (que pode colidir entre contas) moveria
+ * o pedido errado na conta ativa. SERVER-ONLY.
+ */
+async function contaEscritaPorId(contaId: string): Promise<ContaEscrita> {
+  const res = await getContaComTokensPorId(contaId);
+  if (!res || !res.account.ativo) {
+    throw new Error("Conta da entrega não encontrada ou inativa.");
+  }
+  return montarContaEscrita(res.account.id, res.tokens);
 }
 
 /** Formata Date como YYYY-MM-DD no fuso de Brasília. */
@@ -230,11 +250,16 @@ export interface ResultadoAcao {
 export async function moverSituacaoPedido(
   idVhsys: number,
   novaSituacaoId: number,
-  obs?: string
+  obs?: string,
+  // Conta dona do pedido. Omitido → conta ativa (comportamento padrão do Kanban).
+  // Informado → roteia tokens/espelho/modelo para essa conta (mural compartilhado).
+  contaIdOverride?: string
 ): Promise<ResultadoAcao> {
   try {
     const ctx = await exigirAdminOuVendedor();
-    const conta = await contaEscrita();
+    const conta = contaIdOverride
+      ? await contaEscritaPorId(contaIdOverride)
+      : await contaEscrita();
 
     // Validação de entrada
     if (!Number.isInteger(idVhsys) || idVhsys <= 0) {

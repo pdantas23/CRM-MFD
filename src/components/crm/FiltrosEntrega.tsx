@@ -12,14 +12,35 @@ const OPCOES_PERIODO: OpcaoFiltro[] = [
   { valor: "noite", label: "Noite" },
 ];
 
-export function FiltrosEntrega() {
+export function FiltrosEntrega({
+  contasOpcoes = [],
+}: {
+  /** Contas do mural compartilhado (slug + rótulo). Vazio = não mostra o filtro. */
+  contasOpcoes?: { slug: string; label: string }[];
+}) {
   const { aplicar, getParam } = useFiltrosUrl();
 
   const periodoAtual = getParam("periodo_entrega");
   const comSaldo = getParam("com_saldo") === "true";
+  const contaAtual = getParam("conta");
+
+  const opcoesConta: OpcaoFiltro[] = contasOpcoes.map((c) => ({
+    valor: c.slug,
+    label: c.label,
+  }));
 
   return (
     <>
+      {opcoesConta.length > 0 && (
+        <DropdownFiltro
+          label="Conta"
+          opcoes={opcoesConta}
+          valorAtual={contaAtual}
+          onChange={(v) => aplicar({ conta: v })}
+          placeholder="Todas as contas"
+        />
+      )}
+
       <DropdownFiltro
         label="Período"
         opcoes={OPCOES_PERIODO}

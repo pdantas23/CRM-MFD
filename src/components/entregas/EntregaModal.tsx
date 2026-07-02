@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { StatusBadge, AtrasadaBadge, EntregueBadge, ehAtrasada } from "@/components/ui/Badge";
+import { ContaBadge, type ContaInfoMap } from "@/components/entregas/ContaBadge";
 import { formatBRL, formatarData } from "@/lib/format";
 import {
   vincularEntregaOrcamento,
@@ -52,6 +53,9 @@ interface Props {
   onClose: () => void;
   /** Chamado após upload/remoção de anexo para o pai dar router.refresh(). */
   onChanged?: () => void;
+  /** Mural compartilhado: mapa de contas + flag para exibir o selo da conta. */
+  contas?: ContaInfoMap;
+  mostrarConta?: boolean;
 }
 
 const COLS_ORC =
@@ -66,7 +70,7 @@ function totalItem(i: ItemExibido): number {
   return i.qtde * i.valor_unit * (1 - i.desconto / 100);
 }
 
-export function EntregaModal({ entrega, isAdmin, onClose, onChanged }: Props) {
+export function EntregaModal({ entrega, isAdmin, onClose, onChanged, contas, mostrarConta }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Anexo legado (coluna em entregas) — removível, mas não recriável.
@@ -146,15 +150,21 @@ export function EntregaModal({ entrega, isAdmin, onClose, onChanged }: Props) {
     let cancelado = false;
 
     (async () => {
-      const consulta = orcId
-        ? supabase.from("vhsys_orcamentos").select(COLS_ORC).eq("id", orcId).maybeSingle()
-        : supabase
-            .from("vhsys_orcamentos")
-            .select(COLS_ORC)
-            .eq("numero", numeroTextual as number)
-            .eq("lixeira", false)
-            .limit(1)
-            .maybeSingle();
+      // orcamento_id (uuid) é PK global e resolve sozinho; o número textual pode
+      // COLIDIR entre contas no mural compartilhado, então recorta pela conta da
+      // entrega quando ela é conhecida.
+      let consulta;
+      if (orcId) {
+        consulta = supabase.from("vhsys_orcamentos").select(COLS_ORC).eq("id", orcId).maybeSingle();
+      } else {
+        let q = supabase
+          .from("vhsys_orcamentos")
+          .select(COLS_ORC)
+          .eq("numero", numeroTextual as number)
+          .eq("lixeira", false);
+        if (entrega.conta_id) q = q.eq("conta_id", entrega.conta_id);
+        consulta = q.limit(1).maybeSingle();
+      }
 
       const { data } = await consulta;
       if (cancelado) return;
@@ -164,7 +174,10 @@ export function EntregaModal({ entrega, isAdmin, onClose, onChanged }: Props) {
       setOrcamento(orc);
 
       setCarregandoItens(true);
-      fetch(`/api/orcamento-itens/${orc.id_vhsys}`)
+      // Passa a conta da entrega para a API escopar o espelho/tokens à conta
+      // certa (id_vhsys pode colidir entre contas no mural compartilhado).
+      const qsConta = entrega.conta_id ? `?conta=${entrega.conta_id}` : "";
+      fetch(`/api/orcamento-itens/${orc.id_vhsys}${qsConta}`)
         .then((r) => r.json())
         .then((linhas: ItemApi[]) => {
           if (cancelado) return;
@@ -325,9 +338,14 @@ export function EntregaModal({ entrega, isAdmin, onClose, onChanged }: Props) {
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b px-6 py-4">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold text-gray-900">
-              {entrega.nome_cliente}
-            </h2>
+            <div className="flex items-center gap-1.5">
+              {mostrarConta && contas && (
+                <ContaBadge contaId={entrega.conta_id} contas={contas} />
+              )}
+              <h2 className="truncate text-lg font-semibold text-gray-900">
+                {entrega.nome_cliente}
+              </h2>
+            </div>
             <p className="text-sm text-gray-500">
               Entrega · {formatarData(entrega.data)}
             </p>
