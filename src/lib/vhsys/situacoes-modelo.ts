@@ -25,6 +25,8 @@ export interface ModeloSituacoes {
   entregueId: number | null;
   entregaParcialId: number | null;
   pagamentoAprovadoId: number | null;
+  /** "Pagamento Parcial" (existe na SA; null em contas sem essa etapa, ex.: KCM). */
+  pagamentoParcialId: number | null;
   emSeparacaoId: number | null;
   aguardandoPagamentoId: number | null;
   /** Situações que liberam o cadastro de entrega (pgto aprovado → entrega parcial). */
@@ -74,6 +76,10 @@ export function construirModeloSituacoes(situacoes: SituacaoBase[]): ModeloSitua
   // "Entrega parcial": ancorada no nome COMPLETO (não casar "Pagamento Parcial").
   const entregaParcialId = sorted.find((s) => /entrega\s*parcial/i.test(s.nome))?.id_vhsys ?? null;
 
+  // "Pagamento parcial": ancorada no nome (não casar "Entrega Parcial"). Pode
+  // não existir na conta (ex.: KCM) → null.
+  const pagamentoParcialId = sorted.find((s) => /pagamento\s*parcial/i.test(s.nome))?.id_vhsys ?? null;
+
   // Gate de entrega: da ordem do "pagamento aprovado" em diante, sem Entregue/Cancelado.
   const ordemAprovado = pagamentoAprovadoId
     ? (sorted.find((s) => s.id_vhsys === pagamentoAprovadoId)?.ordem ?? Infinity)
@@ -99,6 +105,7 @@ export function construirModeloSituacoes(situacoes: SituacaoBase[]): ModeloSitua
     entregueId,
     entregaParcialId,
     pagamentoAprovadoId,
+    pagamentoParcialId,
     emSeparacaoId,
     aguardandoPagamentoId,
     gateEntrega,

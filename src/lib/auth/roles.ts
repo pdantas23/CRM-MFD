@@ -19,3 +19,11 @@ export function ehSuperadmin(role: string | null | undefined): boolean {
 export function ehOwner(role: string | null | undefined): boolean {
   return role === "owner";
 }
+
+/**
+ * True apenas para financeiro (responsável por aprovar pagamento dos pedidos).
+ * NÃO herda admin e NÃO cadastra entregas — opera só a situação dos pedidos.
+ */
+export function ehFinanceiro(role: string | null | undefined): boolean {
+  return role === "financeiro";
+}

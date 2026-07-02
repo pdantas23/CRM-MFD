@@ -36,6 +36,10 @@ interface PedidosViewProps {
   metricas: Metrica[];
   /** Modelo de situações da conta (colunas/segmentos/gate data-driven). */
   modelo: ModeloSituacoes;
+  /** true (vendedor): não pode mover para pagamento parcial/aprovado. */
+  restricaoPagamento?: boolean;
+  /** true (admin/superadmin): pode cadastrar entrega a partir do pedido. */
+  podeCadastrarEntrega?: boolean;
 }
 
 export function PedidosView({
@@ -48,6 +52,8 @@ export function PedidosView({
   filtros,
   metricas,
   modelo,
+  restricaoPagamento = false,
+  podeCadastrarEntrega = false,
 }: PedidosViewProps) {
   const [selecionado, setSelecionado] = useState<PedidoKanban | null>(null);
   const [viewAtual, setViewAtual] = useState<ViewAtual>("kanban");
@@ -170,6 +176,8 @@ export function PedidosView({
             atingiuLimitePorSituacao={atingiuLimitePorSituacao}
             podeEscrever={podeEscrever}
             modelo={modelo}
+            restricaoPagamento={restricaoPagamento}
+            podeCadastrarEntrega={podeCadastrarEntrega}
           />
         )}
 
@@ -201,6 +209,8 @@ export function PedidosView({
           onClose={() => setSelecionado(null)}
           podeEscrever={podeEscrever}
           modelo={modelo}
+          restricaoPagamento={restricaoPagamento}
+          podeCadastrarEntrega={podeCadastrarEntrega}
         />
       )}
     </FiltrosUrlProvider>

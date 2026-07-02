@@ -13,6 +13,8 @@ interface PedidoCardProps {
   pedido: PedidoKanban;
   onClick: (pedido: PedidoKanban) => void;
   modelo: ModeloSituacoes;
+  /** true (admin/superadmin): mostra o bloco de cadastrar/registrar entrega. */
+  podeCadastrarEntrega?: boolean;
 }
 
 export function hrefNovaEntrega(pedido: PedidoKanban): string {
@@ -30,7 +32,7 @@ export function hrefNovaEntrega(pedido: PedidoKanban): string {
   return `/entregas/nova?${params.toString()}`;
 }
 
-export function PedidoCard({ pedido, onClick, modelo }: PedidoCardProps) {
+export function PedidoCard({ pedido, onClick, modelo, podeCadastrarEntrega = false }: PedidoCardProps) {
   const router = useRouter();
   const saldo = pedido.financeiro?.saldo ?? 0;
   const emEntrega = ehSegmentoEntrega(modelo, pedido.situacao_id);
@@ -98,25 +100,26 @@ export function PedidoCard({ pedido, onClick, modelo }: PedidoCardProps) {
         </p>
       )}
 
-      {pedido.entregaRegistrada ? (
-        <span className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700">
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-          Entrega registrada
-        </span>
-      ) : entregaHabilitada(modelo, pedido.situacao_id) ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            router.push(hrefNovaEntrega(pedido));
-          }}
-          className="mt-3 w-full rounded-md bg-primary-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary-800"
-        >
-          Cadastrar Entrega
-        </button>
-      ) : null}
+      {podeCadastrarEntrega &&
+        (pedido.entregaRegistrada ? (
+          <span className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700">
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Entrega registrada
+          </span>
+        ) : entregaHabilitada(modelo, pedido.situacao_id) ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push(hrefNovaEntrega(pedido));
+            }}
+            className="mt-3 w-full rounded-md bg-primary-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary-800"
+          >
+            Cadastrar Entrega
+          </button>
+        ) : null)}
     </div>
   );
 }

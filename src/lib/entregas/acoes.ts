@@ -14,7 +14,11 @@ import { cacheInvalidate } from "@/lib/crm/cache";
 import { ehAdmin } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import { moverSituacaoPedido } from "@/lib/vhsys/acoes";
-import { construirModeloSituacoes, type SituacaoBase } from "@/lib/vhsys/situacoes-modelo";
+import {
+  construirModeloSituacoes,
+  entregaHabilitada,
+  type SituacaoBase,
+} from "@/lib/vhsys/situacoes-modelo";
 import type { Periodo, StatusEntrega } from "@/lib/types/database";
 
 /** Dados do orçamento úteis para preencher e vincular uma entrega. */
@@ -163,6 +167,44 @@ export async function criarEntregaDeOrcamento(
     return {
       ok: false,
       erro: "Este orçamento ainda não virou pedido — não é possível cadastrar entrega.",
+    };
+  }
+
+  // Gate de situação: a entrega só pode ser cadastrada quando o PEDIDO vinculado
+  // está em "pagamento aprovado" em diante (gateEntrega do modelo da conta). A
+  // aprovação de pagamento é responsabilidade do financeiro.
+  const admin = createAdminClient();
+  const idVhsysPedido = await resolverPedidoIdVhsys(
+    admin,
+    conta.id,
+    orc.id,
+    String(numeroOrcamento)
+  );
+  if (idVhsysPedido === null) {
+    return {
+      ok: false,
+      erro: "Não foi possível localizar o pedido emitido deste orçamento para validar a situação.",
+    };
+  }
+  const { data: pedRow } = await admin
+    .from("vhsys_pedidos")
+    .select("situacao_id")
+    .eq("conta_id", conta.id)
+    .eq("id_vhsys", idVhsysPedido)
+    .maybeSingle();
+  const situacaoPedido = (pedRow as { situacao_id: number | null } | null)?.situacao_id ?? null;
+  const { data: sits } = await admin
+    .from("vhsys_situacoes")
+    .select("id_vhsys, nome, tipo_status, ordem")
+    .eq("conta_id", conta.id)
+    .eq("entidade", "pedidos")
+    .eq("lixeira", false)
+    .order("ordem");
+  const modelo = construirModeloSituacoes((sits ?? []) as SituacaoBase[]);
+  if (!entregaHabilitada(modelo, situacaoPedido)) {
+    return {
+      ok: false,
+      erro: "Só é possível cadastrar entrega com o pedido em 'pagamento aprovado' (ou situação posterior).",
     };
   }
 

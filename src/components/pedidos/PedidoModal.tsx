@@ -20,9 +20,13 @@ interface PedidoModalProps {
   /** Se true, exibe controles de mover situação (admin ou vendedor). */
   podeEscrever?: boolean;
   modelo: ModeloSituacoes;
+  /** true (vendedor): oculta destinos de pagamento parcial/aprovado. */
+  restricaoPagamento?: boolean;
+  /** true (admin/superadmin): mostra o botão de cadastrar entrega. */
+  podeCadastrarEntrega?: boolean;
 }
 
-export function PedidoModal({ pedido, situacoes, onClose, podeEscrever, modelo }: PedidoModalProps) {
+export function PedidoModal({ pedido, situacoes, onClose, podeEscrever, modelo, restricaoPagamento, podeCadastrarEntrega }: PedidoModalProps) {
   const router = useRouter();
   const situacao = situacoes.find((s) => s.id_vhsys === pedido.situacao_id);
   const fin = pedido.financeiro;
@@ -47,12 +51,18 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever, modelo }
   const [situacaoPendente, setSituacaoPendente] = useState<number | null>(null);
   const [, startTransition] = useTransition();
 
-  // Opções de destino: situações do Kanban excluindo Cancelado e a atual
+  // Opções de destino: situações do Kanban excluindo Cancelado e a atual.
+  // Vendedor (restricaoPagamento) não vê os destinos de aprovação de pagamento.
   const opcoesDestino = situacoes.filter(
     (s) =>
       ehColuna(modelo, s.id_vhsys) &&
       s.id_vhsys !== modelo.canceladoId &&
-      s.id_vhsys !== pedido.situacao_id
+      s.id_vhsys !== pedido.situacao_id &&
+      !(
+        restricaoPagamento &&
+        (s.id_vhsys === modelo.pagamentoAprovadoId ||
+          s.id_vhsys === modelo.pagamentoParcialId)
+      )
   );
 
   function handleMoverSituacao(novaSituacaoId: number) {
@@ -239,25 +249,27 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever, modelo }
         </div>
 
         <div className="flex gap-3 border-t border-gray-200 px-6 py-4">
-          {pedido.entregaRegistrada ? (
-            <span className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
-              Entrega registrada
-            </span>
-          ) : entregaHabilitada(modelo, pedido.situacao_id) ? (
-            <button
-              type="button"
-              onClick={() => router.push(hrefNovaEntrega(pedido))}
-              className="btn-primary flex-1"
-            >
-              Cadastrar Entrega
-            </button>
-          ) : (
-            <span className="inline-flex flex-1 items-center justify-center rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
-              {pedido.situacao_id === modelo.entregueId
-                ? "Entrega bloqueada — pedido já entregue"
-                : "Entrega disponível apenas em separação ou entrega parcial"}
-            </span>
-          )}
+          {/* Bloco de entrega só para quem cadastra (admin/superadmin). */}
+          {podeCadastrarEntrega &&
+            (pedido.entregaRegistrada ? (
+              <span className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
+                Entrega registrada
+              </span>
+            ) : entregaHabilitada(modelo, pedido.situacao_id) ? (
+              <button
+                type="button"
+                onClick={() => router.push(hrefNovaEntrega(pedido))}
+                className="btn-primary flex-1"
+              >
+                Cadastrar Entrega
+              </button>
+            ) : (
+              <span className="inline-flex flex-1 items-center justify-center rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+                {pedido.situacao_id === modelo.entregueId
+                  ? "Entrega bloqueada — pedido já entregue"
+                  : "Entrega disponível apenas em separação ou entrega parcial"}
+              </span>
+            ))}
           <button type="button" onClick={onClose} className="btn-secondary">
             Fechar
           </button>

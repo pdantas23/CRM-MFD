@@ -25,9 +25,9 @@ export default async function NovaEntregaPage({
 
   const { profile } = await getSessaoComProfile();
 
-  // Entregador não pode criar entregas; apenas admin e vendedor têm acesso
+  // Cadastro de entrega é exclusivo de admin/superadmin.
   const role = profile?.role;
-  if (!ehAdmin(role) && role !== "vendedor") {
+  if (!ehAdmin(role)) {
     redirect("/entregas");
   }
 

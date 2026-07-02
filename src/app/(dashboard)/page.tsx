@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
-import { ehAdmin } from "@/lib/auth/roles";
+import { ehAdmin, ehFinanceiro } from "@/lib/auth/roles";
 
 export default async function DashboardPage() {
   const { profile } = await getSessaoComProfile();
 
+  // Financeiro opera a tela de Pedidos (aprovação de pagamento).
+  if (profile && ehFinanceiro(profile.role)) {
+    redirect("/pedidos");
+  }
   // Dashboard é exclusivo do admin (métricas do sistema — implementação futura).
   // Demais roles caem direto na operação de entregas.
   if (profile && !ehAdmin(profile.role)) {

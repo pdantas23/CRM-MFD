@@ -24,12 +24,13 @@ interface Props {
   slugConta: string;
 }
 
-const ROLE_OPCOES = [
-  { value: "owner", label: "Owner" },
-  { value: "superadmin", label: "Superadmin" },
+// Papéis que o superadmin pode ATRIBUIR pela tela de Configurações.
+// owner e superadmin NÃO entram: não podem ser criados nem atribuídos aqui.
+const ROLE_OPCOES_ATRIBUIVEIS = [
   { value: "admin", label: "Admin" },
   { value: "vendedor", label: "Vendedor" },
   { value: "entregador", label: "Entregador" },
+  { value: "financeiro", label: "Financeiro" },
 ];
 
 const ROLE_LABEL: Record<string, string> = {
@@ -38,6 +39,7 @@ const ROLE_LABEL: Record<string, string> = {
   admin: "Admin",
   vendedor: "Vendedor",
   entregador: "Entregador",
+  financeiro: "Financeiro",
 };
 
 // ── Abas ────────────────────────────────────────────────────────────────────
@@ -360,7 +362,7 @@ function ModalCriacaoUsuario({
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Role</label>
             <Select
-              options={ROLE_OPCOES}
+              options={ROLE_OPCOES_ATRIBUIVEIS}
               value={role}
               onChange={setRole}
               ariaLabel="Role do usuário"
@@ -426,6 +428,13 @@ function ModalEdicaoUsuario({
   );
   const [erro, setErro] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // owner/superadmin não são atribuíveis; mas se o usuário JÁ tem esse papel,
+  // ele aparece como opção (para não zerar o select ao editar nome/senha dele).
+  const opcoesRole =
+    usuario.role === "owner" || usuario.role === "superadmin"
+      ? [...ROLE_OPCOES_ATRIBUIVEIS, { value: usuario.role, label: ROLE_LABEL[usuario.role] ?? usuario.role }]
+      : ROLE_OPCOES_ATRIBUIVEIS;
 
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -573,7 +582,7 @@ function ModalEdicaoUsuario({
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Role</label>
             <Select
-              options={ROLE_OPCOES}
+              options={opcoesRole}
               value={role}
               onChange={setRole}
               ariaLabel="Role do usuário"

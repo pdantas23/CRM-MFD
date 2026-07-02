@@ -24,13 +24,22 @@ export default async function PedidosPage({
 
   const { profile } = await getSessaoComProfile();
 
-  // Entregador não tem acesso a pedidos; apenas admin e vendedor.
-  if (profile && !ehAdmin(profile.role) && profile.role !== "vendedor") {
+  // Pedidos: admin, vendedor e financeiro. Entregador não tem acesso.
+  if (
+    profile &&
+    !ehAdmin(profile.role) &&
+    profile.role !== "vendedor" &&
+    profile.role !== "financeiro"
+  ) {
     redirect("/entregas");
   }
 
   const role = profile?.role;
-  const podeEscrever = ehAdmin(role) || role === "vendedor";
+  const podeEscrever = ehAdmin(role) || role === "vendedor" || role === "financeiro";
+  // Vendedor não pode mover para pagamento parcial/aprovado (é do financeiro).
+  const restricaoPagamento = role === "vendedor";
+  // Cadastro de entrega é exclusivo de admin/superadmin.
+  const podeCadastrarEntrega = ehAdmin(role);
   const vendedorId = profile?.vendedor_id ?? null;
 
   const conta = await getContaAtiva();
@@ -115,6 +124,8 @@ export default async function PedidosPage({
         filtros={filtros}
         metricas={metricas}
         modelo={modelo}
+        restricaoPagamento={restricaoPagamento}
+        podeCadastrarEntrega={podeCadastrarEntrega}
       />
     </div>
   );

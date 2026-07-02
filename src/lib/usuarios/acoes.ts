@@ -31,7 +31,7 @@ type Resultado<T = Record<never, never>> =
   | ({ ok: true } & T)
   | { ok: false; erro: string };
 
-const ROLES_VALIDOS = ["owner", "superadmin", "admin", "vendedor", "entregador"] as const;
+const ROLES_VALIDOS = ["owner", "superadmin", "admin", "vendedor", "entregador", "financeiro"] as const;
 type RoleValido = (typeof ROLES_VALIDOS)[number];
 
 function roleValido(r: string): r is RoleValido {
@@ -175,6 +175,10 @@ export async function criarUsuario(dados: {
   if (!EMAIL_RE.test(email)) return { ok: false, erro: "Email inválido." };
   if (senha.length < 6) return { ok: false, erro: "A senha deve ter ao menos 6 caracteres." };
   if (!roleValido(role)) return { ok: false, erro: "Role inválido." };
+  // owner e superadmin não podem ser criados por esta tela.
+  if (role === "owner" || role === "superadmin") {
+    return { ok: false, erro: "Não é permitido criar usuários com papel owner ou superadmin." };
+  }
   if (role === "vendedor" && (vendedorId == null || !Number.isInteger(vendedorId))) {
     return { ok: false, erro: "Vendedor VHSYS é obrigatório para o role vendedor." };
   }
@@ -255,6 +259,20 @@ export async function atualizarUsuario(
   }
 
   const admin = createAdminClient();
+
+  // owner/superadmin não são atribuíveis por esta tela: só é permitido MANTER
+  // o papel de quem já o tem (não promover). Bloqueia promoção via chamada direta.
+  if (role === "owner" || role === "superadmin") {
+    const { data: atualRoleRow } = await admin
+      .from("profiles")
+      .select("role")
+      .eq("id", id)
+      .single();
+    const atualRole = (atualRoleRow as { role: string } | null)?.role;
+    if (atualRole !== role) {
+      return { ok: false, erro: "Não é permitido atribuir os papéis owner ou superadmin." };
+    }
+  }
 
   // Nome único — excluindo o próprio usuário.
   const { data: nomeExistente } = await admin

@@ -18,6 +18,10 @@ interface PedidosKanbanProps {
   podeEscrever?: boolean;
   /** Modelo de situações da conta (colunas/segmentos data-driven). */
   modelo: ModeloSituacoes;
+  /** true (vendedor): não pode soltar em pagamento parcial/aprovado. */
+  restricaoPagamento?: boolean;
+  /** true (admin/superadmin): mostra o bloco de entrega nos cards. */
+  podeCadastrarEntrega?: boolean;
 }
 
 // Colunas dinâmicas: nomes/ordem/IDs vêm das situações sincronizadas da conta
@@ -29,6 +33,8 @@ export function PedidosKanban({
   atingiuLimitePorSituacao = {},
   podeEscrever,
   modelo,
+  restricaoPagamento = false,
+  podeCadastrarEntrega = false,
 }: PedidosKanbanProps) {
   const router = useRouter();
   const porId = new Map(situacoes.map((s) => [s.id_vhsys, s]));
@@ -68,7 +74,7 @@ export function PedidosKanban({
       getColunaId={(p) => p.situacao_id}
       getId={(p) => p.id}
       getValor={(p) => p.valor_total ?? 0}
-      renderCard={(p) => <PedidoCard pedido={p} onClick={onCardClick} modelo={modelo} />}
+      renderCard={(p) => <PedidoCard pedido={p} onClick={onCardClick} modelo={modelo} podeCadastrarEntrega={podeCadastrarEntrega} />}
       atingiuLimitePorColuna={atingiuLimitePorSituacao}
       carregarMais={handleCarregarMais}
       mensagemVazio="Nenhum pedido nesta situação"
@@ -77,6 +83,17 @@ export function PedidosKanban({
       onMoverCard={
         podeEscrever
           ? async (pedido, novaSituacaoId) => {
+              // Vendedor não aprova pagamento — rejeita o drop antes do servidor.
+              if (
+                restricaoPagamento &&
+                (novaSituacaoId === modelo.pagamentoAprovadoId ||
+                  novaSituacaoId === modelo.pagamentoParcialId)
+              ) {
+                return {
+                  ok: false,
+                  erro: "Aprovação de pagamento é responsabilidade do financeiro.",
+                };
+              }
               const res = await moverSituacaoPedido(pedido.id_vhsys, novaSituacaoId);
               if (res.ok) router.refresh();
               return res;

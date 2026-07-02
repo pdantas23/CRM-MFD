@@ -41,7 +41,7 @@ import type {
 // ── Helpers internos ───────────────────────────────────────────────────────
 
 export interface ContextoAcao {
-  role: "admin" | "vendedor" | "entregador";
+  role: "admin" | "vendedor" | "entregador" | "financeiro";
   vendedorId: number | null;
   userId: string;
 }
@@ -68,6 +68,40 @@ export async function exigirAdminOuVendedor(): Promise<ContextoAcao> {
 
   // superadmin é tratado como admin no contexto da ação (mesmos poderes).
   const roleEfetiva = profile.role === "superadmin" ? "admin" : (profile.role as "admin" | "vendedor");
+
+  return {
+    role: roleEfetiva,
+    vendedorId: (profile as { vendedor_id: number | null }).vendedor_id ?? null,
+    userId: user.id,
+  };
+}
+
+/**
+ * Guard das ações de MOVER SITUAÇÃO DE PEDIDO. Além de admin/superadmin/vendedor,
+ * autoriza o papel 'financeiro' (controle total da situação do pedido). NÃO é
+ * usado nas ações de orçamento nem na criação de pedido — financeiro não opera
+ * essas telas. Exportado para reuso.
+ */
+export async function exigirMoverPedido(): Promise<ContextoAcao> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, vendedor_id")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "superadmin", "vendedor", "financeiro"].includes(profile.role as string)) {
+    throw new Error("Permissão negada: sem autorização para mover a situação de pedidos.");
+  }
+
+  // superadmin → admin (mesmos poderes); vendedor/financeiro mantêm o próprio papel.
+  const roleEfetiva =
+    profile.role === "superadmin"
+      ? "admin"
+      : (profile.role as "admin" | "vendedor" | "financeiro");
 
   return {
     role: roleEfetiva,
@@ -256,7 +290,7 @@ export async function moverSituacaoPedido(
   contaIdOverride?: string
 ): Promise<ResultadoAcao> {
   try {
-    const ctx = await exigirAdminOuVendedor();
+    const ctx = await exigirMoverPedido();
     const conta = contaIdOverride
       ? await contaEscritaPorId(contaIdOverride)
       : await contaEscrita();
@@ -267,6 +301,18 @@ export async function moverSituacaoPedido(
     }
     const tipoStatus = tipoStatusDe(conta.modelo, novaSituacaoId);
     if (!tipoStatus) throw new Error(`Situação ${novaSituacaoId} desconhecida.`);
+
+    // Aprovação de pagamento (Pagamento Parcial / Pagamento Aprovado) é
+    // responsabilidade do financeiro (e admin) — vendedor não pode fazê-la.
+    if (
+      ctx.role === "vendedor" &&
+      (novaSituacaoId === conta.modelo.pagamentoAprovadoId ||
+        novaSituacaoId === conta.modelo.pagamentoParcialId)
+    ) {
+      throw new Error(
+        "Aprovação de pagamento é responsabilidade do financeiro."
+      );
+    }
 
     // Busca situação atual no espelho para validar transição
     const admin = createAdminClient();
