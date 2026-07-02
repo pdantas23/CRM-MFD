@@ -78,8 +78,12 @@ export function PedidosKanban({
       atingiuLimitePorColuna={atingiuLimitePorSituacao}
       carregarMais={handleCarregarMais}
       mensagemVazio="Nenhum pedido nesta situação"
-      // Pedido entregue é situação final — não pode ser arrastado para outra coluna.
-      podeMoverItem={(p) => p.situacao_id !== modelo.entregueId}
+      // Entregue é final; e um pedido em "aguardando pagamento" só o financeiro
+      // (ou superadmin) move — admin/vendedor não podem arrastá-lo.
+      podeMoverItem={(p) =>
+        p.situacao_id !== modelo.entregueId &&
+        !(restricaoPagamento && p.situacao_id === modelo.aguardandoPagamentoId)
+      }
       onMoverCard={
         podeEscrever
           ? async (pedido, novaSituacaoId) => {

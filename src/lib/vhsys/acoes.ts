@@ -41,7 +41,7 @@ import type {
 // ── Helpers internos ───────────────────────────────────────────────────────
 
 export interface ContextoAcao {
-  role: "admin" | "vendedor" | "entregador" | "financeiro";
+  role: "admin" | "superadmin" | "vendedor" | "entregador" | "financeiro";
   vendedorId: number | null;
   userId: string;
 }
@@ -97,14 +97,10 @@ export async function exigirMoverPedido(): Promise<ContextoAcao> {
     throw new Error("Permissão negada: sem autorização para mover a situação de pedidos.");
   }
 
-  // superadmin → admin (mesmos poderes); vendedor/financeiro mantêm o próprio papel.
-  const roleEfetiva =
-    profile.role === "superadmin"
-      ? "admin"
-      : (profile.role as "admin" | "vendedor" | "financeiro");
-
+  // Mantém o papel REAL (não colapsa superadmin em admin): superadmin e
+  // financeiro têm um privilégio que o admin não tem — aprovar pagamento.
   return {
-    role: roleEfetiva,
+    role: profile.role as ContextoAcao["role"],
     vendedorId: (profile as { vendedor_id: number | null }).vendedor_id ?? null,
     userId: user.id,
   };
@@ -279,7 +275,9 @@ export interface ResultadoAcao {
 /**
  * Mover pedido para nova situação no Kanban.
  * Escopo: qualquer transição exceto CANCELADO (regra 9).
- * Exige role='admin'.
+ * Papéis: admin/superadmin/vendedor/financeiro. Aprovar pagamento (mover PARA
+ * pagamento parcial/aprovado) ou tirar um pedido de "aguardando pagamento" é
+ * exclusivo de superadmin e financeiro; vendedor é escopado ao próprio vendedor.
  */
 export async function moverSituacaoPedido(
   idVhsys: number,
@@ -302,18 +300,6 @@ export async function moverSituacaoPedido(
     const tipoStatus = tipoStatusDe(conta.modelo, novaSituacaoId);
     if (!tipoStatus) throw new Error(`Situação ${novaSituacaoId} desconhecida.`);
 
-    // Aprovação de pagamento (Pagamento Parcial / Pagamento Aprovado) é
-    // responsabilidade do financeiro (e admin) — vendedor não pode fazê-la.
-    if (
-      ctx.role === "vendedor" &&
-      (novaSituacaoId === conta.modelo.pagamentoAprovadoId ||
-        novaSituacaoId === conta.modelo.pagamentoParcialId)
-    ) {
-      throw new Error(
-        "Aprovação de pagamento é responsabilidade do financeiro."
-      );
-    }
-
     // Busca situação atual no espelho para validar transição
     const admin = createAdminClient();
     const { data: pedidoEspelho } = await admin
@@ -332,6 +318,25 @@ export async function moverSituacaoPedido(
     }
 
     const situacaoAtual = (pedidoEspelho as { situacao_id: number | null } | null)?.situacao_id ?? null;
+
+    // Separação de funções: aprovar pagamento (mover PARA "pagamento parcial" ou
+    // "pagamento aprovado") e tirar um pedido de "aguardando pagamento" são
+    // EXCLUSIVOS de superadmin e financeiro. Admin/vendedor só atuam depois da
+    // aprovação (situações à frente: em separação, entrega parcial, entregue).
+    const alvoPagamento =
+      novaSituacaoId === conta.modelo.pagamentoAprovadoId ||
+      novaSituacaoId === conta.modelo.pagamentoParcialId;
+    const origemAguardando =
+      situacaoAtual !== null && situacaoAtual === conta.modelo.aguardandoPagamentoId;
+    if (
+      (alvoPagamento || origemAguardando) &&
+      ctx.role !== "superadmin" &&
+      ctx.role !== "financeiro"
+    ) {
+      throw new Error(
+        "Aprovar pagamento (ou mover um pedido em 'aguardando pagamento') é exclusivo do financeiro ou superadmin."
+      );
+    }
 
     if (!transicaoPermitida(conta.modelo, situacaoAtual, novaSituacaoId)) {
       throw new Error(

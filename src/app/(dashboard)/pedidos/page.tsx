@@ -6,7 +6,7 @@ import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
 import { pedidosOnda0, pedidosOnda1, pedidosOnda2, carregarModeloSituacoes } from "@/lib/crm/carregar";
 import { comCache } from "@/lib/crm/cache";
-import { ehAdmin } from "@/lib/auth/roles";
+import { ehAdmin, ehSuperadmin } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import type {
   PedidoKanban,
@@ -36,8 +36,9 @@ export default async function PedidosPage({
 
   const role = profile?.role;
   const podeEscrever = ehAdmin(role) || role === "vendedor" || role === "financeiro";
-  // Vendedor não pode mover para pagamento parcial/aprovado (é do financeiro).
-  const restricaoPagamento = role === "vendedor";
+  // Aprovar pagamento (parcial/aprovado) e mover pedidos em "aguardando pagamento"
+  // são exclusivos de superadmin e financeiro. Admin e vendedor ficam restritos.
+  const restricaoPagamento = !(ehSuperadmin(role) || role === "financeiro");
   // Cadastro de entrega é exclusivo de admin/superadmin.
   const podeCadastrarEntrega = ehAdmin(role);
   const vendedorId = profile?.vendedor_id ?? null;

@@ -51,19 +51,24 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever, modelo, 
   const [situacaoPendente, setSituacaoPendente] = useState<number | null>(null);
   const [, startTransition] = useTransition();
 
-  // Opções de destino: situações do Kanban excluindo Cancelado e a atual.
-  // Vendedor (restricaoPagamento) não vê os destinos de aprovação de pagamento.
-  const opcoesDestino = situacoes.filter(
-    (s) =>
-      ehColuna(modelo, s.id_vhsys) &&
-      s.id_vhsys !== modelo.canceladoId &&
-      s.id_vhsys !== pedido.situacao_id &&
-      !(
-        restricaoPagamento &&
-        (s.id_vhsys === modelo.pagamentoAprovadoId ||
-          s.id_vhsys === modelo.pagamentoParcialId)
-      )
-  );
+  // Separação de funções (restricaoPagamento = não é superadmin/financeiro):
+  // 1) um pedido em "aguardando pagamento" não pode ser movido — só o financeiro
+  //    (ou superadmin) aprova; 2) os destinos de aprovação de pagamento somem.
+  const bloqueadoAguardando =
+    restricaoPagamento && pedido.situacao_id === modelo.aguardandoPagamentoId;
+  const opcoesDestino = bloqueadoAguardando
+    ? []
+    : situacoes.filter(
+        (s) =>
+          ehColuna(modelo, s.id_vhsys) &&
+          s.id_vhsys !== modelo.canceladoId &&
+          s.id_vhsys !== pedido.situacao_id &&
+          !(
+            restricaoPagamento &&
+            (s.id_vhsys === modelo.pagamentoAprovadoId ||
+              s.id_vhsys === modelo.pagamentoParcialId)
+          )
+      );
 
   function handleMoverSituacao(novaSituacaoId: number) {
     setErroMover(null);
