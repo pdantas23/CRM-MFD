@@ -37,7 +37,7 @@ export default async function DashboardLayout({
 
   // Conta ativa: nome exibido na sidebar + cor do tema injetada como CSS vars.
   const conta = await getContaAtiva();
-  const nomeEmpresa = conta.nomeEmpresa ?? process.env.APP_NAME ?? "CRM";
+  const nomeEmpresa = conta.nomeEmpresa ?? process.env.APP_NAME ?? "Modular";
   const cssVars = deriveScale(conta.themeColor) as React.CSSProperties;
 
   // Contas disponíveis para o seletor de troca (só renderiza se > 1).

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -40,8 +41,8 @@ const navItems: NavItem[] = [
   {
     href: "/entregas",
     label: "Entregas",
-    // Todos exceto financeiro (que opera só Pedidos). Superadmin entra via "admin".
-    roles: ["admin", "vendedor", "entregador"],
+    // Financeiro tem acesso de LEITURA (não opera). Superadmin entra via "admin".
+    roles: ["admin", "vendedor", "entregador", "financeiro"],
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -61,7 +62,8 @@ const navItems: NavItem[] = [
   {
     href: "/orcamentos",
     label: "Orçamentos",
-    roles: ["admin", "vendedor"],
+    // Financeiro tem acesso de LEITURA (não emite/move).
+    roles: ["admin", "vendedor", "financeiro"],
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -134,16 +136,10 @@ export function Sidebar({ profile, nomeEmpresa, contas, slugAtivo }: SidebarProp
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary-600">
-            <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
-          </div>
-          <span className="text-sm font-semibold text-gray-900">{nomeEmpresa}</span>
-          <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-gray-500">
-            {slugAtivo}
-          </span>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Image src="/logo.png" alt="Modular" width={32} height={32} className="h-8 w-8 shrink-0 object-contain" />
+          <span className="shrink-0 font-mono text-sm font-bold uppercase text-gray-900">{slugAtivo}</span>
+          <span className="truncate text-xs text-gray-500" title={nomeEmpresa}>{nomeEmpresa}</span>
         </div>
       </div>
 
@@ -163,16 +159,14 @@ export function Sidebar({ profile, nomeEmpresa, contas, slugAtivo }: SidebarProp
         }`}
       >
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-primary-800 px-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600">
-              <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-            </div>
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Image src="/logo.png" alt="Modular" width={40} height={40} priority className="h-10 w-10 shrink-0 object-contain" />
             <div className="min-w-0">
-              <span className="block truncate text-sm font-semibold leading-tight">{nomeEmpresa}</span>
-              <span className="block font-mono text-[10px] uppercase leading-tight text-primary-300">
+              <span className="block font-mono text-base font-bold uppercase leading-tight tracking-wide">
                 {slugAtivo}
+              </span>
+              <span className="block truncate text-[11px] leading-tight text-primary-300" title={nomeEmpresa}>
+                {nomeEmpresa}
               </span>
             </div>
           </div>

@@ -24,8 +24,14 @@ export default async function OrcamentosPage({
 
   const { profile } = await getSessaoComProfile();
 
-  // Entregador não tem acesso a orçamentos; apenas admin e vendedor.
-  if (profile && !ehAdmin(profile.role) && profile.role !== "vendedor") {
+  // Admin e vendedor operam; financeiro tem acesso de LEITURA (podeEscrever
+  // abaixo o exclui). Entregador não tem acesso.
+  if (
+    profile &&
+    !ehAdmin(profile.role) &&
+    profile.role !== "vendedor" &&
+    profile.role !== "financeiro"
+  ) {
     redirect("/entregas");
   }
 
@@ -83,7 +89,6 @@ export default async function OrcamentosPage({
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Orçamentos</h1>
-        <p className="mt-1 text-sm text-gray-500">Espelho VHSYS</p>
       </div>
 
       <OrcamentosView

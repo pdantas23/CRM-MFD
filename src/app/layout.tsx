@@ -5,10 +5,17 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  // Nome da aplicação configurável (genérico por padrão). O nome real da conta
-  // ativa aparece na sidebar; aqui fica o rótulo da aba, pré-seleção de conta.
-  title: process.env.APP_NAME ?? "CRM",
-  description: "Sistema de gestão",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  // O nome real da conta ativa aparece na sidebar; aqui fica o rótulo da aba e o
+  // título usado no preview de links (redes sociais). Ícone/OG vêm dos arquivos
+  // icon.png / opengraph-image.png / twitter-image.png neste diretório.
+  title: "Sistema interno Modular",
+  description: "Sistema interno Modular",
+  openGraph: {
+    title: "Sistema interno Modular",
+    description: "Sistema interno Modular",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

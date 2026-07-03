@@ -8,9 +8,8 @@ import { DashboardEntregas } from "@/components/dashboard/DashboardEntregas";
 import { TabelaSemanalEntregas } from "@/components/entregas/TabelaSemanalEntregas";
 import { EntregasAdminView } from "@/components/entregas/EntregasAdminView";
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
 import type { Entrega } from "@/lib/types/database";
-import { ehAdmin, ehFinanceiro } from "@/lib/auth/roles";
+import { ehAdmin } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import { listarContasAtivas } from "@/lib/accounts/repo";
 import type { ContaInfoMap } from "@/components/entregas/ContaBadge";
@@ -65,11 +64,8 @@ export default async function EntregasPage({
   const { profile } = await getSessaoComProfile();
   const role = profile?.role;
   const isAdmin = ehAdmin(role);
-
-  // Financeiro não opera entregas — vai para a tela de Pedidos.
-  if (ehFinanceiro(role)) {
-    redirect("/pedidos");
-  }
+  // Financeiro tem acesso de LEITURA: cai na visão semanal read-only (isAdmin
+  // false), igual ao vendedor. Escrita de entrega é exclusiva de admin.
 
   // Garante que há uma conta selecionada (redireciona para /selecionar-conta se
   // não). O MURAL é compartilhado entre contas, então a conta ativa não recorta

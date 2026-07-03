@@ -1,6 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
+
+// Cores da marca Modular (vermelho) aplicadas SÓ na tela de login, sobrescrevendo
+// as CSS vars primary-* (que por padrão são azuis fora do tema por conta). Assim
+// btn-primary e o focus dos inputs ficam vermelhos sem tocar no tema global.
+const BRAND_VARS = {
+  "--color-primary-500": "225 31 38",
+  "--color-primary-600": "212 28 34",
+  "--color-primary-700": "176 22 28",
+} as React.CSSProperties;
 
 function Spinner({ className }: { className?: string }) {
   return (
@@ -31,26 +41,34 @@ export default function LoginPage() {
   }, []);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-900 to-primary-700 px-4">
+    <div
+      style={BRAND_VARS}
+      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-neutral-950 px-4"
+    >
+      {/* Brilho vermelho da marca ao fundo. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-[-8rem] h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-primary-600/25 blur-[120px]"
+      />
+
       {loading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-primary-900 to-primary-700">
-          <Spinner className="h-8 w-8 text-white" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950">
+          <Spinner className="h-8 w-8 text-primary-500" />
         </div>
       )}
 
-      <div className="w-full max-w-md">
+      <div className="relative w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-lg">
-            <svg className="h-9 w-9 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-white">
-            {process.env.NEXT_PUBLIC_APP_NAME ?? "CRM"}
-          </h1>
-          <p className="mt-1 text-primary-200">
-            {process.env.NEXT_PUBLIC_APP_LOGIN_SUBTITLE ?? "Acesso interno"}
-          </p>
+          <Image
+            src="/logo.png"
+            alt="Modular"
+            width={112}
+            height={112}
+            priority
+            className="mx-auto mb-2 h-28 w-28 object-contain"
+          />
+          <h1 className="text-xl font-semibold tracking-wide text-white">Sistema interno</h1>
+          <p className="mt-1 text-sm text-neutral-400">Acesso restrito</p>
         </div>
 
         <div className="card p-8">
@@ -109,7 +127,7 @@ export default function LoginPage() {
               href="/gerenciamento"
               className="text-sm font-medium text-gray-500 transition-colors hover:text-gray-800"
             >
-              Gerenciamento interno do CRM
+              Gerenciamento interno
             </a>
           </div>
         </div>
