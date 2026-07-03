@@ -99,8 +99,9 @@ export function PedidosKanban({
                 };
               }
               const res = await moverSituacaoPedido(pedido.id_vhsys, novaSituacaoId);
-              if (res.ok) router.refresh();
-              return res;
+              if (res?.ok) router.refresh();
+              // res undefined (sessão expirada) → devolve falha p/ o board reverter.
+              return res ?? { ok: false, erro: "Sessão expirada. Recarregue a página." };
             }
           : undefined
       }

@@ -11,6 +11,7 @@ import { cacheInvalidate } from "@/lib/crm/cache";
 import { vhsysPost, vhsysPut, vhsysGet, vhsysDelete, runComTokensVhsys, type VhsysTokens } from "./client";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import { getContaComTokensPorId } from "@/lib/accounts/repo";
+import { registrarPedidoEmitido, registrarPagamentoAprovado } from "@/lib/notificacoes/registro";
 import {
   construirModeloSituacoes,
   situacaoEfetiva,
@@ -304,7 +305,7 @@ export async function moverSituacaoPedido(
     const admin = createAdminClient();
     const { data: pedidoEspelho } = await admin
       .from("vhsys_pedidos")
-      .select("situacao_id, vendedor_id_vhsys")
+      .select("situacao_id, vendedor_id_vhsys, numero, nome_cliente")
       .eq("conta_id", conta.id)
       .eq("id_vhsys", idVhsys)
       .single();
@@ -381,6 +382,24 @@ export async function moverSituacaoPedido(
     // TTL do comCache de 30s — senão o card "volta" e o retry dá de===para).
     cacheInvalidate("pedidos");
     revalidatePath("/pedidos");
+
+    // Notifica admin/superadmin quando o pagamento é APROVADO (libera entrega).
+    if (novaSituacaoId === conta.modelo.pagamentoAprovadoId) {
+      const ped = pedidoEspelho as { numero: number | null; nome_cliente: string | null } | null;
+      const { data: perfil } = await admin
+        .from("profiles")
+        .select("nome")
+        .eq("id", ctx.userId)
+        .maybeSingle();
+      await registrarPagamentoAprovado(admin, {
+        contaId: conta.id,
+        pedidoIdVhsys: idVhsys,
+        pedidoNumero: ped?.numero ?? null,
+        nomeCliente: ped?.nome_cliente ?? null,
+        atorUserId: ctx.userId,
+        atorNome: (perfil as { nome: string } | null)?.nome ?? null,
+      });
+    }
 
     return { ok: true };
   } catch (err) {
@@ -870,6 +889,22 @@ export async function criarPedidoDeOrcamento(
     cacheInvalidate("orcamentos");
     revalidatePath("/pedidos");
     revalidatePath("/orcamentos");
+
+    // Notifica financeiro/superadmin: pedido emitido (chega em aguardando pgto).
+    // O nome do emissor é anexado à notificação. Best-effort.
+    const { data: perfilEmissor } = await admin
+      .from("profiles")
+      .select("nome")
+      .eq("id", ctx.userId)
+      .maybeSingle();
+    await registrarPedidoEmitido(admin, {
+      contaId: conta.id,
+      pedidoIdVhsys: idPedido,
+      pedidoNumero: pedidoEspelho.id_pedido ?? null,
+      nomeCliente: pedidoEspelho.nome_cliente ?? null,
+      atorUserId: ctx.userId,
+      atorNome: (perfilEmissor as { nome: string } | null)?.nome ?? null,
+    });
 
     return { ok: true, idPedidoVhsys: idPedido };
   } catch (err) {

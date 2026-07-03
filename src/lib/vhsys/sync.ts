@@ -27,6 +27,7 @@ import {
   situacaoEfetivaOrcamento,
   type ModeloOrcamento,
 } from "./situacoes-orcamento";
+import { registrarPedidoEmitido } from "@/lib/notificacoes/registro";
 import type {
   VhsysProduto,
   VhsysCliente,
@@ -279,6 +280,47 @@ function paraLinhaOrcamento(registro: unknown, modeloOrc: ModeloOrcamento) {
   };
 }
 
+// pedido_emitido é STICKY (mesmo princípio "não rebaixa" de enriquecerPedidos).
+// A emissão via CRM grava pedido_emitido=true no espelho, mas o VHSYS NÃO expõe
+// esse flag para pedidos emitidos pelo CRM (o.pedido_emitido só liga em emissão
+// nativa). Sem isto, todo sync rebaixaria true→false e o orçamento "desmarcaria"
+// após cada rodada. Regra: VHSYS pode PROMOVER false→true; nunca o contrário —
+// um true já gravado no espelho é preservado.
+async function enriquecerOrcamentos(
+  ativos: unknown[],
+  _modo: ModoSync,
+  supabase: ReturnType<typeof createAdminClient>,
+  contaId: string
+): Promise<Map<number, Record<string, unknown>>> {
+  const orcs = ativos as VhsysOrcamento[];
+  const ids = orcs.map((o) => o.id_orcamento);
+
+  // Ids já marcados como emitidos no espelho (em chunks para não estourar o IN).
+  const jaEmitido = new Set<number>();
+  const CHUNK = 500;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const lote = ids.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from("vhsys_orcamentos")
+      .select("id_vhsys")
+      .eq("conta_id", contaId)
+      .eq("pedido_emitido", true)
+      .in("id_vhsys", lote);
+    if (error) throw new Error(`ler pedido_emitido: ${error.message}`);
+    for (const row of data ?? []) jaEmitido.add(row.id_vhsys as number);
+  }
+
+  // Só sobrescreve quando o resultado é true (VHSYS ou espelho); false não vira
+  // override (deixa o valor do paraLinha, que já é o do VHSYS).
+  const over = new Map<number, Record<string, unknown>>();
+  for (const o of orcs) {
+    if (o.pedido_emitido === 1 || jaEmitido.has(o.id_orcamento)) {
+      over.set(o.id_orcamento, { pedido_emitido: true });
+    }
+  }
+  return over;
+}
+
 function paraLinhaContaReceber(registro: unknown) {
   const c = registro as VhsysContaReceber;
   // Vínculo com pedido: id_registro cru NÃO é o número do pedido (colisão
@@ -403,7 +445,7 @@ function construirEntidades(modeloPedidos: ModeloSituacoes, modeloOrc: ModeloOrc
     { entidade: "clientes", tabela: "vhsys_clientes", listar: listarClientes, paraLinha: paraLinhaCliente },
     { entidade: "vendedores", tabela: "vhsys_vendedores", listar: listarVendedores, paraLinha: paraLinhaVendedor },
     { entidade: "pedidos", tabela: "vhsys_pedidos", listar: listarPedidos, paraLinha: (r) => paraLinhaPedido(r, modeloPedidos), enriquecer: enriquecerPedidos },
-    { entidade: "orcamentos", tabela: "vhsys_orcamentos", listar: listarOrcamentos, paraLinha: (r) => paraLinhaOrcamento(r, modeloOrc) },
+    { entidade: "orcamentos", tabela: "vhsys_orcamentos", listar: listarOrcamentos, paraLinha: (r) => paraLinhaOrcamento(r, modeloOrc), enriquecer: enriquecerOrcamentos },
     { entidade: "contas_receber", tabela: "vhsys_contas_receber", listar: listarContasReceber, paraLinha: paraLinhaContaReceber },
     { entidade: "notas_fiscais", tabela: "vhsys_notas_fiscais", listar: listarNotasFiscais, paraLinha: paraLinhaNotaFiscal },
   ];
@@ -524,7 +566,46 @@ async function sincronizarEspelhoInterno(
       for (const linha of linhas) porId.set(linha.id_vhsys, linha);
       const linhasUnicas = Array.from(porId.values());
 
+      // Notificação "pedido emitido": pedidos NOVOS (ainda não no espelho) que
+      // chegam em "aguardando pagamento". Detecta ANTES do upsert (para saber
+      // quais são novos); materializa DEPOIS. Best-effort — nunca quebra a sync.
+      let novosAguardando: Record<string, unknown>[] = [];
+      if (entidade === "pedidos" && modeloPedidos.aguardandoPagamentoId !== null) {
+        try {
+          const candidatos = linhasUnicas.filter(
+            (l) => !l.lixeira && l.situacao_id === modeloPedidos.aguardandoPagamentoId
+          );
+          if (candidatos.length > 0) {
+            const ids = candidatos.map((l) => l.id_vhsys as number);
+            const existentes = new Set<number>();
+            for (let i = 0; i < ids.length; i += 500) {
+              const chunk = ids.slice(i, i + 500);
+              const { data } = await supabase
+                .from("vhsys_pedidos")
+                .select("id_vhsys")
+                .eq("conta_id", conta.id)
+                .in("id_vhsys", chunk);
+              for (const r of (data ?? []) as { id_vhsys: number }[]) existentes.add(r.id_vhsys);
+            }
+            novosAguardando = candidatos.filter((l) => !existentes.has(l.id_vhsys as number));
+          }
+        } catch {
+          novosAguardando = [];
+        }
+      }
+
       await upsertLotes(supabase, tabela, linhasUnicas);
+
+      for (const l of novosAguardando) {
+        await registrarPedidoEmitido(supabase, {
+          contaId: conta.id,
+          pedidoIdVhsys: l.id_vhsys as number,
+          pedidoNumero: (l.numero as number | null) ?? null,
+          nomeCliente: (l.nome_cliente as string | null) ?? null,
+          atorUserId: null,
+          atorNome: "VHSYS",
+        });
+      }
 
       const { error: erroEstado } = await supabase.from("vhsys_sync_estado").upsert(
         {

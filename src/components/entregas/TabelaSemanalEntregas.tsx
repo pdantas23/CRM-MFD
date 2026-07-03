@@ -243,6 +243,7 @@ export function TabelaSemanalEntregas({ entregas, inicioSemana, isAdmin, contas,
                         ? (e) => {
                             if (arrastando) {
                               e.preventDefault();
+                              e.dataTransfer.dropEffect = "move";
                               setOverCelula(chaveCelula);
                             }
                           }
@@ -284,7 +285,20 @@ export function TabelaSemanalEntregas({ entregas, inicioSemana, isAdmin, contas,
                           <div
                             key={entrega.id}
                             draggable={isAdmin ? true : undefined}
-                            onDragStart={isAdmin ? () => setArrastando(entrega) : undefined}
+                            onDragStart={
+                              isAdmin
+                                ? (e) => {
+                                    // Safari/Firefox exigem setData no dragstart.
+                                    e.dataTransfer.effectAllowed = "move";
+                                    try {
+                                      e.dataTransfer.setData("text/plain", entrega.id);
+                                    } catch {
+                                      /* ignorar restrições de setData */
+                                    }
+                                    setArrastando(entrega);
+                                  }
+                                : undefined
+                            }
                             onDragEnd={
                               isAdmin
                                 ? () => {

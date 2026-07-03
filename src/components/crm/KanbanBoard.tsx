@@ -163,6 +163,7 @@ export function KanbanBoard<T>({
                   ? (e) => {
                       if (arrastando) {
                         e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
                         setOverColuna(coluna.id);
                       }
                     }
@@ -214,7 +215,19 @@ export function KanbanBoard<T>({
                       draggable={arrastavel ? true : undefined}
                       onDragStart={
                         arrastavel
-                          ? () => setArrastando(item)
+                          ? (e) => {
+                              // Safari/Firefox só iniciam o arraste se houver
+                              // dataTransfer.setData no dragstart (Chrome tolera
+                              // a ausência). Sem isto o card não arrasta nesses
+                              // navegadores.
+                              e.dataTransfer.effectAllowed = "move";
+                              try {
+                                e.dataTransfer.setData("text/plain", String(getId(item)));
+                              } catch {
+                                /* alguns navegadores restringem setData — ignorar */
+                              }
+                              setArrastando(item);
+                            }
                           : undefined
                       }
                       onDragEnd={

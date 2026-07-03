@@ -73,8 +73,12 @@ export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profil
     startTransition(async () => {
       const resultado = await moverSituacaoOrcamento(orcamento.id_vhsys, novaSituacaoId);
       setSituacaoPendente(null);
-      if (!resultado.ok) {
-        setErroMover(resultado.erro ?? "Erro ao mover situação.");
+      // resultado undefined = a action não retornou (sessão expirada → o POST foi
+      // redirecionado para /login). Mostra aviso em vez de quebrar (resultado.ok).
+      if (!resultado?.ok) {
+        setErroMover(
+          resultado?.erro ?? "Sessão expirada ou falha de conexão. Recarregue a página e entre novamente."
+        );
         return;
       }
       router.refresh();

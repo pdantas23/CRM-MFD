@@ -76,8 +76,11 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever, modelo, 
     startTransition(async () => {
       const resultado = await moverSituacaoPedido(pedido.id_vhsys, novaSituacaoId);
       setSituacaoPendente(null);
-      if (!resultado.ok) {
-        setErroMover(resultado.erro ?? "Erro ao mover situação.");
+      // resultado undefined = sessão expirada (POST redirecionado p/ /login).
+      if (!resultado?.ok) {
+        setErroMover(
+          resultado?.erro ?? "Sessão expirada ou falha de conexão. Recarregue a página e entre novamente."
+        );
         return;
       }
       router.refresh();

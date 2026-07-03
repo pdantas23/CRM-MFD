@@ -5,7 +5,8 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { iniciarRequest, medir, emitirLog } from "@/lib/perf/boot";
 import { getContaAtiva, contasDoUsuario } from "@/lib/accounts/contexto";
 import { deriveScale } from "@/lib/theme/cor";
-import { ehOwner } from "@/lib/auth/roles";
+import { ehAdmin, ehOwner } from "@/lib/auth/roles";
+import { NotificacoesBell } from "@/components/notificacoes/NotificacoesBell";
 
 export default async function DashboardLayout({
   children,
@@ -59,6 +60,10 @@ export default async function DashboardLayout({
         slugAtivo={conta.slug}
       />
       <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</main>
+
+      {/* Sino de notificações: só papéis que recebem avisos (admin/superadmin
+          para pagamento aprovado; financeiro/superadmin para pedido emitido). */}
+      {(ehAdmin(profile.role) || profile.role === "financeiro") && <NotificacoesBell />}
     </div>
   );
 }
