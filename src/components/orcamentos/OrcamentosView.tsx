@@ -289,9 +289,11 @@ function OrcamentosViewInner({
             podeEscrever
               ? async (orc, novaSituacaoId) => {
                   const res = await moverSituacaoOrcamento(orc.id_vhsys, novaSituacaoId);
-                  if (res?.ok) router.refresh();
-                  // res undefined (sessão expirada) → devolve falha p/ o board reverter.
-                  return res ?? { ok: false, erro: "Sessão expirada. Recarregue a página." };
+                  // Reconcilia sempre que NÃO houve falha explícita (ok ou
+                  // resposta perdida): a escrita pode ter persistido mesmo sem
+                  // resposta. Propaga res como está — undefined não reverte.
+                  if (!res || res.ok) router.refresh();
+                  return res;
                 }
               : undefined
           }

@@ -340,8 +340,13 @@ export async function moverSituacaoPedido(
     }
 
     if (!transicaoPermitida(conta.modelo, situacaoAtual, novaSituacaoId)) {
+      const nomeAtual =
+        (situacaoAtual !== null ? conta.modelo.nomePorId[situacaoAtual] : null) ?? "a situação atual";
+      const nomeNovo = conta.modelo.nomePorId[novaSituacaoId] ?? "essa situação";
       throw new Error(
-        `Transição de ${situacaoAtual} para ${novaSituacaoId} não é permitida.`
+        situacaoAtual === novaSituacaoId
+          ? `O pedido já está em "${nomeNovo}".`
+          : `Não é possível mover de "${nomeAtual}" para "${nomeNovo}".`
       );
     }
 
@@ -378,10 +383,12 @@ export async function moverSituacaoPedido(
       .eq("conta_id", conta.id)
       .eq("id_vhsys", idVhsys);
 
-    // Invalida o cache da tela para a mudança aparecer na hora (sem esperar o
-    // TTL do comCache de 30s — senão o card "volta" e o retry dá de===para).
+    // Invalida o cache in-memory (comCache) para o router.refresh() do cliente
+    // reler dados frescos. NÃO usa revalidatePath: re-renderizar e reencaminhar a
+    // resposta da Server Action falhava intermitentemente ("failed to forward
+    // action response"), o cliente recebia undefined e revertia o card mesmo com
+    // a escrita já persistida. O router.refresh() do cliente já reconcilia a UI.
     cacheInvalidate("pedidos");
-    revalidatePath("/pedidos");
 
     // Notifica admin/superadmin quando o pagamento é APROVADO (libera entrega).
     if (novaSituacaoId === conta.modelo.pagamentoAprovadoId) {
@@ -524,8 +531,13 @@ export async function moverSituacaoOrcamento(
     const situacaoAtual = (orcEspelho as { situacao_id: number | null } | null)?.situacao_id ?? null;
 
     if (!transicaoOrcamentoPermitida(conta.modeloOrc, situacaoAtual, novaSituacaoId)) {
+      const nomeAtual =
+        (situacaoAtual !== null ? conta.modeloOrc.nomePorId[situacaoAtual] : null) ?? "a situação atual";
+      const nomeNovo = conta.modeloOrc.nomePorId[novaSituacaoId] ?? "essa situação";
       throw new Error(
-        `Transição de ${situacaoAtual} para ${novaSituacaoId} não é permitida.`
+        situacaoAtual === novaSituacaoId
+          ? `O orçamento já está em "${nomeNovo}".`
+          : `Não é possível mover de "${nomeAtual}" para "${nomeNovo}".`
       );
     }
 
@@ -562,9 +574,10 @@ export async function moverSituacaoOrcamento(
       .eq("conta_id", conta.id)
       .eq("id_vhsys", idOrcamentoVhsys);
 
-    // Invalida o cache da tela de orçamentos (mesmo motivo da move de pedidos).
+    // Invalida o cache in-memory (comCache); o router.refresh() do cliente relê
+    // fresco. NÃO usa revalidatePath (ver moverSituacaoPedido: o forward da
+    // resposta falhava e revertia o card com a escrita já persistida).
     cacheInvalidate("orcamentos");
-    revalidatePath("/orcamentos");
 
     return { ok: true };
   } catch (err) {

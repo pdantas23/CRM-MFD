@@ -74,7 +74,17 @@ export function PedidosKanban({
       getColunaId={(p) => p.situacao_id}
       getId={(p) => p.id}
       getValor={(p) => p.valor_total ?? 0}
-      renderCard={(p) => <PedidoCard pedido={p} onClick={onCardClick} modelo={modelo} podeCadastrarEntrega={podeCadastrarEntrega} />}
+      // Usa a coluna EFETIVA (respeita o override otimista do DnD): ao soltar em
+      // "pagamento aprovado", o card já reflete a nova situação e o botão
+      // "Cadastrar Entrega" abre na hora, sem esperar o router.refresh().
+      renderCard={(p, colunaId) => (
+        <PedidoCard
+          pedido={colunaId === p.situacao_id ? p : { ...p, situacao_id: colunaId }}
+          onClick={onCardClick}
+          modelo={modelo}
+          podeCadastrarEntrega={podeCadastrarEntrega}
+        />
+      )}
       atingiuLimitePorColuna={atingiuLimitePorSituacao}
       carregarMais={handleCarregarMais}
       mensagemVazio="Nenhum pedido nesta situação"
@@ -99,9 +109,12 @@ export function PedidosKanban({
                 };
               }
               const res = await moverSituacaoPedido(pedido.id_vhsys, novaSituacaoId);
-              if (res?.ok) router.refresh();
-              // res undefined (sessão expirada) → devolve falha p/ o board reverter.
-              return res ?? { ok: false, erro: "Sessão expirada. Recarregue a página." };
+              // Reconcilia sempre que NÃO houve falha explícita (ok ou resposta
+              // perdida): a escrita pode ter persistido mesmo sem resposta.
+              if (!res || res.ok) router.refresh();
+              // Propaga res como está — undefined não deve reverter o card
+              // (a escrita pode ter persistido); o board só reverte em {ok:false}.
+              return res;
             }
           : undefined
       }

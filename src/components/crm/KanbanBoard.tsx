@@ -98,17 +98,25 @@ export function KanbanBoard<T>({
     setOverrides((prev) => ({ ...prev, [itemId]: colunaDestinoId }));
 
     const res = await onMoverCard(item, colunaDestinoId);
-    if (!res?.ok) {
-      // Reverter override em caso de falha
-      setOverrides((prev) => {
-        const next = { ...prev };
-        delete next[itemId];
-        return next;
-      });
-      setErroMover(res?.erro ?? "Falha ao mover.");
-    } else {
+    // Mantém o otimismo APENAS em sucesso explícito ({ok:true}); aí o
+    // router.refresh() traz o mesmo destino e não há "piscada".
+    if (res && res.ok) {
       setErroMover(null);
+      return;
     }
+    // Falha explícita OU resposta ambígua (undefined = a Server Action rodou mas
+    // a resposta se perdeu no forward do Next): NÃO confiar no otimismo. Remove o
+    // override e deixa o servidor ditar — o router.refresh() (disparado no
+    // onMoverCard) traz a verdade: se a escrita persistiu, o card vai pro destino;
+    // se não, volta à origem. Nunca mascara um estado que o banco não tem, então
+    // a tela sempre bate com o que um reload mostraria.
+    setOverrides((prev) => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+    // Banner de erro só em falha EXPLÍCITA (com mensagem); ambígua reconcilia calada.
+    setErroMover(res?.erro ?? null);
   }
 
   return (
