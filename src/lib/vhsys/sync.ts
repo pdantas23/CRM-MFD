@@ -6,6 +6,7 @@
 //   corrigir o que o incremental perdeu e propagar exclusões.
 
 import { createAdminClient } from "../supabase/admin";
+import { mapComLimite } from "../concorrencia";
 import { runComTokensVhsys, type VhsysTokens } from "./client";
 import { listarProdutos, listarClientes, listarVendedores, listarSituacoes } from "./catalogos";
 import {
@@ -402,6 +403,11 @@ async function listarSituacoesFlat(): Promise<(VhsysSituacao & { entidade: strin
 
 const LOTE_UPSERT = 500;
 
+// Entidades de uma conta processadas em paralelo (compartilham o rate-limit
+// VHSYS da conta, então mantemos a concorrência baixa). São independentes entre
+// si; a reconciliação que depende de contas_receber+notas_fiscais roda DEPOIS.
+const LIMITE_ENTIDADES = 4;
+
 async function upsertLotes(
   supabase: ReturnType<typeof createAdminClient>,
   tabela: string,
@@ -438,9 +444,14 @@ interface EntidadeSync {
 
 // Constrói a lista de entidades p/ a conta. O paraLinha de pedidos fecha sobre o
 // modelo de situações da conta (mapeamento legado data-driven).
-function construirEntidades(modeloPedidos: ModeloSituacoes, modeloOrc: ModeloOrcamento): EntidadeSync[] {
+function construirEntidades(
+  modeloPedidos: ModeloSituacoes,
+  modeloOrc: ModeloOrcamento,
+  situacoesFlat: SituacaoFlat[]
+): EntidadeSync[] {
   return [
-    { entidade: "situacoes", tabela: "vhsys_situacoes", listar: listarSituacoesFlat, paraLinha: paraLinhaSituacao, semIncremental: true },
+    // `situacoes` reusa o flat já carregado (evita re-listar /situacoes).
+    { entidade: "situacoes", tabela: "vhsys_situacoes", listar: async () => situacoesFlat, paraLinha: paraLinhaSituacao, semIncremental: true },
     { entidade: "produtos", tabela: "vhsys_produtos", listar: listarProdutos, paraLinha: paraLinhaProduto },
     { entidade: "clientes", tabela: "vhsys_clientes", listar: listarClientes, paraLinha: paraLinhaCliente },
     { entidade: "vendedores", tabela: "vhsys_vendedores", listar: listarVendedores, paraLinha: paraLinhaVendedor },
@@ -451,9 +462,10 @@ function construirEntidades(modeloPedidos: ModeloSituacoes, modeloOrc: ModeloOrc
   ];
 }
 
-/** Modelo de situações de pedidos a partir das situações cruas do VHSYS. */
-async function carregarModeloPedidosVhsys(): Promise<ModeloSituacoes> {
-  const flat = await listarSituacoesFlat();
+type SituacaoFlat = VhsysSituacao & { entidade: string };
+
+/** Modelo de situações de pedidos a partir das situações cruas (já carregadas). */
+function modeloPedidosDeFlat(flat: SituacaoFlat[]): ModeloSituacoes {
   const base: SituacaoBase[] = flat
     .filter((s) => s.entidade === "pedidos" && s.lixeira !== "Sim")
     .map((s) => ({
@@ -465,9 +477,8 @@ async function carregarModeloPedidosVhsys(): Promise<ModeloSituacoes> {
   return construirModeloSituacoes(base);
 }
 
-/** Modelo de situações de orçamentos a partir das situações cruas do VHSYS. */
-async function carregarModeloOrcamentoVhsys(): Promise<ModeloOrcamento> {
-  const flat = await listarSituacoesFlat();
+/** Modelo de situações de orçamentos a partir das situações cruas (já carregadas). */
+function modeloOrcamentoDeFlat(flat: SituacaoFlat[]): ModeloOrcamento {
   const base: SituacaoBase[] = flat
     .filter((s) => s.entidade === "orcamentos" && s.lixeira !== "Sim")
     .map((s) => ({
@@ -498,18 +509,22 @@ async function sincronizarEspelhoInterno(
   conta: ContaSync
 ): Promise<ResultadoEntidade[]> {
   const supabase = createAdminClient();
-  const resultados: ResultadoEntidade[] = [];
   const inicioExecucao = new Date();
 
-  // Modelos de situações da conta (colunas/legado) — usados no paraLinha de
-  // pedidos e orçamentos (mapeamento legado data-driven, sem ids fixos).
-  const [modeloPedidos, modeloOrc] = await Promise.all([
-    carregarModeloPedidosVhsys(),
-    carregarModeloOrcamentoVhsys(),
-  ]);
-  const entidades = construirEntidades(modeloPedidos, modeloOrc);
+  // Situações cruas do VHSYS: UMA leitura por conta, reusada nos dois modelos
+  // (pedidos/orçamentos) E na entidade "situacoes" — antes eram 3 chamadas
+  // idênticas a GET /situacoes por conta.
+  const situacoesFlat = await listarSituacoesFlat();
+  const modeloPedidos = modeloPedidosDeFlat(situacoesFlat);
+  const modeloOrc = modeloOrcamentoDeFlat(situacoesFlat);
+  const entidades = construirEntidades(modeloPedidos, modeloOrc, situacoesFlat);
 
-  for (const { entidade, tabela, listar, paraLinha, semIncremental, enriquecer } of entidades) {
+  // Entidades em paralelo (concorrência limitada) — cada uma resolve para seu
+  // ResultadoEntidade; a ordem de `resultados` espelha a ordem de `entidades`.
+  const resultados = await mapComLimite(
+    entidades,
+    LIMITE_ENTIDADES,
+    async ({ entidade, tabela, listar, paraLinha, semIncremental, enriquecer }) => {
     try {
       let modificadosApos: Date | undefined;
       if (modo === "incremental" && !semIncremental) {
@@ -619,19 +634,21 @@ async function sincronizarEspelhoInterno(
       );
       if (erroEstado) throw new Error(`estado ${entidade}: ${erroEstado.message}`);
 
-      resultados.push({ entidade, registros: linhasUnicas.length });
+      return { entidade, registros: linhasUnicas.length };
     } catch (err) {
-      resultados.push({
+      return {
         entidade,
         registros: 0,
         erro: err instanceof Error ? err.message : String(err),
-      });
+      };
     }
-  }
+    }
+  );
 
-  // Reconciliação pós-loop (NÃO no upsert de cada conta): contas_receber
-  // sincroniza ANTES de notas_fiscais (ver ENTIDADES), então o pedido_resolvido
-  // de contas "NFe_" exige a nota já presente. Aqui ambas já foram upsertadas.
+  // Reconciliação pós-entidades: o pedido_resolvido de contas "NFe_" exige a
+  // nota já presente. Com as entidades em paralelo a ordem não é mais garantida,
+  // mas o `await mapComLimite` acima só resolve quando TODAS terminam — então
+  // aqui contas_receber e notas_fiscais já foram upsertadas.
   const { error: erroReconc } = await supabase.rpc("reconciliar_pedido_resolvido");
   if (erroReconc) console.error(`reconciliar_pedido_resolvido: ${erroReconc.message}`);
 

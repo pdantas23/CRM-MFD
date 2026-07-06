@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { sincronizarEspelho, type ModoSync } from "@/lib/vhsys/sync";
 import { listarContasAtivas, getTokensPorSlug } from "@/lib/accounts/repo";
 import { atualizarNomeEmpresa } from "@/lib/vhsys/empresa";
+import { mapComLimite } from "@/lib/concorrencia";
 
 // Polling de sincronização VHSYS → espelho Supabase, para TODAS as contas ativas.
 //
@@ -23,6 +24,14 @@ import { atualizarNomeEmpresa } from "@/lib/vhsys/empresa";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+// Contas processadas em paralelo. Cada conta usa credenciais VHSYS PRÓPRIAS
+// (empresas distintas → rate-limits independentes), então a paralelização entre
+// contas não soma no mesmo bucket VHSYS; o limite existe só para não esgotar
+// conexões Supabase / memória da função.
+const LIMITE_CONTAS = 3;
+
+type ResultadoConta = { conta: string; resultados: unknown[]; erro?: string };
 
 function bearerValido(authHeader: string | null, secret: string): boolean {
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -49,48 +58,53 @@ export async function GET(request: NextRequest) {
 
   const inicio = Date.now();
   try {
-    // Sincroniza TODAS as contas ativas EM SÉRIE (evita estourar o rate-limit
-    // da VHSYS rodando múltiplas contas em paralelo).
+    // Sincroniza as contas ativas em PARALELO com concorrência limitada. Cada
+    // conta tem credenciais VHSYS próprias (rate-limits separados), então a
+    // paralelização não estoura o rate-limit da VHSYS.
     const contas = await listarContasAtivas();
     console.info(`[cron vhsys-sync] início modo=${modo} contas=${contas.length}`);
-    const porConta: Array<{ conta: string; resultados: unknown[]; erro?: string }> = [];
 
-    for (const conta of contas) {
-      try {
-        const tokens = await getTokensPorSlug(conta.slug);
-        if (!tokens) {
-          console.error(`[cron vhsys-sync] conta=${conta.slug} credenciais ausentes`);
-          porConta.push({ conta: conta.slug, resultados: [], erro: "credenciais ausentes" });
-          continue;
-        }
-        const resultados = await sincronizarEspelho(modo, {
-          id: conta.id,
-          slug: conta.slug,
-          tokens,
-        });
-        // Atualiza o nome da empresa (cacheado em accounts) a partir do VHSYS.
-        await atualizarNomeEmpresa({ id: conta.id, tokens });
+    const porConta: ResultadoConta[] = await mapComLimite(
+      contas,
+      LIMITE_CONTAS,
+      async (conta): Promise<ResultadoConta> => {
+        try {
+          const tokens = await getTokensPorSlug(conta.slug);
+          if (!tokens) {
+            console.error(`[cron vhsys-sync] conta=${conta.slug} credenciais ausentes`);
+            return { conta: conta.slug, resultados: [], erro: "credenciais ausentes" };
+          }
+          const resultados = await sincronizarEspelho(modo, {
+            id: conta.id,
+            slug: conta.slug,
+            tokens,
+          });
+          // Atualiza o nome da empresa (cacheado em accounts) a partir do VHSYS.
+          await atualizarNomeEmpresa({ id: conta.id, tokens });
 
-        // Erros por entidade não estouram exceção (sync.ts os coleta em cada
-        // ResultadoEntidade) — logamos cada um para diagnóstico nos logs Vercel.
-        const errosEntidade = (resultados as { entidade: string; erro?: string }[]).filter(
-          (r) => r.erro
-        );
-        for (const e of errosEntidade) {
-          console.error(
-            `[cron vhsys-sync] conta=${conta.slug} entidade=${e.entidade} erro: ${e.erro}`
+          // Erros por entidade não estouram exceção (sync.ts os coleta em cada
+          // ResultadoEntidade) — logamos cada um para diagnóstico nos logs Vercel.
+          const errosEntidade = (resultados as { entidade: string; erro?: string }[]).filter(
+            (r) => r.erro
           );
+          for (const e of errosEntidade) {
+            console.error(
+              `[cron vhsys-sync] conta=${conta.slug} entidade=${e.entidade} erro: ${e.erro}`
+            );
+          }
+          if (!errosEntidade.length) {
+            console.info(
+              `[cron vhsys-sync] conta=${conta.slug} ok (${resultados.length} entidades)`
+            );
+          }
+          return { conta: conta.slug, resultados };
+        } catch (err) {
+          const mensagem = err instanceof Error ? err.message : String(err);
+          console.error(`[cron vhsys-sync] conta=${conta.slug} FALHOU: ${mensagem}`);
+          return { conta: conta.slug, resultados: [], erro: mensagem };
         }
-        if (!errosEntidade.length) {
-          console.info(`[cron vhsys-sync] conta=${conta.slug} ok (${resultados.length} entidades)`);
-        }
-        porConta.push({ conta: conta.slug, resultados });
-      } catch (err) {
-        const mensagem = err instanceof Error ? err.message : String(err);
-        console.error(`[cron vhsys-sync] conta=${conta.slug} FALHOU: ${mensagem}`);
-        porConta.push({ conta: conta.slug, resultados: [], erro: mensagem });
       }
-    }
+    );
 
     const contasComErro = porConta.filter(
       (c) => c.erro || (c.resultados as { erro?: string }[]).some((r) => r.erro)
