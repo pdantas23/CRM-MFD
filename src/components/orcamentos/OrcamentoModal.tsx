@@ -285,6 +285,15 @@ export function OrcamentoModal({ orcamento, situacaoNome, situacoes = [], profil
           </div>
 
           <div className="flex gap-2">
+            {/* Preview do PDF oficial do VHSYS em nova aba (com botão de baixar). */}
+            <a
+              href={`/orcamento-pdf/${orcamento.id_vhsys}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary"
+            >
+              Ver PDF
+            </a>
             {podeEditar && !orcamento.pedido_emitido && (
               <BotaoNavegacao
                 href={`/orcamentos/${orcamento.id_vhsys}/editar`}

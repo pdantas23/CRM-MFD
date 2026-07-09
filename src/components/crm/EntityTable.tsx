@@ -16,6 +16,8 @@ interface EntityTableProps<T> {
   getRowKey: (row: T) => string | number;
   onRowClick?: (row: T) => void;
   emptyMessage?: string;
+  /** Classe da divisória entre as linhas do corpo (default: divide-gray-100). */
+  divideClassName?: string;
 }
 
 export function EntityTable<T>({
@@ -24,6 +26,7 @@ export function EntityTable<T>({
   getRowKey,
   onRowClick,
   emptyMessage = "Nenhum item encontrado.",
+  divideClassName = "divide-gray-100",
 }: EntityTableProps<T>) {
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
@@ -40,7 +43,7 @@ export function EntityTable<T>({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className={`divide-y ${divideClassName}`}>
           {rows.map((row) => (
             <tr
               key={getRowKey(row)}

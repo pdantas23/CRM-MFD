@@ -1,9 +1,10 @@
-// Busca o NOME DA EMPRESA diretamente da API VHSYS — SERVER-ONLY.
+// Busca NOME e ID da empresa diretamente da API VHSYS — SERVER-ONLY.
 //
 // Endpoint confirmado empiricamente (scripts/vhsys-probe-empresa.ts):
 //   GET /empresas → { code:200, status:"success", data:[{ id_empresa,
 //   cnpj_empresa, razao_empresa, fantasia_empresa, ... }] }.
-// Em caso de falha, retorna null (o chamador usa APP_NAME / slug como fallback).
+// O nome cacheia em accounts.nome_empresa; o id_empresa em accounts.vhsys_empresa_id
+// (usado para montar o link público do orçamento — ver orcamento-link.ts).
 
 import { vhsysGet, runComTokensVhsys, corrigirEncoding, type VhsysTokens } from "./client";
 import { createAdminClient } from "../supabase/admin";
@@ -21,6 +22,9 @@ const CAMPOS_NOME = [
   "nome",
 ];
 
+// Campos que podem conter o id da empresa, por prioridade.
+const CAMPOS_ID = ["id_empresa", "id"];
+
 function extrairNome(registro: unknown): string | null {
   if (!registro || typeof registro !== "object") return null;
   const obj = registro as Record<string, unknown>;
@@ -31,41 +35,96 @@ function extrairNome(registro: unknown): string | null {
   return null;
 }
 
-/**
- * Tenta obter o nome da empresa da conta VHSYS ativa no contexto.
- * Deve ser chamada DENTRO de runComTokensVhsys (ou via atualizarNomeEmpresa).
- */
-export async function buscarNomeEmpresa(): Promise<string | null> {
-  for (const path of ENDPOINTS_EMPRESA) {
-    try {
-      const { data } = await vhsysGet<Record<string, unknown>>(path);
-      const nome = extrairNome(data[0]);
-      if (nome) return nome;
-    } catch {
-      // endpoint inexistente/erro → tenta o próximo
-    }
+function extrairIdEmpresa(registro: unknown): number | null {
+  if (!registro || typeof registro !== "object") return null;
+  const obj = registro as Record<string, unknown>;
+  for (const campo of CAMPOS_ID) {
+    const v = obj[campo];
+    const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN;
+    if (Number.isInteger(n) && n > 0) return n;
   }
   return null;
 }
 
+export interface DadosEmpresa {
+  nome: string | null;
+  idEmpresa: number | null;
+}
+
 /**
- * Busca o nome da empresa no VHSYS (com as credenciais da conta) e grava em
- * accounts.nome_empresa + nome_sync_em. Retorna o nome ou null.
+ * Obtém nome + id da empresa da conta VHSYS ativa no contexto.
+ * Deve ser chamada DENTRO de runComTokensVhsys (ou via as funções abaixo).
+ */
+export async function buscarDadosEmpresa(): Promise<DadosEmpresa> {
+  for (const path of ENDPOINTS_EMPRESA) {
+    try {
+      const { data } = await vhsysGet<Record<string, unknown>>(path);
+      const nome = extrairNome(data[0]);
+      const idEmpresa = extrairIdEmpresa(data[0]);
+      if (nome || idEmpresa) return { nome, idEmpresa };
+    } catch {
+      // endpoint inexistente/erro → tenta o próximo
+    }
+  }
+  return { nome: null, idEmpresa: null };
+}
+
+/**
+ * Busca nome + id da empresa no VHSYS (com as credenciais da conta) e grava em
+ * accounts (nome_empresa + nome_sync_em + vhsys_empresa_id). Retorna o nome.
  */
 export async function atualizarNomeEmpresa(conta: {
   id: string;
   tokens: VhsysTokens;
 }): Promise<string | null> {
-  const nome = await runComTokensVhsys(conta.tokens, () => buscarNomeEmpresa());
-  if (!nome) return null;
-
+  const { nome, idEmpresa } = await runComTokensVhsys(conta.tokens, () => buscarDadosEmpresa());
   const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("accounts")
-    .update({ nome_empresa: nome, nome_sync_em: new Date().toISOString() })
-    .eq("id", conta.id);
-  if (error) {
-    console.warn(`atualizarNomeEmpresa: ${error.message}`);
+
+  if (nome) {
+    const { error } = await supabase
+      .from("accounts")
+      .update({ nome_empresa: nome, nome_sync_em: new Date().toISOString() })
+      .eq("id", conta.id);
+    if (error) console.warn(`atualizarNomeEmpresa (nome): ${error.message}`);
+  }
+  // Gravação do id em separado (best-effort): se a migration 0029 ainda não
+  // tiver sido aplicada, a coluna não existe e só ESTE update falha — sem
+  // impedir a gravação do nome acima.
+  if (idEmpresa) {
+    const { error } = await supabase
+      .from("accounts")
+      .update({ vhsys_empresa_id: idEmpresa })
+      .eq("id", conta.id);
+    if (error) console.warn(`atualizarNomeEmpresa (id_empresa): ${error.message}`);
   }
   return nome;
+}
+
+/**
+ * Garante o id da empresa VHSYS da conta: lê de accounts.vhsys_empresa_id e, se
+ * ausente (conta ainda não sincronizada após a migration), busca via
+ * GET /empresas com os tokens da conta e persiste. Retorna null se não resolver.
+ */
+export async function garantirIdEmpresa(conta: {
+  id: string;
+  tokens: VhsysTokens;
+}): Promise<number | null> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("accounts")
+    .select("vhsys_empresa_id")
+    .eq("id", conta.id)
+    .maybeSingle();
+  const existente = (data as { vhsys_empresa_id: number | null } | null)?.vhsys_empresa_id ?? null;
+  if (existente) return existente;
+
+  const { idEmpresa } = await runComTokensVhsys(conta.tokens, () => buscarDadosEmpresa());
+  if (idEmpresa) {
+    const { error } = await supabase
+      .from("accounts")
+      .update({ vhsys_empresa_id: idEmpresa })
+      .eq("id", conta.id);
+    if (error) console.warn(`garantirIdEmpresa: ${error.message}`);
+  }
+  return idEmpresa;
 }

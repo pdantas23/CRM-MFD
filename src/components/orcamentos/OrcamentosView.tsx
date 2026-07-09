@@ -161,7 +161,37 @@ function OrcamentosViewInner({
         ),
       tdClassName: "text-xs",
     },
+    {
+      header: "PDF",
+      // Preview do PDF oficial do VHSYS. stopPropagation p/ não abrir o modal.
+      render: (o) => (
+        <a
+          href={`/orcamento-pdf/${o.id_vhsys}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title="Ver PDF do orçamento"
+          aria-label="Ver PDF do orçamento"
+          className="inline-flex items-center justify-center rounded p-1 text-primary-600 hover:bg-primary-50 hover:text-primary-800"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-6L12 15m0 0l4.5-4.5M12 15V3" />
+          </svg>
+        </a>
+      ),
+      thClassName: "whitespace-nowrap",
+      tdClassName: "whitespace-nowrap",
+    },
   ];
+
+  // Compacta o padding horizontal (px-4 → px-2) de todas as colunas para caber a
+  // coluna extra "PDF" sem scroll horizontal. `!` garante precedência sobre o
+  // px-4 padrão do EntityTable (sem alterar o componente compartilhado).
+  const colunasCompactas: ColunaTabela<OrcamentoRow>[] = colunasTabela.map((c) => ({
+    ...c,
+    thClassName: `!px-2${c.thClassName ? ` ${c.thClassName}` : ""}`,
+    tdClassName: `!px-2${c.tdClassName ? ` ${c.tdClassName}` : ""}`,
+  }));
 
   // ── Colunas do Kanban (data-driven pelo modelo da conta) ──────────────────
   // ids virtuais (ex: -2) não estão em vhsys_situacoes; o nome vem do modelo.
@@ -226,11 +256,12 @@ function OrcamentosViewInner({
       {viewAtual === "lista" && (
         <>
           <EntityTable<OrcamentoRow>
-            colunas={colunasTabela}
+            colunas={colunasCompactas}
             rows={orcamentos}
             getRowKey={(o) => o.id}
             onRowClick={(o) => setOrcamentoAberto(o)}
             emptyMessage="Nenhum orçamento encontrado com estes filtros."
+            divideClassName="divide-gray-200"
           />
 
           {/* Paginação */}
