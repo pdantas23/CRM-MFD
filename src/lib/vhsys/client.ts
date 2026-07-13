@@ -94,11 +94,14 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// A API sinaliza "nenhum registro" com HTTP 403 + status:error e uma string
-// em data ("Nenhum pedido encontrado!"). Isso é resultado vazio, não erro.
+// A API sinaliza "nenhum registro" com status:error + uma string em data
+// ("Nenhum pedido encontrado!"). Isso é resultado vazio, não erro.
+// O HTTP varia por endpoint: a maioria usa 403; GET /clientes usa 404 (observado
+// em produção 2026-07-13). A guarda pela MENSAGEM garante que um 404 real de
+// endpoint inexistente (sem essa string) continue sendo tratado como erro.
 function isEmptyResult(httpStatus: number, body: VhsysEnvelope<unknown> | null): boolean {
   return (
-    httpStatus === 403 &&
+    (httpStatus === 403 || httpStatus === 404) &&
     body !== null &&
     body.status === "error" &&
     typeof body.data === "string" &&
@@ -162,8 +165,11 @@ export async function vhsysGet<T>(
     const okCode = body && (Number(body.code) === 200 || Number(body.code) === 201);
     const okStatus = body && (body.status === "success" || body.status === "sucesso");
     if (!res.ok || !body || !okCode || !okStatus) {
+      // Inclui a mensagem `data` do envelope no erro (diagnóstico) — o corpo de
+      // listagem não carrega tokens, então é seguro logar.
+      const detalhe = typeof body?.data === "string" ? `: ${body.data}` : "";
       throw new VhsysApiError(
-        `VHSYS GET ${path} falhou (HTTP ${res.status}, code ${body?.code})`,
+        `VHSYS GET ${path} falhou (HTTP ${res.status}, code ${body?.code})${detalhe}`,
         res.status,
         body
       );

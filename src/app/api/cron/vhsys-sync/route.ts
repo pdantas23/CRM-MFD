@@ -106,25 +106,40 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    const contasComErro = porConta.filter(
-      (c) => c.erro || (c.resultados as { erro?: string }[]).some((r) => r.erro)
-    );
-    // Sucesso parcial NÃO derruba o job: uma conta com credencial inválida/expirada
-    // não deve marcar todo o cron como falho (as demais sincronizaram). Só devolve
-    // 500 (alerta real) se TODAS as contas falharem. O motivo de cada falha fica
-    // registrado acima nos logs e no corpo da resposta (campo `erro` por conta).
-    const todasFalharam = contas.length > 0 && contasComErro.length === contas.length;
+    // Classificação por conta:
+    //  - FALHA TOTAL: nem chegou a sincronizar (c.erro) OU todas as entidades
+    //    falharam. É o único caso que conta como "conta falha".
+    //  - ERRO PARCIAL: sincronizou, mas alguma entidade falhou (ex.: um endpoint
+    //    do VHSYS intermitente/instável). NÃO derruba o cron — a sincronização
+    //    das demais entidades vale, e o motivo fica nos logs e no corpo.
+    const falhouPorCompleto = (c: ResultadoConta): boolean => {
+      if (c.erro) return true;
+      const ents = c.resultados as { erro?: string }[];
+      return ents.length > 0 && ents.every((r) => r.erro);
+    };
+    const temAlgumErro = (c: ResultadoConta): boolean =>
+      Boolean(c.erro) || (c.resultados as { erro?: string }[]).some((r) => r.erro);
+
+    const contasFalhaTotal = porConta.filter(falhouPorCompleto).length;
+    const contasErroParcial = porConta.filter(
+      (c) => temAlgumErro(c) && !falhouPorCompleto(c)
+    ).length;
+
+    // Só devolve 500 (alerta real) se TODAS as contas falharam por completo.
+    const todasFalharam = contas.length > 0 && contasFalhaTotal === contas.length;
     const status = todasFalharam ? 500 : 200;
     const ms = Date.now() - inicio;
     console.info(
-      `[cron vhsys-sync] fim modo=${modo} ok=${contas.length - contasComErro.length} ` +
-        `erro=${contasComErro.length} status=${status} ${ms}ms`
+      `[cron vhsys-sync] fim modo=${modo} contas=${contas.length} ` +
+        `ok=${contas.length - contasFalhaTotal} falhaTotal=${contasFalhaTotal} ` +
+        `erroParcial=${contasErroParcial} status=${status} ${ms}ms`
     );
     return NextResponse.json(
       {
         modo,
-        ok: contas.length - contasComErro.length,
-        comErro: contasComErro.length,
+        ok: contas.length - contasFalhaTotal,
+        falhaTotal: contasFalhaTotal,
+        erroParcial: contasErroParcial,
         contas: porConta,
       },
       { status }
