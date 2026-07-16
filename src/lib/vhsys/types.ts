@@ -5,10 +5,13 @@
 export interface VhsysProduto {
   id_produto: number;
   id_registro: number;
+  id_categoria?: number;
   cod_produto: string;
   marca_produto: string;
   desc_produto: string;
   fornecedor_produto: string;
+  fornecedor_produto_id?: number;
+  produto_variado?: number;
   estoque_produto: string;
   unidade_produto: string;
   valor_produto: string;
@@ -16,7 +19,9 @@ export interface VhsysProduto {
   peso_produto: string;
   peso_liq_produto: string;
   ncm_produto: string;
+  origem_produto?: number;
   codigo_barra_produto: string;
+  codigo_barras_internos?: string;
   obs_produto: string;
   tipo_produto: string;
   tamanho_produto: string;

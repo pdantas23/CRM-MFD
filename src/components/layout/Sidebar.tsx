@@ -71,6 +71,17 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    href: "/fornecedores",
+    label: "Fornecedores",
+    // Superadmin entra via "admin" (lógica de filtro abaixo).
+    roles: ["admin"],
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V8a2 2 0 00-2-2h-3V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14M9 21v-4a1 1 0 011-1h4a1 1 0 011 1v4M9 9h1m-1 4h1m4-4h1m-1 4h1M5 21h14" />
+      </svg>
+    ),
+  },
+  {
     href: "/configuracoes",
     label: "Configurações",
     roles: ["superadmin"],

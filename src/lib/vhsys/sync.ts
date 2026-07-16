@@ -111,6 +111,8 @@ function paraLinhaProduto(registro: unknown) {
     estoque: numeroOuNull(p.estoque_produto),
     tipo: p.tipo_produto || null,
     status: p.status_produto || null,
+    fornecedor_produto: p.fornecedor_produto || null,
+    fornecedor_produto_id: p.fornecedor_produto_id ?? null,
     lixeira: p.lixeira === "Sim",
     data_cad_vhsys: dataOuNull(p.data_cad_produto),
     data_mod_vhsys: dataOuNull(p.data_mod_produto),
