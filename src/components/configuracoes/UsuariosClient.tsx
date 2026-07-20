@@ -42,6 +42,11 @@ const ROLE_LABEL: Record<string, string> = {
   financeiro: "Financeiro",
 };
 
+// admin pode vincular um vendedor VHSYS (opcional); vendedor exige o vínculo.
+function podeVincularVendedor(role: string): boolean {
+  return role === "vendedor" || role === "admin";
+}
+
 // ── Abas ────────────────────────────────────────────────────────────────────
 
 const ABAS = [
@@ -233,7 +238,7 @@ function ModalCriacaoUsuario({
         email,
         senha,
         role,
-        vendedorId: role === "vendedor" && vendedorId ? Number(vendedorId) : null,
+        vendedorId: podeVincularVendedor(role) && vendedorId ? Number(vendedorId) : null,
       });
       if (!res.ok) {
         setErro(res.erro);
@@ -369,10 +374,12 @@ function ModalCriacaoUsuario({
             />
           </div>
 
-          {/* Vendedor VHSYS — só quando role === "vendedor" */}
-          {role === "vendedor" && (
+          {/* Vendedor VHSYS — para vendedor (obrigatório) e admin (opcional). */}
+          {podeVincularVendedor(role) && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Vendedor VHSYS</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Vendedor VHSYS{role === "admin" ? " (opcional)" : ""}
+              </label>
               <Select
                 options={vendedorOpcoes}
                 value={vendedorId}
@@ -466,7 +473,7 @@ function ModalEdicaoUsuario({
         email,
         senha: senha || undefined,
         role,
-        vendedorId: role === "vendedor" && vendedorId ? Number(vendedorId) : null,
+        vendedorId: podeVincularVendedor(role) && vendedorId ? Number(vendedorId) : null,
       });
       if (!res.ok) {
         setErro(res.erro);
@@ -589,10 +596,12 @@ function ModalEdicaoUsuario({
             />
           </div>
 
-          {/* Vendedor VHSYS — só quando role === "vendedor" */}
-          {role === "vendedor" && (
+          {/* Vendedor VHSYS — para vendedor (obrigatório) e admin (opcional). */}
+          {podeVincularVendedor(role) && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Vendedor VHSYS</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Vendedor VHSYS{role === "admin" ? " (opcional)" : ""}
+              </label>
               <Select
                 options={vendedorOpcoes}
                 value={vendedorId}

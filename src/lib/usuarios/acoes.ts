@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ehSuperadmin } from "@/lib/auth/roles";
 import { aplicarSufixoLogin } from "@/lib/accounts/login-nome";
+import { getContaAtiva, contasDoUsuario } from "@/lib/accounts/contexto";
 
 // ── Tipos públicos ───────────────────────────────────────────────────────────
 
@@ -38,6 +39,14 @@ function roleValido(r: string): r is RoleValido {
   return (ROLES_VALIDOS as readonly string[]).includes(r);
 }
 
+// Roles que podem vincular um vendedor VHSYS ao profile. 'vendedor' EXIGE o
+// vínculo (define de qual vendedor ele enxerga os dados); 'admin' pode tê-lo
+// OPCIONALMENTE — admin que também vende, para aparecer como vendedor nas
+// próprias vendas. Demais roles nunca vinculam (vendedor_id fica null).
+function rolePodeVincularVendedor(role: string): boolean {
+  return role === "vendedor" || role === "admin";
+}
+
 // ── Helper de permissão ────────────────────────────────────────────────────
 
 interface GuardSuperadmin {
@@ -57,28 +66,26 @@ async function exigirSuperadmin(): Promise<GuardSuperadmin> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, conta_id")
+    .select("role")
     .eq("id", user.id)
     .single();
-  const p = profile as { role: string; conta_id: string | null } | null;
+  const p = profile as { role: string } | null;
 
   if (!ehSuperadmin(p?.role)) {
     return { ...base, erro: "Permissão negada: somente superadmin." };
   }
 
-  // Resolve o slug da conta do chamador (accounts só é legível via service role).
-  let contaSlug: string | null = null;
-  if (p?.conta_id) {
-    const admin = createAdminClient();
-    const { data: conta } = await admin
-      .from("accounts")
-      .select("slug")
-      .eq("id", p.conta_id)
-      .maybeSingle();
-    contaSlug = (conta as { slug: string } | null)?.slug ?? null;
+  // Escopo pela CONTA ATIVA (seletor/cookie), como o resto do sistema — antes
+  // usava profiles.conta_id (fixo), o que ignorava a troca de conta e listava
+  // usuários/vendedores da conta errada. Valida que a conta ativa está no
+  // escopo do superadmin (evita gerenciar conta alheia via cookie manipulado).
+  const conta = await getContaAtiva();
+  const permitidas = await contasDoUsuario(user.id);
+  if (!permitidas.some((c) => c.id === conta.id)) {
+    return { ...base, erro: "Conta ativa fora do seu escopo de acesso." };
   }
 
-  return { userId: user.id, contaId: p?.conta_id ?? null, contaSlug, erro: null };
+  return { userId: user.id, contaId: conta.id, contaSlug: conta.slug, erro: null };
 }
 
 // ── Listagens ──────────────────────────────────────────────────────────────
@@ -107,9 +114,13 @@ export async function listarUsuarios(): Promise<Resultado<{ usuarios: UsuarioRow
   const { data: profilesData, error: profErro } = await query;
   if (profErro) return { ok: false, erro: profErro.message };
 
-  const { data: vendedoresData } = await admin
+  // Mesmo escopo por conta + sem lixeira usado em listarVendedoresVhsys.
+  let vendedoresQuery = admin
     .from("vhsys_vendedores")
-    .select("id_vhsys, nome");
+    .select("id_vhsys, nome")
+    .eq("lixeira", false);
+  if (contaId) vendedoresQuery = vendedoresQuery.eq("conta_id", contaId);
+  const { data: vendedoresData } = await vendedoresQuery;
   const nomePorVendedor = new Map<number, string>();
   for (const v of (vendedoresData ?? []) as VendedorVhsys[]) {
     nomePorVendedor.set(v.id_vhsys, v.nome);
@@ -135,14 +146,20 @@ export async function listarUsuarios(): Promise<Resultado<{ usuarios: UsuarioRow
 }
 
 export async function listarVendedoresVhsys(): Promise<Resultado<{ vendedores: VendedorVhsys[] }>> {
-  const { erro } = await exigirSuperadmin();
+  const { erro, contaId } = await exigirSuperadmin();
   if (erro) return { ok: false, erro };
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  // Escopo por conta: id_vhsys é único POR CONTA — sem esse filtro, o mesmo
+  // vendedor aparece uma vez por conta (duplicado). Exclui a lixeira e evita
+  // que a mistura de contas+excluídos estoure o limite padrão de linhas.
+  let query = admin
     .from("vhsys_vendedores")
     .select("id_vhsys, nome")
+    .eq("lixeira", false)
     .order("nome");
+  if (contaId) query = query.eq("conta_id", contaId);
+  const { data, error } = await query;
   if (error) return { ok: false, erro: error.message };
 
   return { ok: true, vendedores: (data ?? []) as VendedorVhsys[] };
@@ -217,7 +234,7 @@ export async function criarUsuario(dados: {
     .update({
       nome,
       role,
-      vendedor_id: role === "vendedor" ? vendedorId : null,
+      vendedor_id: rolePodeVincularVendedor(role) ? vendedorId : null,
       conta_id: contaId,
     })
     .eq("id", novoId);
@@ -304,7 +321,7 @@ export async function atualizarUsuario(
   // Atualiza profile (nome, role, vendedor_id).
   const { error: profErro } = await admin
     .from("profiles")
-    .update({ nome, role, vendedor_id: role === "vendedor" ? vendedorId : null })
+    .update({ nome, role, vendedor_id: rolePodeVincularVendedor(role) ? vendedorId : null })
     .eq("id", id);
   if (profErro) return { ok: false, erro: profErro.message };
 
