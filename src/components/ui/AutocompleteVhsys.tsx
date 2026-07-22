@@ -23,6 +23,8 @@ export interface AutocompleteVhsysProps<T> {
   onChange: (texto: string) => void;
   className?: string;
   disabled?: boolean;
+  /** Foca o input ao montar (usado ao criar uma nova linha de item via Tab). */
+  autoFocus?: boolean;
 }
 
 export function AutocompleteVhsys<T>({
@@ -36,6 +38,7 @@ export function AutocompleteVhsys<T>({
   onChange,
   className,
   disabled,
+  autoFocus,
 }: AutocompleteVhsysProps<T>) {
   const [opcoes, setOpcoes] = useState<T[]>([]);
   const [carregando, setCarregando] = useState(false);
@@ -87,6 +90,7 @@ export function AutocompleteVhsys<T>({
         type="text"
         value={value}
         disabled={disabled}
+        autoFocus={autoFocus}
         onChange={(e) => {
           onChange(e.target.value);
           buscar(e.target.value);

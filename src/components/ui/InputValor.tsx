@@ -13,6 +13,8 @@ interface InputValorProps {
   casas?: number;
   /** Exibe o "0,00" em cinza (estado vazio) enquanto o valor for zero. */
   cinzaSeZero?: boolean;
+  /** Permite interceptar teclas (ex.: Tab no último campo da linha de item). */
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
 }
 
 export function InputValor({
@@ -23,6 +25,7 @@ export function InputValor({
   disabled,
   casas = 2,
   cinzaSeZero,
+  onKeyDown,
 }: InputValorProps) {
   const formatted = value.toLocaleString("pt-BR", {
     minimumFractionDigits: casas,
@@ -42,6 +45,7 @@ export function InputValor({
       inputMode="decimal"
       value={formatted}
       onChange={handleChange}
+      onKeyDown={onKeyDown}
       placeholder={placeholder}
       disabled={disabled}
       className={`input-base ${corZero} ${className ?? ""}`}

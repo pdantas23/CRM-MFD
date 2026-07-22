@@ -124,7 +124,7 @@ function itemVazio(key: number): ItemLinha {
     descProduto: "",
     codProduto: "",
     produtoQuery: "",
-    qtde: 0,
+    qtde: 1,
     ipi: 0,
     icms: 0,
     valorUnit: 0,
@@ -166,9 +166,23 @@ export function NovoOrcamentoPageForm({
 
   // ── 2. Itens de produto ─────────────────────────────────────────────────────
   const [itens, setItens] = useState<ItemLinha[]>([itemVazio(nextKey.current++)]);
+  // Key da linha que deve receber foco ao montar (nova linha criada via Tab).
+  const [focarItemKey, setFocarItemKey] = useState<number | null>(null);
 
   function adicionarItem() {
     setItens((prev) => [...prev, itemVazio(nextKey.current++)]);
+  }
+
+  /**
+   * Tab no ÚLTIMO campo editável (valor unit.) da ÚLTIMA linha cria uma nova
+   * linha e põe o cursor no campo de produto dela, pronta para digitar.
+   */
+  function tabCriaProximoItem(e: React.KeyboardEvent<HTMLInputElement>, ehUltima: boolean) {
+    if (e.key !== "Tab" || e.shiftKey || !ehUltima) return;
+    e.preventDefault();
+    const novaKey = nextKey.current++;
+    setItens((prev) => [...prev, itemVazio(novaKey)]);
+    setFocarItemKey(novaKey);
   }
 
   function removerItem(key: number) {
@@ -571,6 +585,7 @@ export function NovoOrcamentoPageForm({
                       <AutocompleteVhsys<ProdutoOpcao>
                         endpoint="/api/buscar-produtos"
                         placeholder="Buscar produto..."
+                        autoFocus={item.key === focarItemKey}
                         value={item.produtoQuery}
                         onChange={(texto) => {
                           if (texto.trim() === "") {
@@ -647,6 +662,7 @@ export function NovoOrcamentoPageForm({
                       <InputValor
                         value={item.valorUnit}
                         onChange={(n) => atualizarItem(item.key, "valorUnit", n)}
+                        onKeyDown={(e) => tabCriaProximoItem(e, idx === itens.length - 1)}
                         placeholder="0,00"
                         className="w-28 text-right"
                       />
@@ -658,6 +674,9 @@ export function NovoOrcamentoPageForm({
                       <button
                         type="button"
                         onClick={() => removerItem(item.key)}
+                        // Fora da navegação por Tab: o Tab do valor unit. deve ir
+                        // direto para a próxima linha / criar uma nova.
+                        tabIndex={-1}
                         className="text-gray-400 hover:text-red-600"
                         title="Remover produto"
                         aria-label="Remover produto"
