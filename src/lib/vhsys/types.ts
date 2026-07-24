@@ -435,10 +435,13 @@ export interface PayloadParcelaPedido {
   observacoes_parcela?: string;  // ≤255 chars
 }
 
-/** Diferença de itens para edição: itens a deletar (id_ped_produto) e itens a inserir. */
+/** Diferença de itens para edição: só o que mudou é tocado (itens inalterados
+ *  ficam intactos — evita inflar valor_total_produtos ao deletar+reinserir tudo). */
 export interface ItensDiff {
   deletar: number[];                    // id_ped_produto dos itens removidos
   inserir: PayloadItemOrcamento[];      // itens novos a adicionar
+  // itens existentes alterados (qtde/valor/produto): atualizados in-place.
+  atualizar?: { id_ped_produto: number; item: PayloadItemOrcamento }[];
 }
 
 /** Resposta de POST /orcamentos com id_orcamento gerado. */

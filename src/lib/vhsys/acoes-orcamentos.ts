@@ -352,7 +352,10 @@ export async function editarOrcamento(
   idVhsys: number,
   payload: Partial<PayloadCriarOrcamento>,
   itensDiff: ItensDiff,
-  parcelas?: PayloadParcelaOrcamento[]
+  parcelas?: PayloadParcelaOrcamento[],
+  // Total calculado no CRM (o do preview). Usado no espelho porque o GET
+  // pós-PUT volta com o total ainda não recalculado (VHSYS lazy).
+  valorTotalEspelho?: number
 ): Promise<ResultadoAcao> {
   try {
     const ctx = await exigirAdminOuVendedor();
@@ -369,6 +372,9 @@ export async function editarOrcamento(
       throw new Error("referencia_pedido excede 100 caracteres.");
     }
     validarItens(itensDiff.inserir);
+    if (itensDiff.atualizar && itensDiff.atualizar.length > 0) {
+      validarItens(itensDiff.atualizar.map((a) => a.item));
+    }
     if (parcelas && parcelas.length > 0) validarParcelas(parcelas);
 
     // Verifica autoria
@@ -403,6 +409,14 @@ export async function editarOrcamento(
         await vhsysDelete(`/orcamentos/${idVhsys}/produtos/${idPedProduto}`);
       }
 
+      // Atualizar itens alterados in-place (não deleta/reinsere → não infla total)
+      for (const { id_ped_produto, item } of itensDiff.atualizar ?? []) {
+        if (!Number.isInteger(id_ped_produto) || id_ped_produto <= 0) {
+          throw new Error(`id_ped_produto inválido: ${id_ped_produto}`);
+        }
+        await vhsysPut(`/orcamentos/${idVhsys}/produtos/${id_ped_produto}`, item);
+      }
+
       // Inserir itens novos
       for (const item of itensDiff.inserir) {
         await vhsysPost(`/orcamentos/${idVhsys}/produtos`, item);
@@ -417,7 +431,16 @@ export async function editarOrcamento(
       return data;
     });
 
-    if (lista[0]) await upsertOrcamento(lista[0], conta);
+    if (lista[0]) {
+      // O GET pós-PUT pode voltar com o total ainda NÃO recalculado (VHSYS lazy).
+      // Usa o total calculado no CRM (mesmo do preview) para o espelho refletir
+      // já — sem esperar a 2ª edição / próxima sincronização.
+      const orc =
+        valorTotalEspelho !== undefined
+          ? { ...lista[0], valor_total_nota: valorTotalEspelho.toFixed(2) }
+          : lista[0];
+      await upsertOrcamento(orc, conta);
+    }
 
     // Invalida o cache da tela de orçamentos para a edição refletir
     // imediatamente (mesmo padrão das demais ações de escrita).

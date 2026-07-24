@@ -149,8 +149,12 @@ export function NovoOrcamentoPageForm({
 
   const nextKey = useRef(10); // inicia em 10 para itens; parcelas usam valores maiores
 
-  // Guarda os idPedProduto originais para montar o diff "substituir tudo"
-  const idsPedProdutoOriginais = useRef<number[]>([]);
+  // Snapshot dos itens originais (por id_ped_produto) para o diff da edição:
+  // só o que mudou é enviado; itens intactos não são deletados/reinseridos
+  // (deletar+reinserir tudo inflava o valor_total_produtos no VHSYS).
+  const itensOriginais = useRef<
+    Map<number, { idProduto: number; qtde: number; valorUnit: number; ipi: number; icms: number }>
+  >(new Map());
 
   // ── 1. Cliente ──────────────────────────────────────────────────────────────
   const [clienteQuery, setClienteQuery] = useState(iniciais?.nomeCliente ?? "");
@@ -289,9 +293,23 @@ export function NovoOrcamentoPageForm({
 
         if (cancelado) return;
 
-        // Guarda ids originais para o diff
-        const ids = dadosItens.map((i) => i.id_ped_produto).filter(Boolean);
-        idsPedProdutoOriginais.current = ids;
+        // Snapshot dos itens originais (para o diff no submit).
+        const mapa = new Map<
+          number,
+          { idProduto: number; qtde: number; valorUnit: number; ipi: number; icms: number }
+        >();
+        for (const i of dadosItens) {
+          if (i.id_ped_produto) {
+            mapa.set(i.id_ped_produto, {
+              idProduto: i.id_produto,
+              qtde: Number(i.qtde_produto) || 1,
+              valorUnit: Number(i.valor_unit_produto) || 0,
+              ipi: Number(i.ipi_produto ?? 0),
+              icms: Number(i.icms_produto ?? 0),
+            });
+          }
+        }
+        itensOriginais.current = mapa;
 
         // Preenche itens
         const itensCarregados: ItemLinha[] = dadosItens.map((i) => ({
@@ -350,12 +368,13 @@ export function NovoOrcamentoPageForm({
       ...(obsInterno.trim() ? { obs_interno_pedido: obsInterno.trim() } : {}),
       ...(referencia.trim() ? { referencia_pedido: referencia.trim() } : {}),
       ...(prazoEntrega !== "" ? { prazo_orcamento: Number(prazoEntrega) } : {}),
-      ...(descontoReais > 0
-        ? { desconto_pedido: descontoReais.toFixed(2) }
-        : {}),
-      ...(descontoPorc > 0
-        ? { desconto_pedido_porc: descontoPorc.toFixed(2) }
-        : {}),
+      // Desconto SEMPRE como VALOR EM REAIS (a fonte de verdade do preview), com
+      // o percentual ZERADO. O VHSYS aplica desconto_pedido_porc sobre o total já
+      // descontado — "desconto em cima do desconto" a cada edição; o valor
+      // absoluto é idempotente (total = produtos − desconto_pedido). Enviado
+      // sempre (inclusive 0,00) para ATUALIZAR/REMOVER um desconto já gravado.
+      desconto_pedido: descontoReais.toFixed(2),
+      desconto_pedido_porc: "0.00",
       // Frete
       ...(freteValor > 0
         ? { frete_pedido: freteValor.toFixed(2) }
@@ -389,27 +408,64 @@ export function NovoOrcamentoPageForm({
     }
 
     // IPI/ICMS digitados como % no UI — confirmar unidade esperada pela API
-    const itensMapped: PayloadItemOrcamento[] = itensFiltrados.map((i) => ({
+    const paraPayloadItem = (i: ItemLinha): PayloadItemOrcamento => ({
       id_produto: i.idProduto!,
       desc_produto: i.descProduto,
       qtde_produto: i.qtde,
       valor_unit_produto: i.valorUnit,
       ...(i.ipi > 0 ? { ipi_produto: i.ipi } : {}),
       ...(i.icms > 0 ? { icms_produto: i.icms } : {}),
-    }));
+    });
+    const itensMapped: PayloadItemOrcamento[] = itensFiltrados.map(paraPayloadItem);
 
     if (modoEdicao && orcamentoIdVhsys) {
-      // Modo edição: estratégia "substituir tudo"
+      // Diff real: só o que MUDOU é tocado. Itens intactos ficam como estão —
+      // deletar+reinserir tudo inflava o valor_total_produtos no VHSYS.
+      const idsAtuais = new Set(
+        itensFiltrados.map((i) => i.idPedProduto).filter((id): id is number => !!id)
+      );
+      const inalterado = (i: ItemLinha, o: NonNullable<ReturnType<typeof itensOriginais.current.get>>) =>
+        o.idProduto === i.idProduto &&
+        o.qtde === i.qtde &&
+        o.valorUnit === i.valorUnit &&
+        o.ipi === i.ipi &&
+        o.icms === i.icms;
+
       const itensDiff = {
-        deletar: idsPedProdutoOriginais.current,
-        inserir: itensMapped,
+        // Removidos: originais que sumiram da lista atual.
+        deletar: Array.from(itensOriginais.current.keys()).filter((id) => !idsAtuais.has(id)),
+        // Novos: sem id_ped_produto (ainda não existem no VHSYS).
+        inserir: itensFiltrados.filter((i) => !i.idPedProduto).map(paraPayloadItem),
+        // Alterados: já existiam e algum campo mudou → atualiza in-place.
+        atualizar: itensFiltrados
+          .filter((i) => {
+            if (!i.idPedProduto) return false;
+            const o = itensOriginais.current.get(i.idPedProduto);
+            return o ? !inalterado(i, o) : false;
+          })
+          .map((i) => ({ id_ped_produto: i.idPedProduto!, item: paraPayloadItem(i) })),
       };
+
+      // Quando NENHUM produto muda (ex.: só o desconto), o VHSYS não recalcula o
+      // total na hora (lazy) e o GET pós-save volta defasado — a lista só
+      // atualiza na 2ª edição. Enviamos o total já calculado: é seguro porque
+      // não postamos produtos (o "dobrar" só ocorre com total + POST de produto).
+      const semMudancaProdutos =
+        itensDiff.deletar.length === 0 &&
+        itensDiff.inserir.length === 0 &&
+        itensDiff.atualizar.length === 0;
+      if (semMudancaProdutos) {
+        payload.valor_total_produtos = valorProdutos;
+        payload.valor_total_nota = valorTotal.toFixed(2);
+      }
 
       startTransition(async () => {
         const res = await editarOrcamento(
           orcamentoIdVhsys,
           payload,
-          itensDiff
+          itensDiff,
+          undefined,
+          valorTotal
         );
         if (!res.ok) {
           setErro(res.erro ?? "Erro ao salvar orçamento.");
