@@ -17,7 +17,7 @@ import type { Profile } from "@/lib/types/database";
 import { ehAdmin } from "@/lib/auth/roles";
 import { AutocompleteVhsys } from "@/components/ui/AutocompleteVhsys";
 import { InputValor } from "@/components/ui/InputValor";
-import { InputInteiro } from "@/components/ui/InputInteiro";
+import { InputDecimal } from "@/components/ui/InputDecimal";
 import { ParcelasEditor, type ParcelaForm } from "./ParcelasEditor";
 import { MensagensPadrao } from "./MensagensPadrao";
 import { formatBRL } from "@/lib/format";
@@ -679,10 +679,9 @@ export function EmitirPedidoModal({
                               )}
                             </td>
                             <td className="py-2 pr-2">
-                              <InputInteiro
+                              <InputDecimal
                                 value={item.qtde}
                                 onChange={(n) => atualizarItem(item.key, "qtde", n)}
-                                min={1}
                                 placeholder="Qtde"
                                 className="w-20 text-right"
                               />
