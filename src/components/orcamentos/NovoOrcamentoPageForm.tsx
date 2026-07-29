@@ -56,6 +56,9 @@ interface ItemLinha {
   ipi: number;    // IPI % como número
   icms: number;   // ICMS % como número
   valorUnit: number;
+  // Custo do item carregado na edição — o PUT de alterar produto exige
+  // valor_custo_produto (o POST de criar não). Preservado para reenviar.
+  valorCusto?: number;
 }
 
 /** Valores iniciais para pré-preencher o form em modo edição. */
@@ -286,6 +289,7 @@ export function NovoOrcamentoPageForm({
           desc_produto: string;
           qtde_produto: string | number;
           valor_unit_produto: string | number;
+          valor_custo_produto?: string | number;
           ipi_produto?: number;
           icms_produto?: number;
           cod_produto?: string;
@@ -323,6 +327,10 @@ export function NovoOrcamentoPageForm({
           valorUnit: Number(i.valor_unit_produto) || 0,
           ipi: Number(i.ipi_produto ?? 0),
           icms: Number(i.icms_produto ?? 0),
+          valorCusto:
+            i.valor_custo_produto !== undefined && i.valor_custo_produto !== null
+              ? Number(i.valor_custo_produto)
+              : undefined,
         }));
 
         setItens(itensCarregados.length > 0 ? itensCarregados : [itemVazio(nextKey.current++)]);
@@ -415,6 +423,9 @@ export function NovoOrcamentoPageForm({
       valor_unit_produto: i.valorUnit,
       ...(i.ipi > 0 ? { ipi_produto: i.ipi } : {}),
       ...(i.icms > 0 ? { icms_produto: i.icms } : {}),
+      // O PUT de alterar produto exige valor_custo_produto; reenviamos o custo
+      // carregado (o POST de criar novos itens não tem esse campo → fica de fora).
+      ...(i.valorCusto !== undefined ? { valor_custo_produto: i.valorCusto } : {}),
     });
     const itensMapped: PayloadItemOrcamento[] = itensFiltrados.map(paraPayloadItem);
 
