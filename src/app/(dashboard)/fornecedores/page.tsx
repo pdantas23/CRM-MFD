@@ -6,6 +6,7 @@ import { getContaAtiva } from "@/lib/accounts/contexto";
 import { FornecedoresView } from "@/components/fornecedores/FornecedoresView";
 import type { FornecedorComMateriais } from "@/components/fornecedores/ListaFornecedores";
 import type { ProdutoRow } from "@/components/fornecedores/ProdutosFornecedorList";
+import { CHAVES_SECAO } from "@/lib/fornecedores/secoes";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,19 @@ export default async function FornecedoresPage({
   // unknown é seguro — as colunas completas existem em runtime quando buscando.
   const linhas = (data ?? []) as unknown as ProdutoRow[];
 
+  // Seções por fornecedor (associação configurável — tabela fornecedor_secoes).
+  const { data: secoesData } = await supabase
+    .from("fornecedor_secoes")
+    .select("fornecedor_id, secoes")
+    .eq("conta_id", conta.id);
+  const secoesPorForn = new Map<number, string[]>();
+  for (const r of (secoesData ?? []) as { fornecedor_id: number; secoes: string[] | null }[]) {
+    secoesPorForn.set(
+      r.fornecedor_id,
+      (r.secoes ?? []).filter((s) => CHAVES_SECAO.includes(s))
+    );
+  }
+
   // Distingue "casou pelo material" (mostra e permite clicar) de "casou só pelo
   // nome do fornecedor" (mostra só o nome). ilike não considera acento — a
   // comparação aqui espelha isso (case-insensitive simples).
@@ -78,7 +92,13 @@ export default async function FornecedoresPage({
     if (!id) continue; // 0/null tratado como "sem fornecedor"
     let g = grupos.get(id);
     if (!g) {
-      g = { id, nome: p.fornecedor_produto || `Fornecedor #${id}`, total: 0, materiais: [] };
+      g = {
+        id,
+        nome: p.fornecedor_produto || `Fornecedor #${id}`,
+        total: 0,
+        materiais: [],
+        secoes: secoesPorForn.get(id) ?? [],
+      };
       grupos.set(id, g);
     }
     g.total += 1;

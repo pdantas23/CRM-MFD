@@ -1,13 +1,15 @@
 "use client";
-// Busca + lista de fornecedores. O input atualiza o ?q= da URL (debounced) e a
+// Busca + lista de fornecedores AGRUPADA por seção (Drywall / Piso Vinílico /
+// Solução Acústica / Outros). O input atualiza o ?q= da URL (debounced) e a
 // página (server) refaz a consulta; enquanto isso, a lista fica borrada com um
-// spinner por cima (OverlayBusca). Busca casa nome do fornecedor OU
-// descrição/código do material.
+// spinner por cima. Admin pode editar as seções de cada fornecedor.
 
 import { useState, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ListaFornecedores, type FornecedorComMateriais } from "./ListaFornecedores";
 import { OverlayBusca } from "./OverlayBusca";
+import { SecoesFornecedorModal } from "./SecoesFornecedorModal";
+import { SECOES_FORNECEDOR, CHAVES_SECAO } from "@/lib/fornecedores/secoes";
 
 export function FornecedoresView({
   fornecedores,
@@ -21,6 +23,7 @@ export function FornecedoresView({
   const [debouncing, setDebouncing] = useState(false);
   const [isPending, startTransition] = useTransition();
   const primeira = useRef(true);
+  const [editando, setEditando] = useState<FornecedorComMateriais | null>(null);
 
   // Debounce: navega 300ms depois de parar de digitar (replace, não push).
   useEffect(() => {
@@ -39,9 +42,12 @@ export function FornecedoresView({
     return () => clearTimeout(t);
   }, [valor, router]);
 
-  // Cobre o debounce (digitando) e a navegação server (busca no banco).
   const carregando = debouncing || isPending;
   const termo = valor.trim();
+  const buscando = termo.length > 0;
+
+  const daSecao = (chave: string) => fornecedores.filter((f) => f.secoes.includes(chave));
+  const outros = fornecedores.filter((f) => !f.secoes.some((s) => CHAVES_SECAO.includes(s)));
 
   return (
     <>
@@ -73,14 +79,57 @@ export function FornecedoresView({
       <OverlayBusca carregando={carregando}>
         {fornecedores.length === 0 ? (
           <div className="card px-6 py-16 text-center text-sm text-gray-500">
-            {termo
+            {buscando
               ? `Nenhum fornecedor ou material encontrado para "${termo}".`
               : "Nenhum fornecedor encontrado nos produtos ativos."}
           </div>
         ) : (
-          <ListaFornecedores fornecedores={fornecedores} />
+          <div className="space-y-8">
+            {SECOES_FORNECEDOR.map((s) => {
+              const lista = daSecao(s.chave);
+              // Na busca, oculta seções sem resultado; sem busca, mostra as 3
+              // sempre (para o admin categorizar mesmo quando vazias).
+              if (buscando && lista.length === 0) return null;
+              return (
+                <section key={s.chave}>
+                  <h2 className="mb-2 text-lg font-semibold text-gray-800">
+                    {s.label}
+                    <span className="ml-2 text-sm font-normal text-gray-400">({lista.length})</span>
+                  </h2>
+                  {lista.length > 0 ? (
+                    <ListaFornecedores fornecedores={lista} onEditarSecoes={setEditando} />
+                  ) : (
+                    <div className="card px-6 py-8 text-center text-sm text-gray-400">
+                      Nenhum fornecedor nesta seção ainda.
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+
+            {outros.length > 0 && (
+              <section>
+                <h2 className="mb-2 text-lg font-semibold text-gray-800">
+                  Outros
+                  <span className="ml-2 text-sm font-normal text-gray-400">({outros.length})</span>
+                </h2>
+                <ListaFornecedores fornecedores={outros} onEditarSecoes={setEditando} />
+              </section>
+            )}
+          </div>
         )}
       </OverlayBusca>
+
+      {editando && (
+        <SecoesFornecedorModal
+          fornecedor={editando}
+          onFechar={() => setEditando(null)}
+          onSalvo={() => {
+            setEditando(null);
+            router.refresh();
+          }}
+        />
+      )}
     </>
   );
 }
