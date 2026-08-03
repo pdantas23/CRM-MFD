@@ -344,8 +344,11 @@ export function EmitirPedidoModal({
           setTransportadoraNome(completo.transportadora_nome);
         }
 
-        // Detalhes
-        setDataPedido(completo.data_pedido || hojeISO());
+        // Detalhes — a data do pedido é a de EMISSÃO (hoje), NÃO a do orçamento:
+        // herdar a data do orçamento (que pode ser antiga) faz o pedido aparecer
+        // lá no fim da lista do VHSYS (ordenada por data), como se fosse antigo.
+        // O campo continua editável caso queira ajustar.
+        setDataPedido(hojeISO());
         setPrazoEntrega(completo.prazo_entrega ?? "");
         // Vínculo com o orçamento de origem na observação ("Orçamento #N"),
         // igual ao pedido emitido nativamente. O backend garante esse marcador.
