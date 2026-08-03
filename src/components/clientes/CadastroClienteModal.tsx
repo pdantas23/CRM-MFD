@@ -2,7 +2,7 @@
 // Modal de cadastro rápido de cliente — cria no VHSYS e devolve { id_vhsys, razao }.
 // Buscas auxiliares: CNPJ (BrasilAPI) e CEP (ViaCEP) preenchem os campos.
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { criarCliente } from "@/lib/vhsys/acoes-clientes";
 import type { PayloadCriarCliente } from "@/lib/vhsys/types";
 
@@ -17,6 +17,29 @@ const UFS = [
   "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
   "SP", "SE", "TO",
 ];
+
+/** Formata dígitos como CNPJ: 00.000.000/0000-00 (progressivo). */
+function mascaraCnpj(v: string): string {
+  const d = v.replace(/\D/g, "").slice(0, 14);
+  if (d.length <= 2) return d;
+  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
+  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
+  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+
+/** Formata dígitos como CPF: 000.000.000-00 (progressivo). */
+function mascaraCpf(v: string): string {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+function mascaraDoc(v: string, tipo: "PJ" | "PF"): string {
+  return tipo === "PJ" ? mascaraCnpj(v) : mascaraCpf(v);
+}
 
 // Ícone de lupa (heroicons — magnifying glass)
 function IconeLupa() {
@@ -88,6 +111,22 @@ export function CadastroClienteModal({ onClose, onCriado }: Props) {
     }
   }
 
+  // Busca automática (como no VHSYS): ao completar os 14 dígitos de um CNPJ (PJ),
+  // consulta sozinho após um pequeno debounce. O ref evita repetir a mesma busca.
+  const ultimoCnpjBuscado = useRef("");
+  useEffect(() => {
+    if (tipoPessoa !== "PJ") return;
+    const digitos = cnpj.replace(/\D/g, "");
+    if (digitos.length !== 14 || digitos === ultimoCnpjBuscado.current) return;
+    const t = setTimeout(() => {
+      ultimoCnpjBuscado.current = digitos;
+      buscarCnpj();
+    }, 400);
+    return () => clearTimeout(t);
+    // buscarCnpj usa o `cnpj` do render atual; deps intencionalmente enxutas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cnpj, tipoPessoa]);
+
   async function buscarCep() {
     setErro(null);
     const digitos = cep.replace(/\D/g, "");
@@ -125,7 +164,8 @@ export function CadastroClienteModal({ onClose, onCriado }: Props) {
     const payload: PayloadCriarCliente = {
       razao_cliente: razao.trim(),
       tipo_pessoa: tipoPessoa,
-      ...(cnpj.trim() ? { cnpj_cliente: cnpj.trim() } : {}),
+      // Envia só os dígitos (sem a máscara . / -).
+      ...(cnpj.replace(/\D/g, "") ? { cnpj_cliente: cnpj.replace(/\D/g, "") } : {}),
       // Campos exclusivos de PJ
       ...(tipoPessoa === "PJ" && inscEstadual.trim() ? { insc_estadual_cliente: inscEstadual.trim() } : {}),
       ...(tipoPessoa === "PJ" && fantasia.trim() ? { fantasia_cliente: fantasia.trim() } : {}),
@@ -177,7 +217,12 @@ export function CadastroClienteModal({ onClose, onCriado }: Props) {
               <label className="mb-1 block text-sm font-medium text-gray-700">Tipo de pessoa</label>
               <select
                 value={tipoPessoa}
-                onChange={(e) => setTipoPessoa(e.target.value as "PJ" | "PF")}
+                onChange={(e) => {
+                  const t = e.target.value as "PJ" | "PF";
+                  setTipoPessoa(t);
+                  // Reaplica a máscara do novo tipo aos dígitos já digitados.
+                  setCnpj((c) => mascaraDoc(c, t));
+                }}
                 className="input-base w-full"
               >
                 <option value="PJ">Jurídica</option>
@@ -192,7 +237,9 @@ export function CadastroClienteModal({ onClose, onCriado }: Props) {
                 <input
                   type="text"
                   value={cnpj}
-                  onChange={(e) => setCnpj(e.target.value)}
+                  onChange={(e) => setCnpj(mascaraDoc(e.target.value, tipoPessoa))}
+                  inputMode="numeric"
+                  placeholder={tipoPessoa === "PJ" ? "00.000.000/0000-00" : "000.000.000-00"}
                   className="input-base w-full"
                 />
                 {/* Busca automática só existe para CNPJ (BrasilAPI); CPF não tem consulta pública. */}
