@@ -457,19 +457,10 @@ export function NovoOrcamentoPageForm({
           .map((i) => ({ id_ped_produto: i.idPedProduto!, item: paraPayloadItem(i) })),
       };
 
-      // Quando NENHUM produto muda (ex.: só o desconto), o VHSYS não recalcula o
-      // total na hora (lazy) e o GET pós-save volta defasado — a lista só
-      // atualiza na 2ª edição. Enviamos o total já calculado: é seguro porque
-      // não postamos produtos (o "dobrar" só ocorre com total + POST de produto).
-      const semMudancaProdutos =
-        itensDiff.deletar.length === 0 &&
-        itensDiff.inserir.length === 0 &&
-        itensDiff.atualizar.length === 0;
-      if (semMudancaProdutos) {
-        payload.valor_total_produtos = valorProdutos;
-        payload.valor_total_nota = valorTotal.toFixed(2);
-      }
-
+      // NÃO enviar valor_total_produtos/valor_total_nota no PUT: o endpoint de
+      // ATUALIZAR orçamento não aceita esses campos (só o de criar) e rejeita
+      // ("formato inválido"). O total do espelho é gravado via valorTotal abaixo,
+      // e o VHSYS recalcula o dele a partir dos produtos + frete − desconto.
       startTransition(async () => {
         const res = await editarOrcamento(
           orcamentoIdVhsys,
