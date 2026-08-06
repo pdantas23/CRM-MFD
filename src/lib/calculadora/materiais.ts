@@ -8,7 +8,10 @@
 //
 // FORROS — entram só pela ÁREA (m²), como na Trevo. Forro Estruturado: consumo
 // da 222. Forro Aramado: método Trevo completo (placa 1,05 + nervura, gesso
-// cola, junção H, arame 18, massa/fita Trevo).
+// cola, junção H, arame 18, massa Trevo).
+//
+// FITA — em todos os tipos é a fita telada azul (rolo 90 m). O consumo em metros
+// (comprimento de junta por m²) vem da 222/Trevo; só o rolo/produto é o da casa.
 
 export interface ItemComposicao {
   nome: string;
@@ -80,7 +83,7 @@ export const TIPOS: TipoCalculo[] = [
       { nome: "Montante (3 m)", consumoM2: 2.5, fator: 3, unidade: "peça(s)" }, // 222
       { nome: "Guia (3 m)", consumoM2: 0.9, fator: 3, unidade: "peça(s)" }, // 222
       { nome: "Massa pronta", consumoM2: 0.94, fator: 22, unidade: "balde(s) 22 kg" }, // Trevo
-      { nome: "Fita para junta", consumoM2: 2.8, fator: 150, unidade: "rolo(s) 150 m" }, // 222
+      { nome: "Fita telada azul", consumoM2: 2.8, fator: 90, unidade: "rolo(s) 90 m" }, // 222
       { nome: "Parafuso TA 25", consumoM2: 22, fator: 1, unidade: "un" }, // maior(222 22, Trevo 22)
       { nome: "Parafuso S7", consumoM2: 2, fator: 1, unidade: "un" }, // maior(222 2, Trevo 2)
     ],
@@ -101,7 +104,7 @@ export const TIPOS: TipoCalculo[] = [
       { nome: "Montante (3 m)", consumoM2: 2.5, fator: 3, unidade: "peça(s)" }, // 222
       { nome: "Guia (3 m)", consumoM2: 0.9, fator: 3, unidade: "peça(s)" }, // 222
       { nome: "Massa pronta", consumoM2: 1.88, fator: 22, unidade: "balde(s) 22 kg" }, // Trevo (separativa)
-      { nome: "Fita para junta", consumoM2: 3, fator: 150, unidade: "rolo(s) 150 m" }, // 222 = Trevo
+      { nome: "Fita telada azul", consumoM2: 3, fator: 90, unidade: "rolo(s) 90 m" }, // 222 = Trevo
       { nome: "Lã de PET", consumoM2: 1.05, fator: 30, unidade: "rolo(s)" }, // 222
       { nome: "Parafuso TA 25", consumoM2: 13, fator: 1, unidade: "un" }, // maior(222 10, Trevo 13)
       { nome: "Parafuso TA 35", consumoM2: 29, fator: 1, unidade: "un" }, // maior(222 29, Trevo 22)
@@ -115,7 +118,7 @@ export const TIPOS: TipoCalculo[] = [
     img: "/calculadora/forro-aramado.png",
     entrada: "forro",
     // Método Trevo (forro-aramado-h): placa 1,05 + nervura, gesso cola (cola a
-    // nervura), junção H, arame 18, massa e fita Trevo.
+    // nervura), junção H, arame 18, massa Trevo (fita telada, como nos demais).
     itens: [
       { nome: "Placa ST 12,5 (0,60 × 2,00)", consumoM2: 1.05, fator: 1.2, unidade: "placa(s)" },
       { nome: "Nervura com chapa (h 5 cm)", consumoM2: 0.09, fator: 1.2, unidade: "chapa(s)", arredonda: "baixo" },
@@ -123,7 +126,7 @@ export const TIPOS: TipoCalculo[] = [
       { nome: 'Junção "H"', consumoM2: 4.5, fator: 1, unidade: "un" },
       { nome: "Arame nº 18", consumoM2: 0.14, fator: 1, unidade: "kg" },
       { nome: "Massa pronta", consumoM2: 0.84, fator: 22, unidade: "balde(s) 22 kg" },
-      { nome: "Fita para junta", consumoM2: 3, fator: 150, unidade: "rolo(s) 150 m" },
+      { nome: "Fita telada azul", consumoM2: 3, fator: 90, unidade: "rolo(s) 90 m" },
     ],
   },
   {
@@ -134,7 +137,7 @@ export const TIPOS: TipoCalculo[] = [
     entrada: "forro",
     itens: [
       { nome: "Placa ST BR 12,5mm", consumoM2: 1.05, fator: 2.16, unidade: "placa(s)" },
-      { nome: "Fita para junta", consumoM2: 1.4, fator: 150, unidade: "rolo(s) 150 m" },
+      { nome: "Fita telada azul", consumoM2: 1.4, fator: 90, unidade: "rolo(s) 90 m" },
       { nome: "Massa pronta", consumoM2: 0.47, fator: 30, unidade: "balde(s) 30 kg" },
       { nome: "Canaleta S47 (3 m)", consumoM2: 2, fator: 3, unidade: "perfil(is)" },
       { nome: "Tabica S 40×48 (3 m)", consumoM2: 0.9, fator: 3, unidade: "tabica(s)" },
