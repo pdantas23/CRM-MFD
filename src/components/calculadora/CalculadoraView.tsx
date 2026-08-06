@@ -1,18 +1,19 @@
 "use client";
-// Aba Calculadora, dividida em duas: Preço de venda (precificação por lucro) e
-// Quantidade por obra (planejamento por metragem — a implementar depois).
+// Aba Calculadora, dividida em duas: Quantidade de produtos (planejamento de
+// materiais por metragem) e Preço de venda (precificação por lucro).
 
 import { useState } from "react";
 import { CalculadoraPrecoVenda } from "./CalculadoraPrecoVenda";
+import { CalculadoraQuantidade } from "./CalculadoraQuantidade";
 
 const ABAS = [
+  { id: "quantidade", label: "Quantidade de produtos" },
   { id: "preco", label: "Preço de venda" },
-  { id: "quantidade", label: "Quantidade por obra" },
 ] as const;
 type AbaId = (typeof ABAS)[number]["id"];
 
 export function CalculadoraView() {
-  const [aba, setAba] = useState<AbaId>("preco");
+  const [aba, setAba] = useState<AbaId>("quantidade");
 
   return (
     <div className="space-y-6">
@@ -35,14 +36,7 @@ export function CalculadoraView() {
 
       {aba === "preco" && <CalculadoraPrecoVenda />}
 
-      {aba === "quantidade" && (
-        <div className="card px-6 py-16 text-center">
-          <p className="text-sm font-medium text-gray-700">Quantidade por obra</p>
-          <p className="mt-1 text-sm text-gray-400">
-            Cálculo de materiais por metragem — em desenvolvimento.
-          </p>
-        </div>
-      )}
+      {aba === "quantidade" && <CalculadoraQuantidade />}
     </div>
   );
 }
