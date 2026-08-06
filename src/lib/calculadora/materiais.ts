@@ -6,9 +6,9 @@
 // (coincidem com a 222 na placa) e os parafusos usam o MAIOR coeficiente entre
 // 222 e Trevo. Placa selecionável ST/RU (mesma dimensão 1,20×1,80 = 2,16 m²).
 //
-// FORROS — entram só pela ÁREA (m²), como na Trevo; consumo por m² da 222. A
-// placa do Forro Aramado diverge da Trevo (222 = 1,14/m²; Trevo = 1,05 +
-// nervura) — ver AVISO no tipo.
+// FORROS — entram só pela ÁREA (m²), como na Trevo. Forro Estruturado: consumo
+// da 222. Forro Aramado: método Trevo completo (placa 1,05 + nervura, gesso
+// cola, junção H, arame 18, massa/fita Trevo).
 
 export interface ItemComposicao {
   nome: string;
@@ -17,6 +17,8 @@ export interface ItemComposicao {
   /** Divisor de embalagem/peça (1 = unidade direta). Ex.: rolo 150 m, balde 22 kg. */
   fator: number;
   unidade: string;
+  /** Arredondamento da quantidade: "cima" (padrão) ou "baixo" (nervura da Trevo). */
+  arredonda?: "cima" | "baixo";
 }
 
 export type ModoEntrada = "parede" | "forro";
@@ -51,9 +53,14 @@ export interface TipoCalculo {
   aviso?: string;
 }
 
-// Placa arredonda para cima (nº de chapas inteiras), como na Trevo.
+// Arredonda para cima (nº de embalagens inteiras), como na Trevo.
 export function roundup(v: number): number {
   return Math.ceil(Math.round(v * 100) / 100);
+}
+
+// Arredonda para baixo (aproveitamento — a nervura da Trevo usa Math.floor).
+export function rounddown(v: number): number {
+  return Math.floor(Math.round(v * 100) / 100);
 }
 
 export const TIPOS: TipoCalculo[] = [
@@ -107,19 +114,16 @@ export const TIPOS: TipoCalculo[] = [
     descricao: "Forro aramado “H”",
     img: "/calculadora/forro-aramado.png",
     entrada: "forro",
-    aviso:
-      "Placa do Forro Aramado: usando o consumo da 222 (1,14/m²). O método da Trevo " +
-      "seria 1,05/m² + nervura — avise se quiser trocar.",
+    // Método Trevo (forro-aramado-h): placa 1,05 + nervura, gesso cola (cola a
+    // nervura), junção H, arame 18, massa e fita Trevo.
     itens: [
-      { nome: "Placa ST 12,5 (0,60 × 2,00)", consumoM2: 1.14, fator: 1.2, unidade: "placa(s)" },
-      { nome: "Fita para junta", consumoM2: 2.8, fator: 150, unidade: "rolo(s) 150 m" },
-      { nome: 'Junção "H"', consumoM2: 4.3, fator: 1, unidade: "un" },
-      { nome: "Gesso em pó", consumoM2: 3.8, fator: 40, unidade: "saco(s) 40 kg" },
-      { nome: "Parafuso S7", consumoM2: 4.3, fator: 1, unidade: "un" },
-      { nome: "Arame galvanizado nº 16", consumoM2: 0.05, fator: 1, unidade: "kg" },
-      { nome: "Massa pronta", consumoM2: 0.47, fator: 30, unidade: "balde(s) 30 kg" },
-      { nome: "Sisal", consumoM2: 0.08, fator: 1, unidade: "kg" },
-      { nome: "Broca SDS Plus (S7)", consumoM2: 0.05, fator: 1, unidade: "un" },
+      { nome: "Placa ST 12,5 (0,60 × 2,00)", consumoM2: 1.05, fator: 1.2, unidade: "placa(s)" },
+      { nome: "Nervura com chapa (h 5 cm)", consumoM2: 0.09, fator: 1.2, unidade: "chapa(s)", arredonda: "baixo" },
+      { nome: "Gesso Cola 5 kg", consumoM2: 1.25, fator: 5, unidade: "saco(s) 5 kg" },
+      { nome: 'Junção "H"', consumoM2: 4.5, fator: 1, unidade: "un" },
+      { nome: "Arame nº 18", consumoM2: 0.14, fator: 1, unidade: "kg" },
+      { nome: "Massa pronta", consumoM2: 0.84, fator: 22, unidade: "balde(s) 22 kg" },
+      { nome: "Fita para junta", consumoM2: 3, fator: 150, unidade: "rolo(s) 150 m" },
     ],
   },
   {
@@ -169,9 +173,12 @@ export function calcularMateriais(
       placas.push({ nome: "Placa RU BR 12,5mm", consumoM2: op.ru, fator: 2.16, unidade: "placa(s)" });
   }
 
-  return [...placas, ...tipo.itens].map((i) => ({
-    nome: i.nome,
-    quantidade: area > 0 ? roundup((area * i.consumoM2) / i.fator) : 0,
-    unidade: i.unidade,
-  }));
+  return [...placas, ...tipo.itens].map((i) => {
+    const bruto = area > 0 ? (area * i.consumoM2) / i.fator : 0;
+    return {
+      nome: i.nome,
+      quantidade: i.arredonda === "baixo" ? rounddown(bruto) : roundup(bruto),
+      unidade: i.unidade,
+    };
+  });
 }
