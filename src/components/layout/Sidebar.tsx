@@ -82,6 +82,16 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    href: "/calculadora",
+    label: "Calculadora",
+    roles: ["admin", "vendedor"],
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m-6 4h.01M13 11h.01M9 15h.01M13 15h.01M7 3h10a2 2 0 012 2v14a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
+      </svg>
+    ),
+  },
+  {
     href: "/configuracoes",
     label: "Configurações",
     roles: ["superadmin"],
