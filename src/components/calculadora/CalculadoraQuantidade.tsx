@@ -1,13 +1,14 @@
 "use client";
-// Calculadora de quantidade de materiais por metragem (base: planilha 222 da
-// Modular). Primeira vista = cards por tipo de estrutura (como na Trevo); ao
-// escolher um card, abre a calculadora daquele tipo.
-// Parede: área = metragem linear × pé-direito. Forro: largura × comprimento.
+// Calculadora de quantidade de produtos. Primeira vista = cards por tipo; ao
+// escolher um, abre a calculadora. Drywall (paredes/forros) entra por área (m²)
+// e usa a planilha 222/Trevo; o card Piso Vinílico abre sua própria interface
+// (sub-abas Piso e Insumos).
 
 import { useState } from "react";
 import { InputValor } from "@/components/ui/InputValor";
 import { TIPOS, calcularMateriais, type TipoCalculo } from "@/lib/calculadora/materiais";
 import { imprimirOrcamentoPdf } from "@/lib/calculadora/orcamentoPdf";
+import { CalculadoraPisoVinilico } from "./CalculadoraPisoVinilico";
 
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -32,17 +33,17 @@ function IconeTipo({ entrada }: { entrada: TipoCalculo["entrada"] }) {
 }
 
 export function CalculadoraQuantidade() {
-  const [tipo, setTipo] = useState<TipoCalculo | null>(null);
+  const [sel, setSel] = useState<TipoCalculo | "piso" | null>(null);
 
   // ── Primeira vista: cards por tipo ──────────────────────────────────────────
-  if (!tipo) {
+  if (!sel) {
     return (
       <div className="grid gap-4 sm:grid-cols-2">
         {TIPOS.map((t) => (
           <button
             key={t.id}
             type="button"
-            onClick={() => setTipo(t)}
+            onClick={() => setSel(t)}
             className="card group overflow-hidden text-left transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary-300"
           >
             <div className="flex h-40 items-center justify-center bg-gray-50">
@@ -59,16 +60,33 @@ export function CalculadoraQuantidade() {
             </div>
           </button>
         ))}
+
+        {/* Card Piso Vinílico — abre interface própria (Piso / Insumos) */}
+        <button
+          type="button"
+          onClick={() => setSel("piso")}
+          className="card group overflow-hidden text-left transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary-300"
+        >
+          <div className="flex h-40 items-center justify-center bg-gray-50">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/calculadora/piso-vinilico.jpg" alt="Piso Vinílico" className="h-full w-full object-cover" />
+          </div>
+          <div className="p-4">
+            <p className="font-semibold text-gray-900 group-hover:text-primary-600">Piso Vinílico</p>
+            <p className="mt-0.5 text-sm text-gray-500">Tarkett e Rufino · piso e insumos</p>
+          </div>
+        </button>
       </div>
     );
   }
 
-  // ── Calculadora do tipo escolhido ───────────────────────────────────────────
+  // ── Detalhe do card escolhido ───────────────────────────────────────────────
+  const isPiso = sel === "piso";
   return (
     <div>
       <button
         type="button"
-        onClick={() => setTipo(null)}
+        onClick={() => setSel(null)}
         className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -78,11 +96,13 @@ export function CalculadoraQuantidade() {
       </button>
 
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">{tipo.nome}</h2>
-        <p className="text-sm text-gray-500">{tipo.descricao}</p>
+        <h2 className="text-lg font-semibold text-gray-900">{isPiso ? "Piso Vinílico" : sel.nome}</h2>
+        <p className="text-sm text-gray-500">
+          {isPiso ? "Quantidade de piso e insumos" : sel.descricao}
+        </p>
       </div>
 
-      <FormularioTipo tipo={tipo} />
+      {isPiso ? <CalculadoraPisoVinilico /> : <FormularioTipo tipo={sel} />}
     </div>
   );
 }
