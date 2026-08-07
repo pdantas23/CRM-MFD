@@ -4,11 +4,12 @@
 // e usa a planilha 222/Trevo; o card Piso Vinílico abre sua própria interface
 // (sub-abas Piso e Insumos).
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { InputValor } from "@/components/ui/InputValor";
 import { TIPOS, calcularMateriais, type TipoCalculo } from "@/lib/calculadora/materiais";
 import { imprimirOrcamentoPdf } from "@/lib/calculadora/orcamentoPdf";
 import { CalculadoraPisoVinilico } from "./CalculadoraPisoVinilico";
+import { CalculadoraForroRemovivel } from "./CalculadoraForroRemovivel";
 
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -32,56 +33,95 @@ function IconeTipo({ entrada }: { entrada: TipoCalculo["entrada"] }) {
   );
 }
 
+// Card clicável da grade (tipo de drywall, forro removível ou piso vinílico).
+function CardCalc({
+  img,
+  cover,
+  iconeEntrada,
+  nome,
+  descricao,
+  onClick,
+}: {
+  img?: string;
+  cover?: boolean;
+  iconeEntrada?: TipoCalculo["entrada"];
+  nome: string;
+  descricao: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="card group overflow-hidden text-left transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary-300"
+    >
+      <div className="flex h-40 items-center justify-center bg-gray-50">
+        {img ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={img}
+            alt={nome}
+            className={cover ? "h-full w-full object-cover" : "h-full w-full object-contain p-3"}
+          />
+        ) : iconeEntrada ? (
+          <IconeTipo entrada={iconeEntrada} />
+        ) : null}
+      </div>
+      <div className="p-4">
+        <p className="font-semibold text-gray-900 group-hover:text-primary-600">{nome}</p>
+        <p className="mt-0.5 text-sm text-gray-500">{descricao}</p>
+      </div>
+    </button>
+  );
+}
+
 export function CalculadoraQuantidade() {
-  const [sel, setSel] = useState<TipoCalculo | "piso" | null>(null);
+  const [sel, setSel] = useState<TipoCalculo | "piso" | "removivel" | null>(null);
 
   // ── Primeira vista: cards por tipo ──────────────────────────────────────────
   if (!sel) {
     return (
       <div className="grid gap-4 sm:grid-cols-2">
         {TIPOS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setSel(t)}
-            className="card group overflow-hidden text-left transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary-300"
-          >
-            <div className="flex h-40 items-center justify-center bg-gray-50">
-              {t.img ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={t.img} alt={t.nome} className="h-full w-full object-contain p-3" />
-              ) : (
-                <IconeTipo entrada={t.entrada} />
-              )}
-            </div>
-            <div className="p-4">
-              <p className="font-semibold text-gray-900 group-hover:text-primary-600">{t.nome}</p>
-              <p className="mt-0.5 text-sm text-gray-500">{t.descricao}</p>
-            </div>
-          </button>
+          <Fragment key={t.id}>
+            {/* Forro Removível entra antes do Forro Aramado */}
+            {t.id === "forro-aramado" && (
+              <CardCalc
+                img="/calculadora/forro-removivel.png"
+                nome="Forro Removível"
+                descricao="Mineral, isopor, gesso ou Ecophon"
+                onClick={() => setSel("removivel")}
+              />
+            )}
+            <CardCalc
+              img={t.img}
+              iconeEntrada={t.entrada}
+              nome={t.nome}
+              descricao={t.descricao}
+              onClick={() => setSel(t)}
+            />
+          </Fragment>
         ))}
 
-        {/* Card Piso Vinílico — abre interface própria (Piso / Insumos) */}
-        <button
-          type="button"
+        <CardCalc
+          img="/calculadora/piso-vinilico.jpg"
+          cover
+          nome="Piso Vinílico"
+          descricao="Tarkett e Rufino · piso e insumos"
           onClick={() => setSel("piso")}
-          className="card group overflow-hidden text-left transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary-300"
-        >
-          <div className="flex h-40 items-center justify-center bg-gray-50">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/calculadora/piso-vinilico.jpg" alt="Piso Vinílico" className="h-full w-full object-cover" />
-          </div>
-          <div className="p-4">
-            <p className="font-semibold text-gray-900 group-hover:text-primary-600">Piso Vinílico</p>
-            <p className="mt-0.5 text-sm text-gray-500">Tarkett e Rufino · piso e insumos</p>
-          </div>
-        </button>
+        />
       </div>
     );
   }
 
   // ── Detalhe do card escolhido ───────────────────────────────────────────────
-  const isPiso = sel === "piso";
+  const titulo = sel === "piso" ? "Piso Vinílico" : sel === "removivel" ? "Forro Removível" : sel.nome;
+  const subtitulo =
+    sel === "piso"
+      ? "Quantidade de piso e insumos"
+      : sel === "removivel"
+        ? "Forro modular removível sobre perfis T"
+        : sel.descricao;
   return (
     <div>
       <button
@@ -96,13 +136,17 @@ export function CalculadoraQuantidade() {
       </button>
 
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">{isPiso ? "Piso Vinílico" : sel.nome}</h2>
-        <p className="text-sm text-gray-500">
-          {isPiso ? "Quantidade de piso e insumos" : sel.descricao}
-        </p>
+        <h2 className="text-lg font-semibold text-gray-900">{titulo}</h2>
+        <p className="text-sm text-gray-500">{subtitulo}</p>
       </div>
 
-      {isPiso ? <CalculadoraPisoVinilico /> : <FormularioTipo tipo={sel} />}
+      {sel === "piso" ? (
+        <CalculadoraPisoVinilico />
+      ) : sel === "removivel" ? (
+        <CalculadoraForroRemovivel />
+      ) : (
+        <FormularioTipo tipo={sel} />
+      )}
     </div>
   );
 }
