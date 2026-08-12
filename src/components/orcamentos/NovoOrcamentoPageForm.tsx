@@ -19,6 +19,7 @@ import { InputDecimal } from "@/components/ui/InputDecimal";
 import { MensagensPadrao } from "./MensagensPadrao";
 import { CadastroClienteModal } from "@/components/clientes/CadastroClienteModal";
 import { formatBRL } from "@/lib/format";
+import { lerItensDaCalculadora } from "@/lib/calculadora/gerarOrcamento";
 
 // ── Tipos locais ─────────────────────────────────────────────────────────────
 
@@ -59,6 +60,8 @@ interface ItemLinha {
   // Custo do item carregado na edição — o PUT de alterar produto exige
   // valor_custo_produto (o POST de criar não). Preservado para reenviar.
   valorCusto?: number;
+  // Nome genérico vindo da calculadora (dica de qual produto escolher). Só UI.
+  sugestao?: string;
 }
 
 /** Valores iniciais para pré-preencher o form em modo edição. */
@@ -175,6 +178,25 @@ export function NovoOrcamentoPageForm({
   const [itens, setItens] = useState<ItemLinha[]>([itemVazio(nextKey.current++)]);
   // Key da linha que deve receber foco ao montar (nova linha criada via Tab).
   const [focarItemKey, setFocarItemKey] = useState<number | null>(null);
+
+  // Itens vindos da calculadora ("Gerar orçamento"): pré-carrega as linhas com
+  // a descrição genérica + quantidade; o usuário escolhe o produto real (o nome
+  // genérico fica como dica). Consome do sessionStorage uma vez, no mount.
+  useEffect(() => {
+    if (modoEdicao) return;
+    const calc = lerItensDaCalculadora();
+    if (calc.length === 0) return;
+    // Campo de busca VAZIO (o usuário digita o produto). Da calculadora vêm só a
+    // quantidade e a dica embaixo (nome genérico) para referência.
+    setItens(
+      calc.map((i) => ({
+        ...itemVazio(nextKey.current++),
+        qtde: i.quantidade,
+        sugestao: `${i.descricao} · ${i.quantidade} ${i.unidade}`,
+      })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function adicionarItem() {
     setItens((prev) => [...prev, itemVazio(nextKey.current++)]);
@@ -688,6 +710,11 @@ export function NovoOrcamentoPageForm({
                       {item.codProduto && (
                         <span className="mt-0.5 block text-xs text-gray-400">
                           Cód. {item.codProduto}
+                        </span>
+                      )}
+                      {item.sugestao && (
+                        <span className="mt-0.5 block text-xs text-amber-600">
+                          Calculadora: {item.sugestao}
                         </span>
                       )}
                     </td>

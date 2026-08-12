@@ -10,6 +10,7 @@ import { TIPOS, calcularMateriais, type TipoCalculo } from "@/lib/calculadora/ma
 import { imprimirOrcamentoPdf } from "@/lib/calculadora/orcamentoPdf";
 import { CalculadoraPisoVinilico } from "./CalculadoraPisoVinilico";
 import { CalculadoraForroRemovivel } from "./CalculadoraForroRemovivel";
+import { BotaoGerarOrcamento } from "./BotaoGerarOrcamento";
 
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -192,23 +193,32 @@ function FormularioTipo({ tipo }: { tipo: TipoCalculo }) {
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-medium text-gray-500">Materiais estimados</p>
           {area > 0 && (
-            <button
-              type="button"
-              onClick={() =>
-                imprimirOrcamentoPdf({
-                  titulo: tipo.nome,
-                  composicao: tipo.opcoesPlaca?.find((o) => o.id === opcaoPlaca)?.label,
-                  area,
-                  itens: materiais,
-                })
-              }
-              className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-sm"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
-              </svg>
-              Baixar PDF
-            </button>
+            <div className="flex gap-2">
+              <BotaoGerarOrcamento
+                itens={materiais.map((m) => ({
+                  descricao: m.nome,
+                  quantidade: m.quantidade,
+                  unidade: m.unidade,
+                }))}
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  imprimirOrcamentoPdf({
+                    titulo: tipo.nome,
+                    composicao: tipo.opcoesPlaca?.find((o) => o.id === opcaoPlaca)?.label,
+                    area,
+                    itens: materiais,
+                  })
+                }
+                className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-sm"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
+                </svg>
+                PDF
+              </button>
+            </div>
           )}
         </div>
         {area > 0 ? (

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { InputValor } from "@/components/ui/InputValor";
 import { VARIANTES, calcularForroRemovivel } from "@/lib/calculadora/forroRemovivel";
 import { imprimirOrcamentoPdf } from "@/lib/calculadora/orcamentoPdf";
+import { BotaoGerarOrcamento } from "./BotaoGerarOrcamento";
 
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -55,18 +56,27 @@ export function CalculadoraForroRemovivel() {
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-medium text-gray-500">Materiais estimados</p>
           {area > 0 && (
-            <button
-              type="button"
-              onClick={() =>
-                imprimirOrcamentoPdf({ titulo: "Forro Removível", composicao: variante.label, area, itens })
-              }
-              className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-sm"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
-              </svg>
-              Baixar PDF
-            </button>
+            <div className="flex gap-2">
+              <BotaoGerarOrcamento
+                itens={itens.map((m) => ({
+                  descricao: m.nome,
+                  quantidade: m.quantidade,
+                  unidade: m.unidade,
+                }))}
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  imprimirOrcamentoPdf({ titulo: "Forro Removível", composicao: variante.label, area, itens })
+                }
+                className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-sm"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
+                </svg>
+                PDF
+              </button>
+            </div>
           )}
         </div>
         {area > 0 ? (

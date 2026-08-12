@@ -17,6 +17,7 @@ import {
   type PisoVinilico,
 } from "@/lib/calculadora/pisoVinilico";
 import { imprimirOrcamentoPisoPdf } from "@/lib/calculadora/orcamentoPdf";
+import { BotaoGerarOrcamento } from "./BotaoGerarOrcamento";
 
 function fmt(n: number, casas = 2): string {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -43,6 +44,19 @@ export function CalculadoraPisoVinilico() {
 
   const resultado = piso ? calcularPiso(piso, area) : null;
   const insumos = calcularInsumos(area, baseId, nivelId);
+
+  // Itens para "Gerar orçamento": o piso (quantidade recomendada) + os insumos.
+  const itensOrcamento =
+    piso && resultado
+      ? [
+          {
+            descricao: `Piso ${piso.colecao} ${piso.instalacao} ${piso.espessura}`,
+            quantidade: resultado.recomendada,
+            unidade: resultado.unidade,
+          },
+          ...insumos.map((i) => ({ descricao: i.nome, quantidade: i.quantidade, unidade: i.unidade })),
+        ]
+      : [];
 
   function baixarPdf() {
     if (!piso || !resultado || area <= 0) return;
@@ -170,7 +184,8 @@ export function CalculadoraPisoVinilico() {
       {/* Resultado: piso + insumos juntos */}
       <div className="card p-6">
         {area > 0 && (
-          <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex justify-end gap-2">
+            <BotaoGerarOrcamento itens={itensOrcamento} />
             <button
               type="button"
               onClick={baixarPdf}
@@ -179,7 +194,7 @@ export function CalculadoraPisoVinilico() {
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
               </svg>
-              Baixar PDF
+              PDF
             </button>
           </div>
         )}
