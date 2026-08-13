@@ -90,7 +90,7 @@ export function CalculadoraQuantidade() {
               <CardCalc
                 img="/calculadora/forro-removivel.png"
                 nome="Forro Removível"
-                descricao="Mineral, isopor, gesso ou Ecophon"
+                descricao="EPS, Boreal, Mineral ou Vinil"
                 onClick={() => setSel("removivel")}
               />
             )}

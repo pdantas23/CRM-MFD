@@ -1,10 +1,11 @@
 "use client";
-// Forro modular removível: área (m²) + material da placa → materiais. A variante
-// (mineral/isopor/gesso/Ecophon) só muda o nome da placa; a estrutura é a mesma.
+// Forro modular removível: área (m²) + material da placa + tamanho → materiais.
+// O material (EPS/Boreal/Mineral/Vinil) só muda o nome; o tamanho define a placa
+// e se há perfil terciário (só na placa quadrada 0,625 × 0,625).
 
 import { useState } from "react";
 import { InputValor } from "@/components/ui/InputValor";
-import { VARIANTES, calcularForroRemovivel } from "@/lib/calculadora/forroRemovivel";
+import { VARIANTES, TAMANHOS, calcularForroRemovivel } from "@/lib/calculadora/forroRemovivel";
 import { imprimirOrcamentoPdf } from "@/lib/calculadora/orcamentoPdf";
 import { BotaoGerarOrcamento } from "./BotaoGerarOrcamento";
 
@@ -19,10 +20,12 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 
 export function CalculadoraForroRemovivel() {
   const [area, setArea] = useState(0);
-  const [varianteId, setVarianteId] = useState(VARIANTES[0].id);
+  const [materialId, setMaterialId] = useState(VARIANTES[0].id);
+  const [tamanhoId, setTamanhoId] = useState(TAMANHOS[0].id);
 
-  const variante = VARIANTES.find((v) => v.id === varianteId) ?? VARIANTES[0];
-  const itens = calcularForroRemovivel(area, varianteId);
+  const material = VARIANTES.find((v) => v.id === materialId) ?? VARIANTES[0];
+  const tamanho = TAMANHOS.find((t) => t.id === tamanhoId) ?? TAMANHOS[0];
+  const itens = calcularForroRemovivel(area, materialId, tamanhoId);
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -32,22 +35,39 @@ export function CalculadoraForroRemovivel() {
           <InputValor value={area} onChange={setArea} className="w-full" cinzaSeZero />
         </Campo>
 
-        <Campo label="Material da placa">
-          <select
-            value={varianteId}
-            onChange={(e) => setVarianteId(e.target.value)}
-            className="input-base w-full"
-          >
-            {VARIANTES.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.label}
-              </option>
-            ))}
-          </select>
-        </Campo>
+        <div className="grid grid-cols-2 gap-4">
+          <Campo label="Material da placa">
+            <select
+              value={materialId}
+              onChange={(e) => setMaterialId(e.target.value)}
+              className="input-base w-full"
+            >
+              {VARIANTES.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          </Campo>
+
+          <Campo label="Tamanho da placa">
+            <select
+              value={tamanhoId}
+              onChange={(e) => setTamanhoId(e.target.value)}
+              className="input-base w-full"
+            >
+              {TAMANHOS.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </Campo>
+        </div>
 
         <p className="rounded-md bg-gray-50 p-3 text-xs text-gray-500">
-          Modulação 0,625 × 1,25 m sobre perfis T. Reguladores, arame e parafusos derivam dos perfis.
+          Grelha de perfis T. O perfil terciário (0,625 m) entra só na placa quadrada
+          0,625 × 0,625 m. Reguladores, arame e parafuso/bucha derivam dos perfis.
         </p>
       </div>
 
@@ -67,7 +87,12 @@ export function CalculadoraForroRemovivel() {
               <button
                 type="button"
                 onClick={() =>
-                  imprimirOrcamentoPdf({ titulo: "Forro Removível", composicao: variante.label, area, itens })
+                  imprimirOrcamentoPdf({
+                    titulo: "Forro Removível",
+                    composicao: `${material.label} · ${tamanho.label}`,
+                    area,
+                    itens,
+                  })
                 }
                 className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-sm"
               >
