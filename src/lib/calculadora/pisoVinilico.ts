@@ -89,7 +89,7 @@ export const MARCAS: MarcaPiso[] = [
       { id: "tar-iq-toro-sc", colecao: "iQ Toro SC", instalacao: "Colado", formato: "manta", dimensao: "2 × 23 m", espessura: "2 mm", m2Caixa: 46, uso: "Com 34 / Ind 43", obs: "Homogênea condutiva" },
       { id: "tar-eclipse-premium", colecao: "Eclipse Premium", instalacao: "Colado", formato: "manta", dimensao: "2 × 23 m", espessura: "2 mm", m2Caixa: 46, uso: "Res 23 / Com 34 / Ind 43", obs: "Homogênea" },
       { id: "tar-vylon-plus", colecao: "Vylon Plus", instalacao: "Colado", formato: "manta", dimensao: "2 × 20 m", espessura: "2 mm", m2Caixa: 40, uso: "Com 34 / Ind 43", obs: "Homogênea" },
-      { id: "tar-standard-plus", colecao: "Standard Plus", instalacao: "Colado", formato: "manta", dimensao: "2 × 23 m", espessura: "2 mm", m2Caixa: 46, uso: "Res 23 / Com 34 / Ind 43", obs: "Da planilha (a confirmar)" },
+      { id: "tar-standard-plus", colecao: "Standard Plus", instalacao: "Colado", formato: "manta", dimensao: "2 × 23 m", espessura: "2 mm", m2Caixa: 46, uso: "Res 23 / Com 34 / Ind 43", obs: "Homogênea · ficha oficial Tarkett" },
       { id: "tar-imagine", colecao: "Imagine", instalacao: "Colado", formato: "manta", dimensao: "2 × 25 m", espessura: "2,4 mm", m2Caixa: 50, uso: "Res 23 / Com 32", obs: "Da planilha (a confirmar)" },
     ],
   },
