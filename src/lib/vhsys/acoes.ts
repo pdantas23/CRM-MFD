@@ -9,6 +9,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cacheInvalidate } from "@/lib/crm/cache";
 import { vhsysPost, vhsysPut, vhsysGet, vhsysDelete, runComTokensVhsys, type VhsysTokens } from "./client";
+import { parcelasParaEnvio } from "./parcelas";
+import { humanizarErroVhsys } from "./erros";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import { getContaComTokensPorId } from "@/lib/accounts/repo";
 import { registrarPedidoEmitido, registrarPagamentoAprovado } from "@/lib/notificacoes/registro";
@@ -787,9 +789,10 @@ export async function criarPedidoDeOrcamento(
         // diferente do de orçamento que tolera um objeto por vez.
         await vhsysPost(`/pedidos/${idPedido}/produtos`, itens);
 
-        // Parcelas (substitui anteriores — POST único com array)
+        // Parcelas (substitui anteriores — POST único com array). valor_parcela
+        // vai como string de 2 casas ("100.00"); a API rejeita floats crus.
         if (parcelas && parcelas.length > 0) {
-          await vhsysPost(`/pedidos/${idPedido}/parcelas`, parcelas);
+          await vhsysPost(`/pedidos/${idPedido}/parcelas`, parcelasParaEnvio(parcelas));
         }
 
         // Situação inicial: sem isso o pedido nasce SEM situação personalizada
@@ -809,12 +812,12 @@ export async function criarPedidoDeOrcamento(
     } catch (errItens) {
       // Rollback: remove o pedido recém-criado (ainda não espelhado) para não
       // deixar pedido órfão sem produtos. "Ou vai tudo, ou nada é emitido."
-      const detalhe = errItens instanceof Error ? errItens.message : String(errItens);
+      const detalhe = humanizarErroVhsys(errItens);
       try {
         await runComTokensVhsys(conta.tokens, () => vhsysDelete(`/pedidos/${idPedido}`));
         return {
           ok: false,
-          erro: `Não foi possível adicionar os produtos ao pedido (${detalhe}). Nenhum pedido foi emitido; tente novamente.`,
+          erro: `Não foi possível emitir o pedido: ${detalhe} Nenhum pedido foi criado; corrija e tente novamente.`,
         };
       } catch {
         // Nem o rollback funcionou — há um pedido incompleto a limpar manualmente.
@@ -822,8 +825,8 @@ export async function criarPedidoDeOrcamento(
           ok: false,
           idPedidoVhsys: idPedido,
           erro:
-            `Falha ao adicionar os produtos (${detalhe}) e ao desfazer o pedido nº ` +
-            `interno ${idPedido}. Exclua esse pedido diretamente no VHSYS antes de tentar novamente.`,
+            `Não foi possível emitir o pedido: ${detalhe} Além disso, não deu para desfazer ` +
+            `o pedido nº interno ${idPedido} — exclua-o direto no VHSYS antes de tentar de novo.`,
         };
       }
     }
@@ -921,7 +924,7 @@ export async function criarPedidoDeOrcamento(
 
     return { ok: true, idPedidoVhsys: idPedido };
   } catch (err) {
-    return { ok: false, erro: err instanceof Error ? err.message : String(err) };
+    return { ok: false, erro: humanizarErroVhsys(err) };
   }
 }
 

@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { vhsysPost, vhsysPut, vhsysDelete, vhsysGet, runComTokensVhsys, type VhsysTokens } from "./client";
+import { parcelasParaEnvio } from "./parcelas";
+import { humanizarErroVhsys } from "./erros";
 import { exigirAdminOuVendedor } from "./acoes";
 import { cacheInvalidate } from "@/lib/crm/cache";
 import { getContaAtiva } from "@/lib/accounts/contexto";
@@ -316,7 +318,7 @@ export async function criarOrcamento(
 
       // Registra parcelas (substitui anteriores — POST único com array)
       if (parcelas && parcelas.length > 0) {
-        await vhsysPost(`/orcamentos/${idVhsys}/parcelas`, parcelas);
+        await vhsysPost(`/orcamentos/${idVhsys}/parcelas`, parcelasParaEnvio(parcelas));
       }
 
       const { data: lista } = await vhsysGet<VhsysOrcamento>(`/orcamentos/${idVhsys}`);
@@ -332,7 +334,7 @@ export async function criarOrcamento(
 
     return { ok: true, idOrcamentoVhsys: idVhsys };
   } catch (err) {
-    return { ok: false, erro: err instanceof Error ? err.message : String(err) };
+    return { ok: false, erro: humanizarErroVhsys(err) };
   }
 }
 
@@ -424,7 +426,7 @@ export async function editarOrcamento(
 
       // Registra parcelas (substitui anteriores — POST único com array)
       if (parcelas && parcelas.length > 0) {
-        await vhsysPost(`/orcamentos/${idVhsys}/parcelas`, parcelas);
+        await vhsysPost(`/orcamentos/${idVhsys}/parcelas`, parcelasParaEnvio(parcelas));
       }
 
       const { data } = await vhsysGet<VhsysOrcamento>(`/orcamentos/${idVhsys}`);
@@ -449,6 +451,6 @@ export async function editarOrcamento(
 
     return { ok: true };
   } catch (err) {
-    return { ok: false, erro: err instanceof Error ? err.message : String(err) };
+    return { ok: false, erro: humanizarErroVhsys(err) };
   }
 }
