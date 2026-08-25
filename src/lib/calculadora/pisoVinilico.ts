@@ -80,6 +80,7 @@ export const MARCAS: MarcaPiso[] = [
       { id: "tar-ambienta-stone-92", colecao: "Ambienta Stone", instalacao: "Colado", formato: "placa", dimensao: "920 × 920 mm", espessura: "3 mm", m2Caixa: 3.38, pecasCaixa: 4, uso: "Res 23 / Com 33 / Ind 42", obs: "Capa de uso 0,55 mm" },
       { id: "tar-ambienta-stone-60", colecao: "Ambienta Stone", instalacao: "Colado", formato: "placa", dimensao: "600 × 600 mm", espessura: "3 mm", m2Caixa: 3.6, pecasCaixa: 10, uso: "Res 23 / Com 33 / Ind 42", obs: "Capa de uso 0,55 mm" },
       { id: "tar-solare-92", colecao: "Solare", instalacao: "Colado", formato: "placa", dimensao: "920 × 920 mm", espessura: "3 mm", m2Caixa: 3.38, pecasCaixa: 4, uso: "Res 23 / Com 33", obs: "Capa de uso 0,55 mm" },
+      { id: "tar-paviflex-thru", colecao: "Paviflex Thru", instalacao: "Colado", formato: "placa", dimensao: "30,5 × 30,5 cm", espessura: "2 mm", m2Caixa: 4.09, pecasCaixa: 44, uso: "Res. e Comercial", obs: "Homogênea (alto tráfego) · 44 placas/cx" },
       // Mantas (rolo)
       { id: "tar-iq-optima", colecao: "iQ Optima", instalacao: "Colado", formato: "manta", dimensao: "2 × 25 m", espessura: "2 mm", m2Caixa: 50, uso: "Res 23 / Com 34 / Ind 43", obs: "Homogênea" },
       { id: "tar-iq-granit", colecao: "iQ Granit", instalacao: "Colado", formato: "manta", dimensao: "2 × 25 m", espessura: "2 mm", m2Caixa: 50, uso: "Res 23 / Com 34 / Ind 43", obs: "Homogênea" },
