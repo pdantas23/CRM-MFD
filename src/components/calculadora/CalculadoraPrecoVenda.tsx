@@ -1,13 +1,15 @@
 "use client";
 // Calculadora de preço de venda × margem de lucro (bidirecional).
-// Fórmula: PV = { [(P × (1 + ICMS) × (1 + COM)) + F] × (1 + L) } ÷ (1 − CO − IS)
+// Fórmula: PV = { [ (P×(1+ICMS)) + F ] ÷ (1−CO) × (1+L) } ÷ (1 − COM − IS)
 //  - P    = preço de custo do produto
-//  - ICMS = diferença: max(0, atual − crédito de ICMS da origem)
-//  - COM  = comissões (% total, markup sobre o custo)
-//  - F    = frete
-//  - L    = lucro (% markup sobre a base)
-//  - CO   = custos operacionais (% da venda, "por dentro")
-//  - IS   = imposto de saída (% da venda, "por dentro")
+//  - ICMS = diferença max(0, atual − crédito de origem); markup sobre o custo
+//  - F    = frete (aditivo)
+//  - CO   = custos operacionais (% "por dentro" sobre a base — leva em conta
+//           tudo, MENOS o lucro)
+//  - L    = lucro (% sobre a base já com os custos operacionais — leva tudo)
+//  - COM  = comissões (% "por dentro" sobre o VALOR FINAL — conta com o frete)
+//  - IS   = imposto de saída (% "por dentro" sobre o VALOR FINAL, ao final)
+// A soma de custo + ICMS + frete + custos op + lucro + comissão + imposto = PV.
 // Digitando o LUCRO, calcula o preço de venda; digitando o PREÇO DE VENDA,
 // calcula o lucro. Campos nulos (exceto o preço de custo) são neutros no cálculo.
 // Todos os campos usam a máscara "centavos primeiro" (dígitos entram pela direita).
@@ -29,6 +31,16 @@ function pct(n: number): string {
   return `${n.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 }
 
+// Linha "descrição … valor" do painel da direita.
+function Linha({ label, valor, destaque }: { label: string; valor: string; destaque?: boolean }) {
+  return (
+    <div className="flex justify-between">
+      <dt className="text-gray-500">{label}</dt>
+      <dd className={destaque ? "font-medium text-green-700" : "font-medium text-gray-800"}>{valor}</dd>
+    </div>
+  );
+}
+
 export function CalculadoraPrecoVenda() {
   const [precoCusto, setPrecoCusto] = useState(0);
   const [icmsOrigem, setIcmsOrigem] = useState(0);
@@ -44,28 +56,35 @@ export function CalculadoraPrecoVenda() {
 
   // ICMS da fórmula = diferencial (atual − crédito da origem), nunca negativo.
   const icmsDiffPct = Math.max(0, icmsAtual - icmsOrigem);
-  const custoTributado = precoCusto * (1 + icmsDiffPct / 100) * (1 + comissao / 100);
-  const baseComFrete = custoTributado + frete;
+  const custoICMS = precoCusto * (1 + icmsDiffPct / 100);
+  const base = custoICMS + frete;
 
-  // Custos operacionais + imposto de saída são "por dentro" (% do preço de venda):
-  // PV = base_com_lucro ÷ (1 − CO% − IS%). divisor ≤ 0 → percentuais inviáveis.
-  const deducaoPct = custosOp + impostoSaida;
-  const divisor = 1 - deducaoPct / 100;
-  const divisorValido = divisor > 0;
+  // Custos operacionais: "por dentro" SOBRE A BASE, antes do lucro.
+  const divCO = 1 - custosOp / 100;
+  const divCOValido = divCO > 0;
+  const subtotal1 = divCOValido ? base / divCO : 0;
 
-  // Direto (modo=lucro): PV = [base × (1 + L)] ÷ divisor.
-  // Inverso (modo=pv): base_com_lucro = PV × divisor → L = base_com_lucro/base − 1.
+  // Comissão + imposto de saída: "por dentro" SOBRE O VALOR FINAL (o preço de venda).
+  const divFinal = 1 - (comissao + impostoSaida) / 100;
+  const divFinalValido = divFinal > 0;
+  const divisoresValidos = divCOValido && divFinalValido;
+
+  // Direto (modo=lucro): subtotal2 = subtotal1 × (1+L); PV = subtotal2 ÷ divFinal.
+  // Inverso (modo=pv): subtotal2 = PV × divFinal → L = subtotal2/subtotal1 − 1.
   const lucroEfetivo =
     modo === "lucro"
       ? lucro
-      : baseComFrete > 0 && divisorValido
-        ? ((precoVenda * divisor) / baseComFrete - 1) * 100
+      : subtotal1 > 0 && divisoresValidos
+        ? ((precoVenda * divFinal) / subtotal1 - 1) * 100
         : 0;
-  const baseComLucro = baseComFrete * (1 + lucroEfetivo / 100);
-  const pvEfetivo = modo === "lucro" ? (divisorValido ? baseComLucro / divisor : 0) : precoVenda;
+  const subtotal2 = subtotal1 * (1 + lucroEfetivo / 100);
+  const pvEfetivo = modo === "lucro" ? (divisoresValidos ? subtotal2 / divFinal : 0) : precoVenda;
 
-  const lucroReais = baseComLucro - baseComFrete;
-  const custosOpReais = pvEfetivo * (custosOp / 100);
+  // Valores em R$ de cada componente (somam o preço de venda).
+  const icmsReais = custoICMS - precoCusto;
+  const custosOpReais = divCOValido ? subtotal1 - base : 0;
+  const lucroReais = subtotal2 - subtotal1;
+  const comissaoReais = pvEfetivo * (comissao / 100);
   const impostoReais = pvEfetivo * (impostoSaida / 100);
 
   return (
@@ -132,30 +151,13 @@ export function CalculadoraPrecoVenda() {
         </div>
 
         <dl className="mt-6 space-y-2 border-t border-gray-100 pt-4 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-gray-500">ICMS aplicado (atual − crédito)</dt>
-            <dd className="font-medium text-gray-800">{pct(icmsDiffPct)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500">Custo com ICMS + comissões</dt>
-            <dd className="font-medium text-gray-800">{formatBRL(custoTributado)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500">+ Frete</dt>
-            <dd className="font-medium text-gray-800">{formatBRL(frete)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500">Lucro ({pct(lucroEfetivo)})</dt>
-            <dd className="font-medium text-green-700">{formatBRL(lucroReais)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500">Custos operacionais ({pct(custosOp)})</dt>
-            <dd className="font-medium text-gray-800">{formatBRL(custosOpReais)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500">Imposto de saída ({pct(impostoSaida)})</dt>
-            <dd className="font-medium text-gray-800">{formatBRL(impostoReais)}</dd>
-          </div>
+          <Linha label="Custo base" valor={formatBRL(precoCusto)} />
+          <Linha label={`ICMS (${pct(icmsDiffPct)})`} valor={formatBRL(icmsReais)} />
+          <Linha label="Frete" valor={formatBRL(frete)} />
+          <Linha label={`Custos operacionais (${pct(custosOp)})`} valor={formatBRL(custosOpReais)} />
+          <Linha label={`Lucro (${pct(lucroEfetivo)})`} valor={formatBRL(lucroReais)} destaque />
+          <Linha label={`Comissões (${pct(comissao)})`} valor={formatBRL(comissaoReais)} />
+          <Linha label={`Imposto de saída (${pct(impostoSaida)})`} valor={formatBRL(impostoReais)} />
         </dl>
 
         {icmsOrigem > icmsAtual && (
@@ -163,10 +165,10 @@ export function CalculadoraPrecoVenda() {
             O crédito de ICMS é maior que o ICMS atual — o ICMS aplicado foi tratado como 0%.
           </p>
         )}
-        {!divisorValido && (
+        {!divisoresValidos && (
           <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-            Custos operacionais + imposto de saída somam {pct(deducaoPct)} (≥ 100%) — impossível
-            formar o preço. Reduza os percentuais.
+            {!divCOValido ? "Custos operacionais ≥ 100%" : "Comissões + imposto de saída ≥ 100%"} —
+            impossível formar o preço. Reduza o percentual.
           </p>
         )}
       </div>
