@@ -140,7 +140,7 @@ export const TIPOS: TipoCalculo[] = [
     itens: [
       { nome: "Placa ST BR 12,5mm", consumoM2: 1.05, fator: 2.16, unidade: "placa(s)" },
       { nome: "Fita telada azul", consumoM2: 1.4, fator: 90, unidade: "rolo(s) 90 m" },
-      { nome: "Massa pronta", consumoM2: 0.47, fator: 30, unidade: "balde(s) 30 kg" },
+      { nome: "Massa pronta", consumoM2: 0.47, fator: 22, unidade: "balde(s) 22 kg" },
       { nome: "Canaleta S47 (3 m)", consumoM2: 2, fator: 3, unidade: "perfil(is)" },
       { nome: "Tabica S 40×48 (3 m)", consumoM2: 0.9, fator: 3, unidade: "tabica(s)" },
       { nome: "Regulador / Pendural S47", consumoM2: 1.8, fator: 1, unidade: "un" },
