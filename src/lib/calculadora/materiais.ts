@@ -84,6 +84,7 @@ export const TIPOS: TipoCalculo[] = [
       { nome: "Guia (3 m)", consumoM2: 0.9, fator: 3, unidade: "peça(s)" }, // 222
       { nome: "Massa pronta", consumoM2: 0.94, fator: 22, unidade: "balde(s) 22 kg" }, // Trevo
       { nome: "Fita telada azul", consumoM2: 2.8, fator: 90, unidade: "rolo(s) 90 m" }, // 222
+      { nome: "Lã de PET", consumoM2: 1.05, fator: 1, unidade: "m²" }, // Trevo (1,05/m²)
       { nome: "Parafuso TA 25", consumoM2: 22, fator: 1, unidade: "un" }, // maior(222 22, Trevo 22)
       { nome: "Parafuso S6", consumoM2: 2, fator: 1, unidade: "un" }, // maior(222 2, Trevo 2)
       { nome: "Bucha 6", consumoM2: 2, fator: 1, unidade: "un" }, // 1 por Parafuso S6
@@ -107,7 +108,7 @@ export const TIPOS: TipoCalculo[] = [
       { nome: "Guia (3 m)", consumoM2: 0.9, fator: 3, unidade: "peça(s)" }, // 222
       { nome: "Massa pronta", consumoM2: 1.88, fator: 22, unidade: "balde(s) 22 kg" }, // Trevo (separativa)
       { nome: "Fita telada azul", consumoM2: 3, fator: 90, unidade: "rolo(s) 90 m" }, // 222 = Trevo
-      { nome: "Lã de PET", consumoM2: 1.05, fator: 30, unidade: "rolo(s)" }, // 222
+      { nome: "Lã de PET", consumoM2: 1.05, fator: 1, unidade: "m²" }, // Trevo (1,05/m²)
       { nome: "Parafuso TA 25", consumoM2: 13, fator: 1, unidade: "un" }, // maior(222 10, Trevo 13)
       { nome: "Parafuso TA 35", consumoM2: 29, fator: 1, unidade: "un" }, // maior(222 29, Trevo 22)
       { nome: "Parafuso S6", consumoM2: 2, fator: 1, unidade: "un" }, // maior(222 2, Trevo 2)
@@ -142,6 +143,7 @@ export const TIPOS: TipoCalculo[] = [
     itens: [
       { nome: "Placa ST BR 12,5mm", consumoM2: 1.05, fator: 2.16, unidade: "placa(s)" },
       { nome: "Fita telada azul", consumoM2: 1.4, fator: 90, unidade: "rolo(s) 90 m" },
+      { nome: "Lã de PET", consumoM2: 1.05, fator: 1, unidade: "m²" }, // Trevo (1,05/m²)
       { nome: "Massa pronta", consumoM2: 0.47, fator: 22, unidade: "balde(s) 22 kg" },
       { nome: "Canaleta S47 (3 m)", consumoM2: 2, fator: 3, unidade: "perfil(is)" },
       { nome: "Tabica S 40×48 (3 m)", consumoM2: 0.9, fator: 3, unidade: "tabica(s)" },
