@@ -86,6 +86,7 @@ export const TIPOS: TipoCalculo[] = [
       { nome: "Fita telada azul", consumoM2: 2.8, fator: 90, unidade: "rolo(s) 90 m" }, // 222
       { nome: "Parafuso TA 25", consumoM2: 22, fator: 1, unidade: "un" }, // maior(222 22, Trevo 22)
       { nome: "Parafuso S6", consumoM2: 2, fator: 1, unidade: "un" }, // maior(222 2, Trevo 2)
+      { nome: "Bucha 6", consumoM2: 2, fator: 1, unidade: "un" }, // 1 por Parafuso S6
       { nome: "Parafuso PFM 13mm", consumoM2: 2, fator: 1, unidade: "un" }, // Trevo PFM-13
     ],
   },
@@ -110,6 +111,7 @@ export const TIPOS: TipoCalculo[] = [
       { nome: "Parafuso TA 25", consumoM2: 13, fator: 1, unidade: "un" }, // maior(222 10, Trevo 13)
       { nome: "Parafuso TA 35", consumoM2: 29, fator: 1, unidade: "un" }, // maior(222 29, Trevo 22)
       { nome: "Parafuso S6", consumoM2: 2, fator: 1, unidade: "un" }, // maior(222 2, Trevo 2)
+      { nome: "Bucha 6", consumoM2: 2, fator: 1, unidade: "un" }, // 1 por Parafuso S6
       { nome: "Parafuso PFM 13mm", consumoM2: 2, fator: 1, unidade: "un" }, // Trevo PFM-13
     ],
   },
@@ -147,6 +149,7 @@ export const TIPOS: TipoCalculo[] = [
       { nome: "União S47", consumoM2: 0.3, fator: 1, unidade: "un" },
       { nome: "Parafuso TA 25", consumoM2: 13, fator: 1, unidade: "un" },
       { nome: "Parafuso S6", consumoM2: 2, fator: 1, unidade: "un" },
+      { nome: "Bucha 6", consumoM2: 2, fator: 1, unidade: "un" }, // 1 por Parafuso S6
       { nome: "Parafuso PFM 13mm", consumoM2: 2, fator: 1, unidade: "un" }, // Trevo PFM-13
       { nome: "Arame galvanizado nº 16", consumoM2: 1.8, fator: 14, unidade: "kg" },
     ],
