@@ -8,6 +8,7 @@
 import { createAdminClient } from "../supabase/admin";
 import { mapComLimite } from "../concorrencia";
 import { runComTokensVhsys, type VhsysTokens } from "./client";
+import { valorTotalOrcamento } from "./totais";
 import { listarProdutos, listarClientes, listarVendedores, listarSituacoes } from "./catalogos";
 import {
   listarPedidos,
@@ -266,7 +267,9 @@ function paraLinhaOrcamento(registro: unknown, modeloOrc: ModeloOrcamento) {
     nome_cliente: o.nome_cliente,
     vendedor_id_vhsys: o.vendedor_pedido_id || null,
     vendedor_nome: o.vendedor_pedido || null,
-    valor_total: numeroOuNull(o.valor_total_nota),
+    // Reconstrói do subtotal dos produtos + frete − desconto: o valor_total_nota
+    // às vezes vem incompleto (perde o 1º item, ex.: #310).
+    valor_total: valorTotalOrcamento(o),
     situacao_id: efetiva.situacaoId,
     status_base: o.status_pedido || null,
     origem_situacao: efetiva.origem,

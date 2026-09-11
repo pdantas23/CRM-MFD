@@ -11,6 +11,7 @@ import { cacheInvalidate } from "@/lib/crm/cache";
 import { vhsysPost, vhsysPut, vhsysGet, vhsysDelete, runComTokensVhsys, type VhsysTokens } from "./client";
 import { parcelasParaEnvio } from "./parcelas";
 import { humanizarErroVhsys } from "./erros";
+import { valorTotalOrcamento } from "./totais";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import { getContaComTokensPorId } from "@/lib/accounts/repo";
 import { registrarPedidoEmitido, registrarPagamentoAprovado } from "@/lib/notificacoes/registro";
@@ -244,7 +245,8 @@ async function upsertOrcamentoNoEspelho(orc: VhsysOrcamento, conta: ContaEscrita
     nome_cliente: orc.nome_cliente,
     vendedor_id_vhsys: orc.vendedor_pedido_id || null,
     vendedor_nome: orc.vendedor_pedido || null,
-    valor_total: numeroOuNull(orc.valor_total_nota),
+    // Reconstrói do subtotal quando o valor_total_nota vem incompleto (bug #310).
+    valor_total: valorTotalOrcamento(orc),
     situacao_id: efetiva.situacaoId,
     status_base: orc.status_pedido || null,
     origem_situacao: efetiva.origem,

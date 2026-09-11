@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { vhsysPost, vhsysPut, vhsysDelete, vhsysGet, runComTokensVhsys, type VhsysTokens } from "./client";
 import { parcelasParaEnvio } from "./parcelas";
 import { humanizarErroVhsys } from "./erros";
+import { valorTotalOrcamento, valorTotalDosItens } from "./totais";
 import { exigirAdminOuVendedor } from "./acoes";
 import { cacheInvalidate } from "@/lib/crm/cache";
 import { getContaAtiva } from "@/lib/accounts/contexto";
@@ -35,12 +36,6 @@ function dataOuNull(s: string | null | undefined): string | null {
   return s;
 }
 
-function numeroOuNull(s: string | null | undefined): number | null {
-  if (!s || s === "") return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
-
 /** Conta ativa para escrita (id, tokens VHSYS + modelo de situações de orçamento). */
 async function contaAtivaEscrita(): Promise<{
   id: string;
@@ -65,10 +60,19 @@ async function contaAtivaEscrita(): Promise<{
 
 async function upsertOrcamento(
   orc: VhsysOrcamento,
-  conta: { id: string; modeloOrc: ModeloOrcamento }
+  conta: { id: string; modeloOrc: ModeloOrcamento },
+  // Total autoritativo (soma dos itens que enviamos). Quando informado, vence o
+  // total da VHSYS — que pode vir incompleto — e é refletido também no `dados`.
+  valorTotalOverride?: number
 ): Promise<void> {
   const admin = createAdminClient();
   const efetiva = situacaoEfetivaOrcamento(conta.modeloOrc, orc.situacao || null, orc.status_pedido || null);
+  const valorTotal = valorTotalOverride ?? valorTotalOrcamento(orc);
+  // Mantém o `dados` coerente com o total gravado (quando há override).
+  const dados =
+    valorTotalOverride !== undefined
+      ? { ...orc, valor_total_nota: valorTotalOverride.toFixed(2) }
+      : orc;
   const linha = {
     conta_id: conta.id,
     id_vhsys: orc.id_orcamento,
@@ -77,7 +81,7 @@ async function upsertOrcamento(
     nome_cliente: orc.nome_cliente,
     vendedor_id_vhsys: orc.vendedor_pedido_id || null,
     vendedor_nome: orc.vendedor_pedido || null,
-    valor_total: numeroOuNull(orc.valor_total_nota),
+    valor_total: valorTotal,
     situacao_id: efetiva.situacaoId,
     status_base: orc.status_pedido || null,
     origem_situacao: efetiva.origem,
@@ -89,7 +93,7 @@ async function upsertOrcamento(
     lixeira: orc.lixeira === "Sim",
     data_cad_vhsys: dataOuNull(orc.data_cad_pedido),
     data_mod_vhsys: dataOuNull(orc.data_mod_pedido),
-    dados: orc,
+    dados,
     sincronizado_em: new Date().toISOString(),
   };
   const { error } = await admin
@@ -325,7 +329,16 @@ export async function criarOrcamento(
       return { idVhsys, lista };
     });
 
-    if (lista[0]) await upsertOrcamento(lista[0], conta);
+    if (lista[0]) {
+      // Total AUTORITATIVO a partir dos itens enviados — o GET pós-criação pode
+      // devolver o valor_total_nota incompleto (bug do #310).
+      const total = valorTotalDosItens(itens, {
+        frete: payloadFinal.frete_pedido,
+        descontoAbs: payloadFinal.desconto_pedido,
+        descontoPorc: payloadFinal.desconto_pedido_porc,
+      });
+      await upsertOrcamento(lista[0], conta, total);
+    }
 
     // Invalida o cache da tela de orçamentos para o novo registro aparecer
     // sem esperar o TTL (mesmo padrão das ações de mover situação/emitir).
@@ -434,14 +447,10 @@ export async function editarOrcamento(
     });
 
     if (lista[0]) {
-      // O GET pós-PUT pode voltar com o total ainda NÃO recalculado (VHSYS lazy).
-      // Usa o total calculado no CRM (mesmo do preview) para o espelho refletir
-      // já — sem esperar a 2ª edição / próxima sincronização.
-      const orc =
-        valorTotalEspelho !== undefined
-          ? { ...lista[0], valor_total_nota: valorTotalEspelho.toFixed(2) }
-          : lista[0];
-      await upsertOrcamento(orc, conta);
+      // O GET pós-PUT pode voltar com o total ainda NÃO recalculado (VHSYS lazy)
+      // ou incompleto. Usa o total calculado no CRM (mesmo do preview) como
+      // override autoritativo; sem ele, upsertOrcamento reconstrói dos produtos.
+      await upsertOrcamento(lista[0], conta, valorTotalEspelho);
     }
 
     // Invalida o cache da tela de orçamentos para a edição refletir
