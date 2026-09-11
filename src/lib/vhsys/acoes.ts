@@ -11,7 +11,7 @@ import { cacheInvalidate } from "@/lib/crm/cache";
 import { vhsysPost, vhsysPut, vhsysGet, vhsysDelete, runComTokensVhsys, type VhsysTokens } from "./client";
 import { parcelasParaEnvio } from "./parcelas";
 import { humanizarErroVhsys } from "./erros";
-import { valorTotalOrcamento } from "./totais";
+import { valorTotalOrcamento, valorTotalPedido, valorTotalDosItens } from "./totais";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import { getContaComTokensPorId } from "@/lib/accounts/repo";
 import { registrarPedidoEmitido, registrarPagamentoAprovado } from "@/lib/notificacoes/registro";
@@ -200,9 +200,20 @@ function dataSituacaoPedido(p: VhsysPedido): string | null {
 }
 
 
-async function upsertPedidoNoEspelho(pedido: VhsysPedido, conta: ContaEscrita): Promise<void> {
+async function upsertPedidoNoEspelho(
+  pedido: VhsysPedido,
+  conta: ContaEscrita,
+  // Total autoritativo (soma dos itens) — vence o total da VHSYS, que pode vir
+  // incompleto, e é refletido no `dados`.
+  valorTotalOverride?: number
+): Promise<void> {
   const admin = createAdminClient();
   const efetiva = situacaoEfetiva(conta.modelo, pedido.situacao || null, pedido.status_pedido || null);
+  const valorTotal = valorTotalOverride ?? valorTotalPedido(pedido);
+  const dados =
+    valorTotalOverride !== undefined
+      ? { ...pedido, valor_total_nota: valorTotalOverride.toFixed(2) }
+      : pedido;
   const linha = {
     conta_id: conta.id,
     id_vhsys: pedido.id_ped,
@@ -211,7 +222,7 @@ async function upsertPedidoNoEspelho(pedido: VhsysPedido, conta: ContaEscrita): 
     nome_cliente: pedido.nome_cliente,
     vendedor_id_vhsys: pedido.vendedor_pedido_id || null,
     vendedor_nome: pedido.vendedor_pedido || null,
-    valor_total: numeroOuNull(pedido.valor_total_nota),
+    valor_total: valorTotal,
     frete: numeroOuNull(pedido.frete_pedido),
     desconto: numeroOuNull(pedido.desconto_pedido),
     situacao_id: efetiva.situacaoId,
@@ -225,7 +236,7 @@ async function upsertPedidoNoEspelho(pedido: VhsysPedido, conta: ContaEscrita): 
     lixeira: pedido.lixeira === "Sim",
     data_cad_vhsys: dataOuNull(pedido.data_cad_pedido),
     data_mod_vhsys: dataOuNull(pedido.data_mod_pedido),
-    dados: pedido,
+    dados,
     sincronizado_em: new Date().toISOString(),
   };
   const { error } = await admin
@@ -856,7 +867,13 @@ export async function criarPedidoDeOrcamento(
           `tente novamente; se persistir, a integração de emissão precisa de ajuste.`,
       };
     }
-    await upsertPedidoNoEspelho(pedidoEspelho, conta);
+    // Total AUTORITATIVO a partir dos itens emitidos — o GET pós-emissão pode
+    // devolver o valor_total_nota incompleto (mesmo bug do #310 nos orçamentos).
+    const totalPedido = valorTotalDosItens(itens, {
+      frete: payloadFinal.frete_pedido,
+      descontoAbs: payloadFinal.desconto_pedido,
+    });
+    await upsertPedidoNoEspelho(pedidoEspelho, conta, totalPedido);
 
     // Fixa a situação inicial no espelho de forma AUTORITATIVA. O GET acima pode
     // ter trazido a situação antes do POST /status propagar (situacao=""), o que

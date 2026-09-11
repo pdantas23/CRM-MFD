@@ -1,19 +1,19 @@
-// Total do orçamento reconstruído do SUBTOTAL DOS PRODUTOS (valor_total_produtos)
-// + frete − descontos. Preferido ao valor_total_nota: a API às vezes devolve o
+// Total de orçamento/pedido reconstruído do SUBTOTAL DOS PRODUTOS
+// (valor_total_produtos) + frete − descontos. A API às vezes devolve o
 // valor_total_nota INCOMPLETO (acumulador que perde o 1º item, ex.: orçamento
-// #310), enquanto valor_total_produtos reflete a soma real dos itens. Se o
-// subtotal não vier, cai no valor_total_nota.
+// #310); nesse caso o subtotal dos produtos reflete a soma real. Se a nota não
+// estiver abaixo do subtotal, é mantida (preserva IPI/ST).
 
-import type { VhsysOrcamento } from "./types";
+import type { VhsysOrcamento, VhsysPedido } from "./types";
 
 function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
 
-/** valor_total do orçamento; corrige o valor_total_nota quando ele perde itens. */
-export function valorTotalOrcamento(orc: VhsysOrcamento): number | null {
-  const o = orc as Record<string, unknown>;
+// Núcleo comum a orçamento e pedido (mesmos campos): corrige o valor_total_nota
+// quando ele vem abaixo do subtotal dos produtos (item perdido no acumulador).
+function valorTotalDocumento(o: Record<string, unknown>): number | null {
   const notaRaw = o.valor_total_nota;
   const nota =
     notaRaw === undefined || notaRaw === null || notaRaw === "" || !Number.isFinite(Number(notaRaw))
@@ -35,6 +35,16 @@ export function valorTotalOrcamento(orc: VhsysOrcamento): number | null {
     }
   }
   return nota;
+}
+
+/** valor_total do orçamento; corrige o valor_total_nota quando ele perde itens. */
+export function valorTotalOrcamento(orc: VhsysOrcamento): number | null {
+  return valorTotalDocumento(orc as Record<string, unknown>);
+}
+
+/** valor_total do pedido; mesma correção (o valor_total_nota também pode faltar item). */
+export function valorTotalPedido(pedido: VhsysPedido): number | null {
+  return valorTotalDocumento(pedido as Record<string, unknown>);
 }
 
 /** Total a partir dos itens que ESTAMOS enviando (autoritativo em criar). */

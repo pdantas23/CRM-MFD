@@ -8,7 +8,7 @@
 import { createAdminClient } from "../supabase/admin";
 import { mapComLimite } from "../concorrencia";
 import { runComTokensVhsys, type VhsysTokens } from "./client";
-import { valorTotalOrcamento } from "./totais";
+import { valorTotalOrcamento, valorTotalPedido } from "./totais";
 import { listarProdutos, listarClientes, listarVendedores, listarSituacoes } from "./catalogos";
 import {
   listarPedidos,
@@ -179,7 +179,8 @@ function paraLinhaPedido(registro: unknown, modelo: ModeloSituacoes) {
     nome_cliente: p.nome_cliente,
     vendedor_id_vhsys: p.vendedor_pedido_id || null,
     vendedor_nome: p.vendedor_pedido || null,
-    valor_total: numeroOuNull(p.valor_total_nota),
+    // Reconstrói do subtotal quando o valor_total_nota vem incompleto (bug #310).
+    valor_total: valorTotalPedido(p),
     frete: numeroOuNull(p.frete_pedido),
     desconto: numeroOuNull(p.desconto_pedido),
     situacao_id: efetiva.situacaoId,
