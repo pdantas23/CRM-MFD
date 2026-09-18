@@ -91,6 +91,8 @@ export const MARCAS: MarcaPiso[] = [
       { id: "tar-vylon-plus", colecao: "Vylon Plus", instalacao: "Colado", formato: "manta", dimensao: "2 × 20 m", espessura: "2 mm", m2Caixa: 40, uso: "Com 34 / Ind 43", obs: "Homogênea" },
       { id: "tar-standard-plus", colecao: "Standard Plus", instalacao: "Colado", formato: "manta", dimensao: "2 × 23 m", espessura: "2 mm", m2Caixa: 46, uso: "Res 23 / Com 34 / Ind 43", obs: "Homogênea · ficha oficial Tarkett" },
       { id: "tar-imagine", colecao: "Imagine", instalacao: "Colado", formato: "manta", dimensao: "2 × 25 m", espessura: "2,4 mm", m2Caixa: 50, uso: "Res 23 / Com 32", obs: "Da planilha (a confirmar)" },
+      { id: "tar-decorflex-70", colecao: "Decorflex", instalacao: "Colado", formato: "manta", dimensao: "2 × 35 m", espessura: "1,5 mm", m2Caixa: 70, uso: "Res 23", obs: "Heterogênea HTE · capa 0,15 mm · ficha oficial Tarkett" },
+      { id: "tar-decorflex-60", colecao: "Decorflex", instalacao: "Colado", formato: "manta", dimensao: "2 × 30 m", espessura: "1,5 mm", m2Caixa: 60, uso: "Res 23", obs: "Heterogênea HTE · capa 0,15 mm · ficha oficial Tarkett" },
     ],
   },
 ];
