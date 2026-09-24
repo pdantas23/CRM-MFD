@@ -1,9 +1,10 @@
 // Cálculo de piso vinílico (Calculadora → card Piso Vinílico).
 // Base: planilha "MEDIDAS DE PRODUTOS PARA PISO VINILICO" (Rufino + Tarkett).
 //
-// PISO — quantidade real = área ÷ m²/caixa (fracionário); recomendada =
-// roundup(real × 1,1) → número fechado de caixas com +10% de folga (fórmula da
-// planilha). Mantas Tarkett são vendidas em rolo (m²/rolo no lugar de m²/caixa).
+// PISO — régua/placa (vendidos em caixa) são calculados em m²: recomendado =
+// roundup(área × 1,1), o m² fechado com +10% de folga; o nº de caixas equivalente
+// vem só como referência. Mantas Tarkett continuam em rolo (m²/rolo): real =
+// área ÷ m²/rolo, recomendada = roundup(real × 1,1) rolos fechados.
 //
 // INSUMOS — por área do piso, pelo PIOR caso do rendimento (menor → não faltar):
 // primer (por tipo de base), cola e massa autonivelante (por espessura).
@@ -98,21 +99,41 @@ export const MARCAS: MarcaPiso[] = [
 ];
 
 export interface ResultadoPiso {
-  real: number; // caixas (ou rolos) fracionário
-  recomendada: number; // fechado, +10%
-  areaCoberta: number; // recomendada × m²/embalagem
-  unidade: string; // "caixa(s)" | "rolo(s)"
+  manta: boolean; // manta → resultado em rolo; régua/placa → em m²
+  recomendada: number; // qtd recomendada na unidade principal (m² p/ caixa, rolos p/ manta)
+  unidade: string; // unidade principal: "m²" | "rolo(s)"
+  real: number; // medida-base: área (caixa) ou rolos fracionário (manta)
+  realUnidade: string; // "m²" | "rolo(s)"
+  referencia: number; // caixa: nº de caixas equivalente; manta: área coberta (m²)
+  refUnidade: string; // "caixa(s)" | "m²"
 }
 
-/** Real = área ÷ m²/embalagem; recomendada = roundup(real × 1,1). */
+// Régua/placa: resultado em m² (área + 10%, fechado em m²), nº de caixas só como
+// referência. Manta: resultado em rolos fechados (real = área ÷ m²/rolo).
 export function calcularPiso(piso: PisoVinilico, area: number): ResultadoPiso {
-  const real = area > 0 && piso.m2Caixa > 0 ? area / piso.m2Caixa : 0;
-  const recomendada = real > 0 ? roundup(real * 1.1) : 0;
+  if (piso.formato === "manta") {
+    const real = area > 0 && piso.m2Caixa > 0 ? area / piso.m2Caixa : 0;
+    const rolos = real > 0 ? roundup(real * 1.1) : 0;
+    return {
+      manta: true,
+      recomendada: rolos,
+      unidade: "rolo(s)",
+      real,
+      realUnidade: "rolo(s)",
+      referencia: rolos * piso.m2Caixa,
+      refUnidade: "m²",
+    };
+  }
+  const m2 = area > 0 ? roundup(area * 1.1) : 0;
+  const caixas = area > 0 && piso.m2Caixa > 0 ? roundup((area * 1.1) / piso.m2Caixa) : 0;
   return {
-    real,
-    recomendada,
-    areaCoberta: recomendada * piso.m2Caixa,
-    unidade: piso.formato === "manta" ? "rolo(s)" : "caixa(s)",
+    manta: false,
+    recomendada: m2,
+    unidade: "m²",
+    real: area,
+    realUnidade: "m²",
+    referencia: caixas,
+    refUnidade: "caixa(s)",
   };
 }
 

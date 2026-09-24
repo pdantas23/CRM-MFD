@@ -97,15 +97,18 @@ export interface DadosOrcamentoPiso {
   m2Caixa: number;
   uso: string;
   area: number;
-  unidade: string; // "caixa(s)" | "rolo(s)"
-  real: number;
+  manta: boolean; // manta → resultado em rolo; régua/placa → em m²
+  unidade: string; // unidade principal do resultado: "m²" | "rolo(s)"
   recomendada: number;
-  areaCoberta: number;
+  real: number;
+  realUnidade: string;
+  referencia: number; // caixa: nº de caixas; manta: área coberta (m²)
+  refUnidade: string; // "caixa(s)" | "m²"
   insumos: { nome: string; quantidade: number; unidade: string; detalhe: string }[];
 }
 
 export function imprimirOrcamentoPisoPdf(d: DadosOrcamentoPiso): void {
-  const emb = d.unidade === "rolo(s)" ? "rolo" : "cx";
+  const emb = d.manta ? "rolo" : "cx";
   const insumos = d.insumos
     .map(
       (i) =>
@@ -113,6 +116,12 @@ export function imprimirOrcamentoPisoPdf(d: DadosOrcamentoPiso): void {
         `<td class="q">${esc(i.quantidade)}</td><td>${esc(i.unidade)}</td></tr>`,
     )
     .join("");
+  const linhaBase = d.manta
+    ? `<tr><td>Quantidade real (calculada)</td><td class="q">${esc(brl2(d.real))}</td><td>${esc(d.realUnidade)}</td></tr>`
+    : `<tr><td>Área da obra</td><td class="q">${esc(brl2(d.area))}</td><td>m²</td></tr>`;
+  const linhaRef = d.manta
+    ? `<tr><td>Área coberta</td><td class="q">${esc(brl2(d.referencia))}</td><td>m²</td></tr>`
+    : `<tr><td>Equivale a</td><td class="q">${esc(d.referencia)}</td><td>${esc(d.refUnidade)}</td></tr>`;
   const corpo = `${cabecalho("Orçamento de piso vinílico")}
     <div class="resumo">
       <div><strong>Marca</strong> ${esc(d.marca)}</div>
@@ -123,14 +132,14 @@ export function imprimirOrcamentoPisoPdf(d: DadosOrcamentoPiso): void {
     </div>
     <h2>Piso</h2>
     <table><tbody>
-      <tr><td>Quantidade real (calculada)</td><td class="q">${esc(brl2(d.real))}</td><td>${esc(d.unidade)}</td></tr>
-      <tr><td>Quantidade recomendada (+10%)</td><td class="q">${esc(d.recomendada)}</td><td>${esc(d.unidade)}</td></tr>
-      <tr><td>Área coberta</td><td class="q">${esc(brl2(d.areaCoberta))}</td><td>m²</td></tr>
+      ${linhaBase}
+      <tr><td>Recomendado (+10%)</td><td class="q">${esc(d.recomendada)}</td><td>${esc(d.unidade)}</td></tr>
+      ${linhaRef}
     </tbody></table>
     <h2>Insumos</h2>
     <table><thead><tr><th>Material</th><th class="q">Qtd.</th><th>Unidade</th></tr></thead>
     <tbody>${insumos}</tbody></table>
-    <footer>Quantidades estimadas. Recomendada = real + 10%, em ${emb === "rolo" ? "rolos" : "caixas"} fechados.
+    <footer>Quantidades estimadas. Recomendado = ${d.manta ? "real + 10%, em rolos fechados" : "área + 10%, em m²"}.
     Documento gerado pela calculadora do sistema.</footer>`;
   abrirImpressao(`Orçamento de piso — ${d.piso}`, corpo);
 }

@@ -69,10 +69,13 @@ export function CalculadoraPisoVinilico() {
       m2Caixa: piso.m2Caixa,
       uso: piso.uso,
       area,
+      manta: resultado.manta,
       unidade: resultado.unidade,
-      real: resultado.real,
       recomendada: resultado.recomendada,
-      areaCoberta: resultado.areaCoberta,
+      real: resultado.real,
+      realUnidade: resultado.realUnidade,
+      referencia: resultado.referencia,
+      refUnidade: resultado.refUnidade,
       insumos,
     });
   }
@@ -215,7 +218,7 @@ function ResultadoPisoView({ area, piso }: { area: number; piso?: PisoVinilico }
   return (
     <>
       <p className="text-sm font-medium text-gray-500">
-        Quantidade de {piso.formato === "manta" ? "rolos" : "caixas"}
+        {r.manta ? "Quantidade de rolos" : "Piso (m²)"}
       </p>
       {area > 0 ? (
         <>
@@ -225,17 +228,24 @@ function ResultadoPisoView({ area, piso }: { area: number; piso?: PisoVinilico }
           </div>
           <dl className="mt-5 space-y-2 border-t border-gray-100 pt-4 text-sm">
             <div className="flex justify-between">
-              <dt className="text-gray-500">Quantidade real (calculada)</dt>
-              <dd className="font-medium text-gray-800">{fmt(r.real)} {r.unidade}</dd>
+              <dt className="text-gray-500">{r.manta ? "Quantidade real (calculada)" : "Área da obra"}</dt>
+              <dd className="font-medium text-gray-800">{fmt(r.real)} {r.realUnidade}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-gray-500">Quantidade recomendada (+10%)</dt>
+              <dt className="text-gray-500">Recomendado (+10%)</dt>
               <dd className="font-semibold text-gray-900">{r.recomendada} {r.unidade}</dd>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Área coberta</dt>
-              <dd className="font-medium text-gray-800">{fmt(r.areaCoberta)} m²</dd>
-            </div>
+            {r.manta ? (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Área coberta</dt>
+                <dd className="font-medium text-gray-800">{fmt(r.referencia)} m²</dd>
+              </div>
+            ) : (
+              <div className="flex justify-between text-xs text-gray-400">
+                <dt>Equivale a</dt>
+                <dd>≈ {r.referencia} {r.refUnidade}</dd>
+              </div>
+            )}
           </dl>
         </>
       ) : (
