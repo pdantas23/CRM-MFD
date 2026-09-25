@@ -215,6 +215,8 @@ export function CalculadoraPisoVinilico() {
 function ResultadoPisoView({ area, piso }: { area: number; piso?: PisoVinilico }) {
   if (!piso) return <p className="text-sm text-gray-400">Nenhum piso disponível para esta marca.</p>;
   const r = calcularPiso(piso, area);
+  // Manta → rolos (inteiro); régua/placa → m² fechado em caixas (decimal).
+  const rec = r.manta ? String(r.recomendada) : fmt(r.recomendada);
   return (
     <>
       <p className="text-sm font-medium text-gray-500">
@@ -223,7 +225,7 @@ function ResultadoPisoView({ area, piso }: { area: number; piso?: PisoVinilico }
       {area > 0 ? (
         <>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-primary-700">{r.recomendada}</span>
+            <span className="text-3xl font-bold text-primary-700">{rec}</span>
             <span className="text-sm text-gray-500">{r.unidade} · recomendado</span>
           </div>
           <dl className="mt-5 space-y-2 border-t border-gray-100 pt-4 text-sm">
@@ -232,8 +234,8 @@ function ResultadoPisoView({ area, piso }: { area: number; piso?: PisoVinilico }
               <dd className="font-medium text-gray-800">{fmt(r.real)} {r.realUnidade}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-gray-500">Recomendado (+10%)</dt>
-              <dd className="font-semibold text-gray-900">{r.recomendada} {r.unidade}</dd>
+              <dt className="text-gray-500">{r.manta ? "Recomendado (+10%)" : "Recomendado (caixas fechadas)"}</dt>
+              <dd className="font-semibold text-gray-900">{rec} {r.unidade}</dd>
             </div>
             {r.manta ? (
               <div className="flex justify-between">

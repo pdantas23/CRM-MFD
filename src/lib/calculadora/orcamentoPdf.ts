@@ -133,13 +133,13 @@ export function imprimirOrcamentoPisoPdf(d: DadosOrcamentoPiso): void {
     <h2>Piso</h2>
     <table><tbody>
       ${linhaBase}
-      <tr><td>Recomendado (+10%)</td><td class="q">${esc(d.recomendada)}</td><td>${esc(d.unidade)}</td></tr>
+      <tr><td>Recomendado (${d.manta ? "+10%" : "caixas fechadas"})</td><td class="q">${esc(d.manta ? d.recomendada : brl2(d.recomendada))}</td><td>${esc(d.unidade)}</td></tr>
       ${linhaRef}
     </tbody></table>
     <h2>Insumos</h2>
     <table><thead><tr><th>Material</th><th class="q">Qtd.</th><th>Unidade</th></tr></thead>
     <tbody>${insumos}</tbody></table>
-    <footer>Quantidades estimadas. Recomendado = ${d.manta ? "real + 10%, em rolos fechados" : "área + 10%, em m²"}.
+    <footer>Quantidades estimadas. Recomendado = ${d.manta ? "real + 10%, em rolos fechados" : "área + 10% arredondado para caixas fechadas (m²)"}.
     Documento gerado pela calculadora do sistema.</footer>`;
   abrirImpressao(`Orçamento de piso — ${d.piso}`, corpo);
 }

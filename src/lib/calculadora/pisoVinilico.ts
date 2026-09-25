@@ -1,10 +1,11 @@
 // Cálculo de piso vinílico (Calculadora → card Piso Vinílico).
 // Base: planilha "MEDIDAS DE PRODUTOS PARA PISO VINILICO" (Rufino + Tarkett).
 //
-// PISO — régua/placa (vendidos em caixa) são calculados em m²: recomendado =
-// roundup(área × 1,1), o m² fechado com +10% de folga; o nº de caixas equivalente
-// vem só como referência. Mantas Tarkett continuam em rolo (m²/rolo): real =
-// área ÷ m²/rolo, recomendada = roundup(real × 1,1) rolos fechados.
+// PISO — régua/placa (vendidos em caixa) são calculados em m², mas o resultado
+// fecha em CAIXAS INTEIRAS: caixas = roundup((área × 1,1) ÷ m²/caixa) e o m²
+// recomendado = caixas × m²/caixa (ex.: 200 m² de Ambienta 3,58 → 62 cx →
+// 221,96 m²). Mantas Tarkett continuam em rolo (m²/rolo): real = área ÷ m²/rolo,
+// recomendada = roundup(real × 1,1) rolos fechados.
 //
 // INSUMOS — por área do piso, pelo PIOR caso do rendimento (menor → não faltar):
 // primer (por tipo de base), cola e massa autonivelante (por espessura).
@@ -100,16 +101,17 @@ export const MARCAS: MarcaPiso[] = [
 
 export interface ResultadoPiso {
   manta: boolean; // manta → resultado em rolo; régua/placa → em m²
-  recomendada: number; // qtd recomendada na unidade principal (m² p/ caixa, rolos p/ manta)
+  recomendada: number; // qtd recomendada na unidade principal (m² fechado em caixas p/ caixa, rolos p/ manta)
   unidade: string; // unidade principal: "m²" | "rolo(s)"
   real: number; // medida-base: área (caixa) ou rolos fracionário (manta)
   realUnidade: string; // "m²" | "rolo(s)"
-  referencia: number; // caixa: nº de caixas equivalente; manta: área coberta (m²)
+  referencia: number; // caixa: nº de caixas fechadas; manta: área coberta (m²)
   refUnidade: string; // "caixa(s)" | "m²"
 }
 
-// Régua/placa: resultado em m² (área + 10%, fechado em m²), nº de caixas só como
-// referência. Manta: resultado em rolos fechados (real = área ÷ m²/rolo).
+// Régua/placa: resultado em m² fechado em caixas inteiras (caixas = roundup(área
+// × 1,1 ÷ m²/caixa); m² = caixas × m²/caixa). Manta: rolos fechados (real = área
+// ÷ m²/rolo).
 export function calcularPiso(piso: PisoVinilico, area: number): ResultadoPiso {
   if (piso.formato === "manta") {
     const real = area > 0 && piso.m2Caixa > 0 ? area / piso.m2Caixa : 0;
@@ -124,11 +126,10 @@ export function calcularPiso(piso: PisoVinilico, area: number): ResultadoPiso {
       refUnidade: "m²",
     };
   }
-  const m2 = area > 0 ? roundup(area * 1.1) : 0;
   const caixas = area > 0 && piso.m2Caixa > 0 ? roundup((area * 1.1) / piso.m2Caixa) : 0;
   return {
     manta: false,
-    recomendada: m2,
+    recomendada: caixas * piso.m2Caixa, // m² de caixas fechadas
     unidade: "m²",
     real: area,
     realUnidade: "m²",
