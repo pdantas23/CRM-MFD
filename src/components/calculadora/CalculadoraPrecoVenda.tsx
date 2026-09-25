@@ -14,24 +14,21 @@
 import { useState } from "react";
 import { InputValor } from "@/components/ui/InputValor";
 import { formatBRL } from "@/lib/format";
-import { MARCAS, type PisoVinilico } from "@/lib/calculadora/pisoVinilico";
+import { MARCAS, FORMATO_LABEL, type MarcaId, type PisoVinilico } from "@/lib/calculadora/pisoVinilico";
 
-// Produtos Tarkett com dados de planilha (frete/m², ICMS incluso, preço sugerido).
-// Selecionar um deles preenche Frete e Crédito de ICMS; o preço sugerido só é
-// exibido como referência (não entra no cálculo).
-const PISOS_PRECO = (MARCAS.find((m) => m.id === "tarkett")?.pisos ?? []).filter(
-  (p) => p.fretePorM2 != null || p.icmsIncluso != null || p.precoSugerido != null,
-);
-const GRUPOS_PRECO: [string, PisoVinilico[]][] = (() => {
+// Agrupa os produtos de uma marca por categoria (Tarkett) ou formato (Rufino).
+// Selecionar um produto preenche Frete e Crédito de ICMS quando a marca tem
+// esses dados de planilha; o preço sugerido só é exibido como referência.
+function gruposDaMarca(pisos: PisoVinilico[]): [string, PisoVinilico[]][] {
   const mapa = new Map<string, PisoVinilico[]>();
-  for (const p of PISOS_PRECO) {
-    const g = p.categoria ?? "Outros";
+  for (const p of pisos) {
+    const g = p.categoria ?? FORMATO_LABEL[p.formato];
     const arr = mapa.get(g);
     if (arr) arr.push(p);
     else mapa.set(g, [p]);
   }
   return Array.from(mapa.entries());
-})();
+}
 
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -62,20 +59,22 @@ export function CalculadoraPrecoVenda() {
   const [frete, setFrete] = useState(0);
   const [creditoIcms, setCreditoIcms] = useState(0); // crédito de ICMS de origem (%)
   const [icmsAtual, setIcmsAtual] = useState(22.5); // ICMS do estado (PI), travado em 22,5%
-  const [custosOp, setCustosOp] = useState(0);
+  const [custosOp, setCustosOp] = useState(7); // padrão 7% (editável)
   const [comissao, setComissao] = useState(0);
-  const [impostoSaida, setImpostoSaida] = useState(0);
+  const [impostoSaida, setImpostoSaida] = useState(11.5); // padrão 11,5% (editável)
   const [margem, setMargem] = useState(0);
   const [precoVenda, setPrecoVenda] = useState(0);
   // Qual campo o usuário está definindo; o outro é calculado.
   const [modo, setModo] = useState<"margem" | "pv">("margem");
-  // Produto Tarkett escolhido (opcional): preenche frete e crédito de ICMS.
+  // Marca + produto escolhidos (opcional): preenchem frete e crédito de ICMS.
+  const [marcaPrecoId, setMarcaPrecoId] = useState<MarcaId>("tarkett");
   const [produtoId, setProdutoId] = useState("");
-  const produto = PISOS_PRECO.find((p) => p.id === produtoId);
+  const marcaPreco = MARCAS.find((m) => m.id === marcaPrecoId) ?? MARCAS[0];
+  const produto = marcaPreco.pisos.find((p) => p.id === produtoId);
 
   function selecionarProduto(id: string) {
     setProdutoId(id);
-    const p = PISOS_PRECO.find((x) => x.id === id);
+    const p = marcaPreco.pisos.find((x) => x.id === id);
     if (!p) return;
     if (p.fretePorM2 != null) setFrete(p.fretePorM2);
     if (p.icmsIncluso != null) setCreditoIcms(p.icmsIncluso);
@@ -109,14 +108,31 @@ export function CalculadoraPrecoVenda() {
     <div className="grid gap-6 lg:grid-cols-2">
       {/* Entradas */}
       <div className="card space-y-4 p-6">
-        <Campo label="Produto (Tarkett) — opcional">
+        <Campo label="Marca">
+          <select
+            value={marcaPrecoId}
+            onChange={(e) => {
+              setMarcaPrecoId(e.target.value as MarcaId);
+              setProdutoId(""); // volta ao manual ao trocar de marca
+            }}
+            className="input-base w-full"
+          >
+            {MARCAS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.nome}
+              </option>
+            ))}
+          </select>
+        </Campo>
+
+        <Campo label="Produto">
           <select
             value={produtoId}
             onChange={(e) => selecionarProduto(e.target.value)}
             className="input-base w-full"
           >
-            <option value="">— Manual (sem produto) —</option>
-            {GRUPOS_PRECO.map(([grupo, itens]) => (
+            <option value="">Manual</option>
+            {gruposDaMarca(marcaPreco.pisos).map(([grupo, itens]) => (
               <optgroup key={grupo} label={grupo}>
                 {itens.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -126,9 +142,6 @@ export function CalculadoraPrecoVenda() {
               </optgroup>
             ))}
           </select>
-          <p className="mt-1 text-xs text-gray-400">
-            Preenche o frete e o crédito de ICMS pela planilha. O preço da planilha aparece só como referência.
-          </p>
         </Campo>
 
         <Campo label="Preço de custo do produto">
