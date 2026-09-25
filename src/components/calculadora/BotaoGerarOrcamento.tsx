@@ -5,13 +5,20 @@
 import { useRouter } from "next/navigation";
 import { prepararItensOrcamento, type ItemOrcamentoCalc } from "@/lib/calculadora/gerarOrcamento";
 
-export function BotaoGerarOrcamento({ itens }: { itens: ItemOrcamentoCalc[] }) {
+export function BotaoGerarOrcamento({
+  itens,
+  observacao,
+}: {
+  itens: ItemOrcamentoCalc[];
+  /** Observação opcional (dados discriminados do cálculo) para o campo do orçamento. */
+  observacao?: string;
+}) {
   const router = useRouter();
   return (
     <button
       type="button"
       onClick={() => {
-        const url = prepararItensOrcamento(itens);
+        const url = prepararItensOrcamento(itens, observacao);
         if (url) router.push(url);
       }}
       className="btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-sm"

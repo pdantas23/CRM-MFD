@@ -184,7 +184,7 @@ export function NovoOrcamentoPageForm({
   // genérico fica como dica). Consome do sessionStorage uma vez, no mount.
   useEffect(() => {
     if (modoEdicao) return;
-    const calc = lerItensDaCalculadora();
+    const { itens: calc, observacao } = lerItensDaCalculadora();
     if (calc.length === 0) return;
     // Campo de busca VAZIO (o usuário digita o produto). Da calculadora vêm só a
     // quantidade e a dica embaixo (nome genérico) para referência.
@@ -195,6 +195,8 @@ export function NovoOrcamentoPageForm({
         sugestao: `${i.descricao} · ${i.quantidade} ${i.unidade}`,
       })),
     );
+    // Observação discriminada (ex.: piso vinílico: m² calculado, +10%, caixas).
+    if (observacao) setObs(observacao);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

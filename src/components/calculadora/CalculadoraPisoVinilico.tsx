@@ -10,9 +10,9 @@ import {
   FORMATO_LABEL,
   calcularPiso,
   calcularInsumos,
+  observacaoPiso,
   BASES_PRIMER,
   NIVELAMENTOS,
-  type FormatoPiso,
   type MarcaId,
   type PisoVinilico,
 } from "@/lib/calculadora/pisoVinilico";
@@ -21,6 +21,19 @@ import { BotaoGerarOrcamento } from "./BotaoGerarOrcamento";
 
 function fmt(n: number, casas = 2): string {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+
+// Agrupa os pisos por categoria (Tarkett) ou, na falta dela, pelo formato
+// (Rufino). Preserva a ordem em que aparecem no cadastro.
+function gruposDoPiso(pisos: PisoVinilico[]): [string, PisoVinilico[]][] {
+  const mapa = new Map<string, PisoVinilico[]>();
+  for (const p of pisos) {
+    const g = p.categoria ?? FORMATO_LABEL[p.formato];
+    const arr = mapa.get(g);
+    if (arr) arr.push(p);
+    else mapa.set(g, [p]);
+  }
+  return Array.from(mapa.entries());
 }
 
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
@@ -50,13 +63,17 @@ export function CalculadoraPisoVinilico() {
     piso && resultado
       ? [
           {
-            descricao: `Piso ${piso.colecao} ${piso.instalacao} ${piso.espessura}`,
+            descricao: `Piso ${piso.colecao} ${piso.instalacao}${piso.espessura ? " " + piso.espessura : ""}`,
             quantidade: resultado.recomendada,
             unidade: resultado.unidade,
           },
           ...insumos.map((i) => ({ descricao: i.nome, quantidade: i.quantidade, unidade: i.unidade })),
         ]
       : [];
+
+  // Observação com os dados discriminados do piso (m² calculada, +10% e caixas).
+  const observacaoOrcamento =
+    piso && resultado && area > 0 ? observacaoPiso(marca.nome, piso, area, resultado) : "";
 
   function baixarPdf() {
     if (!piso || !resultado || area <= 0) return;
@@ -65,7 +82,7 @@ export function CalculadoraPisoVinilico() {
       piso: `${piso.colecao} ${piso.instalacao}`,
       formato: FORMATO_LABEL[piso.formato].replace(" (rolo)", ""),
       dimensao: piso.dimensao,
-      espessura: piso.espessura,
+      espessura: piso.espessura ?? "",
       m2Caixa: piso.m2Caixa,
       uso: piso.uso,
       area,
@@ -111,20 +128,16 @@ export function CalculadoraPisoVinilico() {
             onChange={(e) => setPisoId(e.target.value)}
             className="input-base w-full"
           >
-            {(["regua", "placa", "manta"] as FormatoPiso[]).map((f) => {
-              const grupo = marca.pisos.filter((p) => p.formato === f);
-              if (!grupo.length) return null;
-              return (
-                <optgroup key={f} label={FORMATO_LABEL[f]}>
-                  {grupo.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.colecao} {p.instalacao} — {p.espessura} · {fmt(p.m2Caixa)} m²/
-                      {p.formato === "manta" ? "rolo" : "cx"} · {p.uso}
-                    </option>
-                  ))}
-                </optgroup>
-              );
-            })}
+            {gruposDoPiso(marca.pisos).map(([grupo, itens]) => (
+              <optgroup key={grupo} label={grupo}>
+                {itens.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.colecao} · {p.dimensao} — {p.espessura ? p.espessura + " · " : ""}
+                    {fmt(p.m2Caixa)} m²/{p.formato === "manta" ? "rolo" : "cx"}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
           </select>
         </Campo>
 
@@ -136,7 +149,7 @@ export function CalculadoraPisoVinilico() {
             </div>
             <div className="flex justify-between">
               <dt className="text-gray-500">Espessura</dt>
-              <dd className="font-medium text-gray-800">{piso.espessura}</dd>
+              <dd className="font-medium text-gray-800">{piso.espessura ?? "—"}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-gray-500">{piso.formato === "manta" ? "m²/rolo" : "m²/caixa"}</dt>
@@ -188,7 +201,7 @@ export function CalculadoraPisoVinilico() {
       <div className="card p-6">
         {area > 0 && (
           <div className="mb-4 flex justify-end gap-2">
-            <BotaoGerarOrcamento itens={itensOrcamento} />
+            <BotaoGerarOrcamento itens={itensOrcamento} observacao={observacaoOrcamento} />
             <button
               type="button"
               onClick={baixarPdf}
