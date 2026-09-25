@@ -14,6 +14,24 @@
 import { useState } from "react";
 import { InputValor } from "@/components/ui/InputValor";
 import { formatBRL } from "@/lib/format";
+import { MARCAS, type PisoVinilico } from "@/lib/calculadora/pisoVinilico";
+
+// Produtos Tarkett com dados de planilha (frete/m², ICMS incluso, preço sugerido).
+// Selecionar um deles preenche Frete e Crédito de ICMS; o preço sugerido só é
+// exibido como referência (não entra no cálculo).
+const PISOS_PRECO = (MARCAS.find((m) => m.id === "tarkett")?.pisos ?? []).filter(
+  (p) => p.fretePorM2 != null || p.icmsIncluso != null || p.precoSugerido != null,
+);
+const GRUPOS_PRECO: [string, PisoVinilico[]][] = (() => {
+  const mapa = new Map<string, PisoVinilico[]>();
+  for (const p of PISOS_PRECO) {
+    const g = p.categoria ?? "Outros";
+    const arr = mapa.get(g);
+    if (arr) arr.push(p);
+    else mapa.set(g, [p]);
+  }
+  return Array.from(mapa.entries());
+})();
 
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -51,6 +69,17 @@ export function CalculadoraPrecoVenda() {
   const [precoVenda, setPrecoVenda] = useState(0);
   // Qual campo o usuário está definindo; o outro é calculado.
   const [modo, setModo] = useState<"margem" | "pv">("margem");
+  // Produto Tarkett escolhido (opcional): preenche frete e crédito de ICMS.
+  const [produtoId, setProdutoId] = useState("");
+  const produto = PISOS_PRECO.find((p) => p.id === produtoId);
+
+  function selecionarProduto(id: string) {
+    setProdutoId(id);
+    const p = PISOS_PRECO.find((x) => x.id === id);
+    if (!p) return;
+    if (p.fretePorM2 != null) setFrete(p.fretePorM2);
+    if (p.icmsIncluso != null) setCreditoIcms(p.icmsIncluso);
+  }
 
   // DIFAL = ICMS atual − crédito (nunca negativo), sobre o preço do produto.
   const difalPct = Math.max(0, icmsAtual - creditoIcms);
@@ -80,6 +109,28 @@ export function CalculadoraPrecoVenda() {
     <div className="grid gap-6 lg:grid-cols-2">
       {/* Entradas */}
       <div className="card space-y-4 p-6">
+        <Campo label="Produto (Tarkett) — opcional">
+          <select
+            value={produtoId}
+            onChange={(e) => selecionarProduto(e.target.value)}
+            className="input-base w-full"
+          >
+            <option value="">— Manual (sem produto) —</option>
+            {GRUPOS_PRECO.map(([grupo, itens]) => (
+              <optgroup key={grupo} label={grupo}>
+                {itens.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.colecao} · {p.dimensao}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-400">
+            Preenche o frete e o crédito de ICMS pela planilha. O preço da planilha aparece só como referência.
+          </p>
+        </Campo>
+
         <Campo label="Preço de custo do produto">
           <InputValor value={precoCusto} onChange={setPrecoCusto} className="w-full" cinzaSeZero />
         </Campo>
@@ -150,6 +201,16 @@ export function CalculadoraPrecoVenda() {
           <Linha label={`Imposto de saída (${pct(impostoSaida)})`} valor={formatBRL(impostoReais)} />
           <Linha label={`Margem (${pct(margemEfetiva)})`} valor={formatBRL(margemReais)} destaque />
         </dl>
+
+        {produto?.precoSugerido != null && (
+          <div className="mt-4 flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-sm">
+            <span className="text-gray-500">
+              Preço sugerido (planilha)
+              <span className="ml-1 text-xs text-gray-400">{produto.colecao}</span>
+            </span>
+            <span className="font-medium text-gray-800">{formatBRL(produto.precoSugerido)}/m²</span>
+          </div>
+        )}
 
         {creditoIcms > icmsAtual && (
           <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
