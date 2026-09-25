@@ -47,6 +47,30 @@ function rolePodeVincularVendedor(role: string): boolean {
   return role === "vendedor" || role === "admin";
 }
 
+// Confirma que o vendedor VHSYS escolhido pertence à MESMA conta do profile.
+// O id_vhsys é numerado POR CONTA — vincular um vendedor de outra conta faz o
+// usuário não enxergar nenhum dado (o filtro vendedor_id_vhsys nunca casa).
+// Foi o que zerou a lista do almeida-kcm (vinculado ao id do almeida-sa).
+// contaId null = superadmin global/legado (sem conta fixa) → não valida.
+async function vendedorNaConta(
+  admin: ReturnType<typeof createAdminClient>,
+  vendedorId: number,
+  contaId: string | null,
+): Promise<boolean> {
+  if (!contaId) return true;
+  const { data } = await admin
+    .from("vhsys_vendedores")
+    .select("id_vhsys")
+    .eq("conta_id", contaId)
+    .eq("id_vhsys", vendedorId)
+    .eq("lixeira", false)
+    .maybeSingle();
+  return data != null;
+}
+
+const ERRO_VENDEDOR_CONTA =
+  "O vendedor selecionado pertence a outra conta. Ative a conta correta e escolha um vendedor dela.";
+
 // ── Helper de permissão ────────────────────────────────────────────────────
 
 interface GuardSuperadmin {
@@ -210,6 +234,13 @@ export async function criarUsuario(dados: {
     .maybeSingle();
   if (existente) return { ok: false, erro: `Já existe um usuário com o nome "${nome}".` };
 
+  // O novo usuário fica na conta ativa (contaId); o vendedor precisa ser dela.
+  if (rolePodeVincularVendedor(role) && vendedorId != null) {
+    if (!(await vendedorNaConta(admin, vendedorId, contaId))) {
+      return { ok: false, erro: ERRO_VENDEDOR_CONTA };
+    }
+  }
+
   // Cria o usuário no Auth — o trigger handle_new_user cria o profile.
   const { data: criado, error: criarErro } = await admin.auth.admin.createUser({
     email,
@@ -276,6 +307,21 @@ export async function atualizarUsuario(
   }
 
   const admin = createAdminClient();
+
+  // Vínculo de vendedor validado contra a conta DO PRÓPRIO usuário editado
+  // (não a ativa): editar com outra conta ativa mostraria vendedores dela, e
+  // salvar vincularia um id de conta errada — zerando a listagem do usuário.
+  if (rolePodeVincularVendedor(role) && vendedorId != null) {
+    const { data: alvoConta } = await admin
+      .from("profiles")
+      .select("conta_id")
+      .eq("id", id)
+      .single();
+    const contaDoUsuario = (alvoConta as { conta_id: string | null } | null)?.conta_id ?? null;
+    if (!(await vendedorNaConta(admin, vendedorId, contaDoUsuario))) {
+      return { ok: false, erro: ERRO_VENDEDOR_CONTA };
+    }
+  }
 
   // owner/superadmin não são atribuíveis por esta tela: só é permitido MANTER
   // o papel de quem já o tem (não promover). Bloqueia promoção via chamada direta.
