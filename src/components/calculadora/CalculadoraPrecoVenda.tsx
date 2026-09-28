@@ -78,6 +78,9 @@ export function CalculadoraPrecoVenda() {
     if (!p) return;
     if (p.fretePorM2 != null) setFrete(p.fretePorM2);
     if (p.icmsIncluso != null) setCreditoIcms(p.icmsIncluso);
+    // Valor base da planilha; se o produto não tem custo cadastrado, zera (não
+    // mantém o valor do produto anterior) para o usuário digitar.
+    setPrecoCusto(p.precoCusto ?? 0);
   }
 
   // DIFAL = ICMS atual − crédito (nunca negativo), sobre o preço do produto.
