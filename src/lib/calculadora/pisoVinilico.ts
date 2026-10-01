@@ -54,17 +54,19 @@ export const MARCAS: MarcaPiso[] = [
   {
     id: "rufino",
     nome: "Rufino",
+    // Preço de custo/m² e crédito de ICMS (4%) da tabela Rufino. Frete/m² =
+    // gramatura/m² (fichas técnicas Rufino, ISO 23997) × R$ 1,51/kg.
     pisos: [
       // Réguas
-      { id: "ruf-sofisticato-col-reg", colecao: "Sofisticato", instalacao: "Colado", formato: "regua", dimensao: "17,78 × 121,92 cm", espessura: "2 mm", m2Caixa: 3.9, pecasCaixa: 18, uso: "Residencial", obs: "Garantia 10 anos Res." },
-      { id: "ruf-sofisticato-cli-reg", colecao: "Sofisticato", instalacao: "Clicado", formato: "regua", dimensao: "22,90 × 122,00 cm", espessura: "4,5 mm", m2Caixa: 2.79, pecasCaixa: 10, uso: "Residencial", obs: "3,5 mm + 1 mm manta IXPE" },
-      { id: "ruf-nobile-col-reg", colecao: "Nobile", instalacao: "Colado", formato: "regua", dimensao: "17,78 × 121,92 cm", espessura: "2 mm", m2Caixa: 3.9, pecasCaixa: 18, uso: "Res. e Comercial", obs: "Garantia 10 Res / 5 Com" },
-      { id: "ruf-nobile-cli-reg", colecao: "Nobile", instalacao: "Clicado", formato: "regua", dimensao: "22,9 × 122,22 cm", espessura: "5 mm", m2Caixa: 2.23, pecasCaixa: 8, uso: "Res. e Comercial", obs: "4 mm + 1 mm manta IXPE" },
-      { id: "ruf-bravo-col-reg", colecao: "Bravo", instalacao: "Colado", formato: "regua", dimensao: "17,78 × 121,92 cm", espessura: "3 mm", m2Caixa: 2.6, pecasCaixa: 12, uso: "Res. e Comercial", obs: "Garantia 10 Res / Com" },
+      { id: "ruf-sofisticato-col-reg", colecao: "Sofisticato", instalacao: "Colado", formato: "regua", dimensao: "17,78 × 121,92 cm", espessura: "2 mm", m2Caixa: 3.9, pecasCaixa: 18, uso: "Residencial", obs: "Garantia 10 anos Res.", icmsIncluso: 4, fretePorM2: 5.22, precoCusto: 45.83 },
+      { id: "ruf-sofisticato-cli-reg", colecao: "Sofisticato", instalacao: "Clicado", formato: "regua", dimensao: "22,90 × 122,00 cm", espessura: "4,5 mm", m2Caixa: 2.79, pecasCaixa: 10, uso: "Residencial", obs: "3,5 mm + 1 mm manta IXPE", icmsIncluso: 4, fretePorM2: 10.83, precoCusto: 105.44 },
+      { id: "ruf-nobile-col-reg", colecao: "Nobile", instalacao: "Colado", formato: "regua", dimensao: "17,78 × 121,92 cm", espessura: "2 mm", m2Caixa: 3.9, pecasCaixa: 18, uso: "Res. e Comercial", obs: "Garantia 10 Res / 5 Com", icmsIncluso: 4, fretePorM2: 5.22, precoCusto: 48.13 },
+      { id: "ruf-nobile-cli-reg", colecao: "Nobile", instalacao: "Clicado", formato: "regua", dimensao: "22,9 × 122,22 cm", espessura: "5 mm", m2Caixa: 2.23, pecasCaixa: 8, uso: "Res. e Comercial", obs: "4 mm + 1 mm manta IXPE", icmsIncluso: 4, fretePorM2: 13.2, precoCusto: 117.21 },
+      { id: "ruf-bravo-col-reg", colecao: "Bravo", instalacao: "Colado", formato: "regua", dimensao: "17,78 × 121,92 cm", espessura: "3 mm", m2Caixa: 2.6, pecasCaixa: 12, uso: "Res. e Comercial", obs: "Garantia 10 Res / Com", icmsIncluso: 4, fretePorM2: 7.84, precoCusto: 76.68 },
       // Placas
-      { id: "ruf-sofisticato-col-pla", colecao: "Sofisticato", instalacao: "Colado", formato: "placa", dimensao: "45,72 × 45,72 cm", espessura: "2 mm", m2Caixa: 5.02, pecasCaixa: 24, uso: "Residencial", obs: "Garantia 10 anos Res." },
-      { id: "ruf-nobile-col-pla", colecao: "Nobile", instalacao: "Colado", formato: "placa", dimensao: "91,44 × 91,44 cm", espessura: "2 mm", m2Caixa: 10.03, pecasCaixa: 12, uso: "Res. e Comercial", obs: "Garantia 10 Res / 5 Com" },
-      { id: "ruf-bravo-col-pla", colecao: "Bravo", instalacao: "Colado", formato: "placa", dimensao: "91,44 × 91,44 cm", espessura: "3 mm", m2Caixa: 6.69, pecasCaixa: 8, uso: "Res. e Comercial", obs: "Garantia 10 Res / 5 Com" },
+      { id: "ruf-sofisticato-col-pla", colecao: "Sofisticato", instalacao: "Colado", formato: "placa", dimensao: "45,72 × 45,72 cm", espessura: "2 mm", m2Caixa: 5.02, pecasCaixa: 24, uso: "Residencial", obs: "Garantia 10 anos Res.", icmsIncluso: 4, fretePorM2: 5.22, precoCusto: 45.83 },
+      { id: "ruf-nobile-col-pla", colecao: "Nobile", instalacao: "Colado", formato: "placa", dimensao: "91,44 × 91,44 cm", espessura: "2 mm", m2Caixa: 10.03, pecasCaixa: 12, uso: "Res. e Comercial", obs: "Garantia 10 Res / 5 Com", icmsIncluso: 4, fretePorM2: 5.22, precoCusto: 55.35 },
+      { id: "ruf-bravo-col-pla", colecao: "Bravo", instalacao: "Colado", formato: "placa", dimensao: "91,44 × 91,44 cm", espessura: "3 mm", m2Caixa: 6.69, pecasCaixa: 8, uso: "Res. e Comercial", obs: "Garantia 10 Res / 5 Com", icmsIncluso: 4, fretePorM2: 7.84, precoCusto: 88.18 },
     ],
   },
   {
