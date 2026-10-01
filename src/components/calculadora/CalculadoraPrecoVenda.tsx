@@ -30,6 +30,13 @@ function gruposDaMarca(pisos: PisoVinilico[]): [string, PisoVinilico[]][] {
   return Array.from(mapa.entries());
 }
 
+const FORMATO_CURTO: Record<string, string> = { regua: "Régua", placa: "Placa", manta: "Manta" };
+
+// Nome de exibição do produto (nome comercial; senão coleção + formato).
+function nomeProduto(p: PisoVinilico): string {
+  return p.nome ?? `${p.colecao} ${FORMATO_CURTO[p.formato] ?? ""}`.trimEnd();
+}
+
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -139,7 +146,7 @@ export function CalculadoraPrecoVenda() {
               <optgroup key={grupo} label={grupo}>
                 {itens.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.colecao} · {p.dimensao}
+                    {nomeProduto(p)}
                   </option>
                 ))}
               </optgroup>
