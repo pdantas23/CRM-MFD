@@ -16,6 +16,8 @@ interface DropdownFiltroProps {
   /** Chamado quando o usuário seleciona uma opção. undefined = limpar filtro. */
   onChange: (valor: string | undefined) => void;
   placeholder?: string;
+  /** Ocupa a largura do container (ex.: filtros empilhados num modal). */
+  larguraTotal?: boolean;
 }
 
 export function DropdownFiltro({
@@ -24,6 +26,7 @@ export function DropdownFiltro({
   valorAtual,
   onChange,
   placeholder = "Todos",
+  larguraTotal,
 }: DropdownFiltroProps) {
   const [aberto, setAberto] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -59,7 +62,7 @@ export function DropdownFiltro({
   const listboxId = `dropdown-${label.replace(/\s+/g, "-").toLowerCase()}`;
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={`relative ${larguraTotal ? "w-full" : ""}`}>
       <button
         type="button"
         onClick={() => setAberto((v) => !v)}
@@ -67,15 +70,17 @@ export function DropdownFiltro({
         aria-expanded={aberto}
         aria-controls={listboxId}
         className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+          larguraTotal ? "w-full" : ""
+        } ${
           ativo
             ? "border-primary-600 bg-primary-50 text-primary-700"
             : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
         }`}
       >
         <span className="text-xs text-gray-400">{label}:</span>
-        <span>{labelAtual}</span>
+        <span className={larguraTotal ? "flex-1 truncate text-left" : ""}>{labelAtual}</span>
         <svg
-          className={`h-3.5 w-3.5 transition-transform ${aberto ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 shrink-0 transition-transform ${aberto ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -89,7 +94,9 @@ export function DropdownFiltro({
           id={listboxId}
           role="listbox"
           aria-label={label}
-          className="absolute left-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+          className={`absolute left-0 top-full z-50 mt-1 max-h-72 min-w-[160px] overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg ${
+            larguraTotal ? "w-full" : ""
+          }`}
         >
           {/* Opção "Todos" para limpar filtro */}
           <button

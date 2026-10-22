@@ -4,6 +4,7 @@ import { sincronizarEspelho, type ModoSync } from "@/lib/vhsys/sync";
 import { listarContasAtivas, getTokensPorSlug } from "@/lib/accounts/repo";
 import { atualizarNomeEmpresa } from "@/lib/vhsys/empresa";
 import { mapComLimite } from "@/lib/concorrencia";
+import { sincronizarComprasNotas } from "@/lib/produtos/entradas";
 
 // Polling de sincronização VHSYS → espelho Supabase, para TODAS as contas ativas.
 //
@@ -81,6 +82,17 @@ export async function GET(request: NextRequest) {
           });
           // Atualiza o nome da empresa (cacheado em accounts) a partir do VHSYS.
           await atualizarNomeEmpresa({ id: conta.id, tokens });
+
+          // Notas de entrada → última compra e custo da aba Produtos (no máximo
+          // a cada 30 min por conta). Falha aqui não afeta o espelho.
+          try {
+            const r = await sincronizarComprasNotas({ id: conta.id, tokens });
+            console.info(`[cron vhsys-sync] conta=${conta.slug} compras: ${r}`);
+          } catch (err) {
+            console.error(
+              `[cron vhsys-sync] conta=${conta.slug} compras FALHOU: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
 
           // Erros por entidade não estouram exceção (sync.ts os coleta em cada
           // ResultadoEntidade) — logamos cada um para diagnóstico nos logs Vercel.
