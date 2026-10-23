@@ -24,7 +24,7 @@ create table if not exists public.precificacao_produtos (
   secao            text,
   preco_custo      numeric(14,4),
   frete            numeric(14,4),
-  credito_icms     numeric(8,6),          -- null = desconhecido (DIFAL cheio); 0 = interno
+  credito_icms     numeric(8,6),          -- null = interno (sem DIFAL); 0 ou mais = DIFAL em base dupla (ver 0037)
   custo_op         numeric(8,6) not null,
   comissao         numeric(8,6) not null,
   imposto_saida    numeric(8,6) not null,

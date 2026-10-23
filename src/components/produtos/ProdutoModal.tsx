@@ -18,6 +18,7 @@ import {
   ORDEM_SECOES,
   SEM_SECAO,
   custoLiquido,
+  difalPct,
   margem,
   precoEquilibrio,
   somaTaxas,
@@ -154,8 +155,8 @@ export function ProdutoModal({
   const equilibrio = precoEquilibrio(taxas, icmsAtual);
   const m = margem(taxas, icmsAtual, venda);
   const vendaEfetiva = venda ?? equilibrio;
-  const difalPct = taxas.creditoIcms === 0 ? 0 : Math.max(0, icmsAtual - (taxas.creditoIcms ?? 0));
-  const difal = precoCusto === null ? null : difalPct * precoCusto;
+  const pctDifal = difalPct(taxas.creditoIcms, icmsAtual);
+  const difal = precoCusto === null ? null : pctDifal * precoCusto;
   const sobreVenda = (f: number) => (vendaEfetiva === null ? null : f * vendaEfetiva);
   const lucro = vendaEfetiva === null || liq === null ? null : vendaEfetiva - liq - somaTaxas(taxas) * vendaEfetiva;
 
@@ -380,7 +381,7 @@ export function ProdutoModal({
                   {liq !== null && (
                     <p className="text-xs text-gray-500">
                       {brl(precoCusto)} de custo + {brl(frete ?? 0)} de frete + {brl(difal)} de DIFAL (
-                      {pct(difalPct)} do custo)
+                      {pct(pctDifal)} do custo)
                     </p>
                   )}
                 </>
@@ -393,8 +394,8 @@ export function ProdutoModal({
                 <Campo label="Frete">
                   <CampoNumero value={frete} onChange={setFrete} prefixo="R$" />
                 </Campo>
-                <Campo label="Crédito de ICMS" dica="Vazio = DIFAL cheio · 0 = compra interna">
-                  <CampoNumero value={credito} onChange={setCredito} sufixo="%" placeholder="cheio" />
+                <Campo label="Crédito de ICMS" dica="Vazio = compra interna (sem DIFAL) · 0 = de fora sem crédito">
+                  <CampoNumero value={credito} onChange={setCredito} sufixo="%" placeholder="interno" />
                 </Campo>
               </div>
             </Etapa>

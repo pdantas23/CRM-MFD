@@ -2,8 +2,12 @@
 // "Produtos - Modular"). Sem "use server": usado no server e no client.
 //
 //   Custo líquido = custo + frete + DIFAL
-//     DIFAL = (ICMS atual − crédito) × custo; ZERO quando o crédito é 0%
-//             (compra interna). Crédito em branco = DIFAL cheio.
+//     DIFAL (fração do custo, ver difalPct):
+//       crédito em branco → zero (compra interna)
+//       crédito ≥ 0%      → base dupla (ICMS "por dentro", LC 87/96 art. 13 §1º I;
+//                           RICMS-PI art. 1.155 II), como a SEFAZ/nota:
+//                           (1 − crédito) ÷ (1 − ICMS atual) × ICMS atual − crédito
+//                           (crédito 0% e ICMS 22,5% → 29,03% do custo)
 //   Preço de equilíbrio = custo líquido ÷ (1 − (op + comissão + imposto))
 //   Margem = 1 − custo líquido ÷ venda − (op + comissão + imposto)
 //
@@ -12,7 +16,7 @@
 export interface TaxasProduto {
   precoCusto: number | null;
   frete: number | null;
-  /** null = crédito desconhecido (DIFAL cheio); 0 = compra interna (sem DIFAL). */
+  /** null = compra interna (sem DIFAL); 0 ou mais = DIFAL em base dupla. */
   creditoIcms: number | null;
   custoOp: number;
   comissao: number;
@@ -77,10 +81,15 @@ export function somaTaxas(t: Pick<TaxasProduto, "custoOp" | "comissao" | "impost
   return t.custoOp + t.comissao + t.impostoSaida;
 }
 
+/** DIFAL como fração do custo (regras no topo do arquivo). */
+export function difalPct(creditoIcms: number | null, icmsAtual: number): number {
+  if (creditoIcms === null || icmsAtual >= 1) return 0;
+  return Math.max(0, ((1 - creditoIcms) / (1 - icmsAtual)) * icmsAtual - creditoIcms);
+}
+
 export function custoLiquido(t: TaxasProduto, icmsAtual: number): number | null {
   if (t.precoCusto === null) return null;
-  const difal =
-    t.creditoIcms === 0 ? 0 : Math.max(0, icmsAtual - (t.creditoIcms ?? 0)) * t.precoCusto;
+  const difal = difalPct(t.creditoIcms, icmsAtual) * t.precoCusto;
   return t.precoCusto + (t.frete ?? 0) + difal;
 }
 
@@ -133,8 +142,8 @@ export function blocoPrecificacao(
 ): string {
   const liq = custoLiquido(t, icmsAtual);
   const equilibrio = precoEquilibrio(t, icmsAtual);
-  const difalPct = t.creditoIcms === 0 ? 0 : Math.max(0, icmsAtual - (t.creditoIcms ?? 0));
-  const difal = t.precoCusto === null ? null : difalPct * t.precoCusto;
+  const pctDifal = difalPct(t.creditoIcms, icmsAtual);
+  const difal = t.precoCusto === null ? null : pctDifal * t.precoCusto;
   const vendaFinal = venda ?? equilibrio;
   const m = venda === null ? 0 : margem(t, icmsAtual, venda);
   const lucro = vendaFinal === null || liq === null ? null : vendaFinal - liq - somaTaxas(t) * vendaFinal;
@@ -148,7 +157,7 @@ export function blocoPrecificacao(
   });
   return [
     `${INICIO_BLOCO} — ${data} · ${autor}]`,
-    `Custo ${reais(t.precoCusto)} + frete ${reais(t.frete ?? 0)} + DIFAL ${porcento(difalPct)} (${reais(difal)}) = custo líquido ${reais(liq)}`,
+    `Custo ${reais(t.precoCusto)} + frete ${reais(t.frete ?? 0)} + DIFAL ${porcento(pctDifal)} (${reais(difal)}) = custo líquido ${reais(liq)}`,
     `Despesas da venda: operacional ${porcento(t.custoOp)} · comissão ${porcento(t.comissao)} · imposto ${porcento(t.impostoSaida)} (total ${porcento(somaTaxas(t))})`,
     `Preço mínimo (equilíbrio): ${reais(equilibrio)}`,
     venda === null

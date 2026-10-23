@@ -253,7 +253,7 @@ export function LinhaProdutoEditavel({
         <CampoNumero compacto value={form.frete} onChange={(v) => mudar("frete", v)} prefixo="R$" className="w-24" />
       </td>
       <td className={td}>
-        <CampoNumero compacto value={form.credito} onChange={(v) => mudar("credito", v)} sufixo="%" className="w-20" placeholder="cheio" />
+        <CampoNumero compacto value={form.credito} onChange={(v) => mudar("credito", v)} sufixo="%" className="w-20" placeholder="interno" />
       </td>
       <td className={td}>
         <CampoNumero compacto value={form.op} onChange={(v) => mudar("op", v)} sufixo="%" className="w-20" />

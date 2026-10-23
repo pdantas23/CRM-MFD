@@ -1,7 +1,7 @@
 "use client";
 // Número decimal pt-BR que PODE ficar vazio (vazio = null). Diferente de
 // InputValor/InputDecimal, que tratam vazio como 0 — aqui a diferença importa
-// (ex.: crédito de ICMS em branco = DIFAL cheio; 0% = compra interna).
+// (ex.: crédito de ICMS em branco = compra interna; 0% = de fora sem crédito).
 import { useEffect, useState } from "react";
 
 function formatar(n: number | null, casas: number): string {
