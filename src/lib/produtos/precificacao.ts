@@ -4,10 +4,9 @@
 //   Custo líquido = custo + frete + DIFAL
 //     DIFAL (fração do custo, ver difalPct):
 //       crédito em branco → zero (compra interna)
-//       crédito ≥ 0%      → base dupla (ICMS "por dentro", LC 87/96 art. 13 §1º I;
-//                           RICMS-PI art. 1.155 II), como a SEFAZ/nota:
-//                           (1 − crédito) ÷ (1 − ICMS atual) × ICMS atual − crédito
-//                           (crédito 0% e ICMS 22,5% → 29,03% do custo)
+//       crédito ≥ 0%      → diferença simples de alíquotas: ICMS atual − crédito
+//                           (0% → 22,5% cheio; 4% → 18,5%). Escolha do negócio: não
+//                           usa a base dupla da SEFAZ, que dá um DIFAL maior.
 //   Preço de equilíbrio = custo líquido ÷ (1 − (op + comissão + imposto))
 //   Margem = 1 − custo líquido ÷ venda − (op + comissão + imposto)
 //
@@ -16,7 +15,7 @@
 export interface TaxasProduto {
   precoCusto: number | null;
   frete: number | null;
-  /** null = compra interna (sem DIFAL); 0 ou mais = DIFAL em base dupla. */
+  /** null = compra interna (sem DIFAL); 0 ou mais = DIFAL de (ICMS atual − crédito). */
   creditoIcms: number | null;
   custoOp: number;
   comissao: number;
@@ -83,8 +82,8 @@ export function somaTaxas(t: Pick<TaxasProduto, "custoOp" | "comissao" | "impost
 
 /** DIFAL como fração do custo (regras no topo do arquivo). */
 export function difalPct(creditoIcms: number | null, icmsAtual: number): number {
-  if (creditoIcms === null || icmsAtual >= 1) return 0;
-  return Math.max(0, ((1 - creditoIcms) / (1 - icmsAtual)) * icmsAtual - creditoIcms);
+  if (creditoIcms === null) return 0;
+  return Math.max(0, icmsAtual - creditoIcms);
 }
 
 export function custoLiquido(t: TaxasProduto, icmsAtual: number): number | null {

@@ -394,7 +394,7 @@ export function ProdutoModal({
                 <Campo label="Frete">
                   <CampoNumero value={frete} onChange={setFrete} prefixo="R$" />
                 </Campo>
-                <Campo label="Crédito de ICMS" dica="Vazio = compra interna (sem DIFAL) · 0 = de fora sem crédito">
+                <Campo label="Crédito de ICMS" dica="Vazio = compra interna (sem DIFAL) · 0 = DIFAL cheio">
                   <CampoNumero value={credito} onChange={setCredito} sufixo="%" placeholder="interno" />
                 </Campo>
               </div>
