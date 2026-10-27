@@ -119,7 +119,8 @@ export function ProdutoModal({
   const [imp, setImp] = useState(emPct(linha.impostoSaida));
   const [venda, setVenda] = useState(linha.valorVenda);
   // Simulação: preço hipotético para ver margem/lucro — NUNCA é salvo nem enviado.
-  const [simVenda, setSimVenda] = useState<number | null>(null);
+  // undefined = sem simulação (mostra a venda cadastrada); null = campo apagado.
+  const [simVenda, setSimVenda] = useState<number | null | undefined>(undefined);
   const [detalhes, setDetalhes] = useState<DetalhesProduto | null>(null);
   const [estado, setEstado] = useState<"livre" | "salvando" | "enviando" | "excluindo">("livre");
   const [erro, setErro] = useState<string | null>(null);
@@ -170,8 +171,9 @@ export function ProdutoModal({
   const situacao = situacaoDe(linha, icmsAtual);
 
   // ── Simulador (não salva) ─────────────────────────────────────────────
-  const simMargem = margem(taxas, icmsAtual, simVenda);
-  const simLucro = simVenda === null || liq === null ? null : simVenda - liq - somaTaxas(taxas) * simVenda;
+  const simValor = simVenda === undefined ? venda : simVenda;
+  const simMargem = margem(taxas, icmsAtual, simValor);
+  const simLucro = simValor === null || liq === null ? null : simValor - liq - somaTaxas(taxas) * simValor;
 
   function simularMargem(p: number | null) {
     if (p === null) return setSimVenda(null);
@@ -501,19 +503,19 @@ export function ProdutoModal({
                       Para negociar: não altera o valor salvo no CRM nem o do VHSYS
                     </p>
                   </div>
-                  {simVenda !== null && (
+                  {simVenda !== undefined && (
                     <button
                       type="button"
-                      onClick={() => setSimVenda(null)}
+                      onClick={() => setSimVenda(undefined)}
                       className="text-xs font-medium text-gray-500 hover:text-gray-700"
                     >
-                      Limpar
+                      Voltar ao cadastrado
                     </button>
                   )}
                 </header>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Campo label="Valor final">
-                    <CampoNumero value={simVenda} onChange={setSimVenda} prefixo="R$" />
+                    <CampoNumero value={simValor} onChange={setSimVenda} prefixo="R$" />
                   </Campo>
                   <Campo label="Margem">
                     <CampoNumero
@@ -526,7 +528,7 @@ export function ProdutoModal({
                 </div>
               </div>
               <div className="space-y-0.5 rounded-b-lg border-t border-gray-200 bg-white px-4 py-2.5">
-                {simVenda === null ? (
+                {simValor === null ? (
                   <p className="text-xs text-gray-500">
                     Digite o valor final ou a margem — o outro é calculado.
                   </p>
@@ -539,7 +541,7 @@ export function ProdutoModal({
                     />
                     <p className="text-xs text-gray-500">
                       Hoje: {brl(vendaEfetiva)} de venda, lucro {brl(lucro)} ({pct(venda === null ? 0 : m)})
-                      {simVenda < (equilibrio ?? 0) ? " · abaixo do preço mínimo: dá prejuízo" : ""}
+                      {simValor < (equilibrio ?? 0) ? " · abaixo do preço mínimo: dá prejuízo" : ""}
                     </p>
                   </>
                 )}
