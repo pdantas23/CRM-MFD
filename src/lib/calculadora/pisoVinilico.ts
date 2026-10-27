@@ -209,27 +209,6 @@ export function calcularPiso(piso: PisoVinilico, area: number): ResultadoPiso {
   };
 }
 
-function fmtM2(n: number): string {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// Texto discriminado da quantidade de piso, para a observação do orçamento:
-// área calculada, recomendado (+10%) e o equivalente em caixas/rolos (nº e m²).
-export function observacaoPiso(marca: string, piso: PisoVinilico, area: number, r: ResultadoPiso): string {
-  const maisDez = area * 1.1; // +10% cru, antes de fechar em embalagem
-  const emb = piso.formato === "manta" ? "rolo" : "cx";
-  // recomendada/referencia trocam de papel entre manta (rolos/m²) e caixa (m²/caixas).
-  const qtdeEmb = r.manta ? r.recomendada : r.referencia; // nº de embalagens
-  const totalM2 = r.manta ? r.referencia : r.recomendada; // m² cobertos por elas
-  return [
-    `Piso vinílico — ${piso.colecao} ${piso.instalacao}${piso.espessura ? " " + piso.espessura : ""} (${marca})`,
-    `• Área calculada: ${fmtM2(area)} m²`,
-    `• Recomendado (+10%): ${fmtM2(maisDez)} m²`,
-    `• Equivalente em ${r.manta ? "rolos" : "caixas"}: ${qtdeEmb} ${r.manta ? "rolo(s)" : "caixa(s)"}` +
-      ` = ${fmtM2(totalM2)} m² (${fmtM2(piso.m2Caixa)} m²/${emb})`,
-  ].join("\n");
-}
-
 // ── Insumos ──────────────────────────────────────────────────────────────────
 
 export interface OpcaoRendimento {

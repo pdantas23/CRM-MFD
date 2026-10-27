@@ -10,7 +10,6 @@ import {
   FORMATO_LABEL,
   calcularPiso,
   calcularInsumos,
-  observacaoPiso,
   BASES_PRIMER,
   NIVELAMENTOS,
   type MarcaId,
@@ -70,10 +69,6 @@ export function CalculadoraPisoVinilico() {
           ...insumos.map((i) => ({ descricao: i.nome, quantidade: i.quantidade, unidade: i.unidade })),
         ]
       : [];
-
-  // Observação com os dados discriminados do piso (m² calculada, +10% e caixas).
-  const observacaoOrcamento =
-    piso && resultado && area > 0 ? observacaoPiso(marca.nome, piso, area, resultado) : "";
 
   function baixarPdf() {
     if (!piso || !resultado || area <= 0) return;
@@ -201,7 +196,7 @@ export function CalculadoraPisoVinilico() {
       <div className="card p-6">
         {area > 0 && (
           <div className="mb-4 flex justify-end gap-2">
-            <BotaoGerarOrcamento itens={itensOrcamento} observacao={observacaoOrcamento} />
+            <BotaoGerarOrcamento itens={itensOrcamento} />
             <button
               type="button"
               onClick={baixarPdf}
