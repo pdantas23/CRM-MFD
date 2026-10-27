@@ -123,7 +123,7 @@ export function ProdutoModal({
   const [detalhes, setDetalhes] = useState<DetalhesProduto | null>(null);
   const [estado, setEstado] = useState<"livre" | "salvando" | "enviando" | "excluindo">("livre");
   const [erro, setErro] = useState<string | null>(null);
-  const [aba, setAba] = useState<"info" | "calculadora">("info");
+  const [aba, setAba] = useState<"info" | "calculadora" | "simular">("info");
 
   useEffect(() => {
     if (linha.idVhsys === null) return;
@@ -172,17 +172,11 @@ export function ProdutoModal({
   // ── Simulador (não salva) ─────────────────────────────────────────────
   const simMargem = margem(taxas, icmsAtual, simVenda);
   const simLucro = simVenda === null || liq === null ? null : simVenda - liq - somaTaxas(taxas) * simVenda;
-  const simDesconto = simVenda === null || !vendaEfetiva ? null : 1 - simVenda / vendaEfetiva;
 
   function simularMargem(p: number | null) {
     if (p === null) return setSimVenda(null);
     const v = vendaParaMargem(taxas, icmsAtual, p / 100);
     if (v !== null) setSimVenda(v);
-  }
-
-  function simularDesconto(p: number | null) {
-    if (p === null || !vendaEfetiva) return setSimVenda(null);
-    setSimVenda(vendaEfetiva * (1 - p / 100));
   }
 
   function mudarMargem(p: number | null) {
@@ -315,6 +309,7 @@ export function ProdutoModal({
             [
               ["info", "Informações"],
               ["calculadora", "Calculadora de custos"],
+              ["simular", "Simular preço"],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -492,8 +487,11 @@ export function ProdutoModal({
               Vai para o VHSYS: custo {brl(liq)} · venda {brl(vendaEfetiva)} · ICMS atual da conta{" "}
               {(icmsAtual * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%
             </p>
+          </div>
 
-            {/* Simulador — não salva no CRM nem envia ao VHSYS */}
+          {/* Simular preço */}
+          <div className={aba === "simular" ? "space-y-4" : "hidden"}>
+            {/* Simular preço — aba própria; não salva no CRM nem envia ao VHSYS */}
             <section className="rounded-lg border border-dashed border-gray-300 bg-gray-50/60">
               <div className="space-y-3 px-4 py-3">
                 <header className="flex items-start justify-between gap-3">
@@ -513,11 +511,11 @@ export function ProdutoModal({
                     </button>
                   )}
                 </header>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <Campo label="Preço simulado">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Campo label="Valor final">
                     <CampoNumero value={simVenda} onChange={setSimVenda} prefixo="R$" />
                   </Campo>
-                  <Campo label="Margem simulada">
+                  <Campo label="Margem">
                     <CampoNumero
                       value={simMargem === null ? null : simMargem * 100}
                       onChange={simularMargem}
@@ -525,19 +523,12 @@ export function ProdutoModal({
                       className={simMargem === null ? "" : simMargem < 0 ? "text-red-600" : "text-green-700"}
                     />
                   </Campo>
-                  <Campo label="Desconto sobre a venda atual">
-                    <CampoNumero
-                      value={simDesconto === null ? null : simDesconto * 100}
-                      onChange={simularDesconto}
-                      sufixo="%"
-                    />
-                  </Campo>
                 </div>
               </div>
               <div className="space-y-0.5 rounded-b-lg border-t border-gray-200 bg-white px-4 py-2.5">
                 {simVenda === null ? (
                   <p className="text-xs text-gray-500">
-                    Digite um preço, uma margem ou um desconto para ver o resultado.
+                    Digite o valor final ou a margem — o outro é calculado.
                   </p>
                 ) : (
                   <>
