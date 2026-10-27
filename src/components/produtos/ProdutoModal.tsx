@@ -118,6 +118,8 @@ export function ProdutoModal({
   const [com, setCom] = useState(emPct(linha.comissao));
   const [imp, setImp] = useState(emPct(linha.impostoSaida));
   const [venda, setVenda] = useState(linha.valorVenda);
+  // Simulação: preço hipotético para ver margem/lucro — NUNCA é salvo nem enviado.
+  const [simVenda, setSimVenda] = useState<number | null>(null);
   const [detalhes, setDetalhes] = useState<DetalhesProduto | null>(null);
   const [estado, setEstado] = useState<"livre" | "salvando" | "enviando" | "excluindo">("livre");
   const [erro, setErro] = useState<string | null>(null);
@@ -166,6 +168,22 @@ export function ProdutoModal({
   );
   const fornecedorVhsys = fornecedores.find((f) => f.id === linha.vhsys?.fornecedorId)?.nome;
   const situacao = situacaoDe(linha, icmsAtual);
+
+  // ── Simulador (não salva) ─────────────────────────────────────────────
+  const simMargem = margem(taxas, icmsAtual, simVenda);
+  const simLucro = simVenda === null || liq === null ? null : simVenda - liq - somaTaxas(taxas) * simVenda;
+  const simDesconto = simVenda === null || !vendaEfetiva ? null : 1 - simVenda / vendaEfetiva;
+
+  function simularMargem(p: number | null) {
+    if (p === null) return setSimVenda(null);
+    const v = vendaParaMargem(taxas, icmsAtual, p / 100);
+    if (v !== null) setSimVenda(v);
+  }
+
+  function simularDesconto(p: number | null) {
+    if (p === null || !vendaEfetiva) return setSimVenda(null);
+    setSimVenda(vendaEfetiva * (1 - p / 100));
+  }
 
   function mudarMargem(p: number | null) {
     if (p === null) return setVenda(null);
@@ -474,6 +492,68 @@ export function ProdutoModal({
               Vai para o VHSYS: custo {brl(liq)} · venda {brl(vendaEfetiva)} · ICMS atual da conta{" "}
               {(icmsAtual * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%
             </p>
+
+            {/* Simulador — não salva no CRM nem envia ao VHSYS */}
+            <section className="rounded-lg border border-dashed border-gray-300 bg-gray-50/60">
+              <div className="space-y-3 px-4 py-3">
+                <header className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">Simular preço</h3>
+                    <p className="text-xs text-gray-500">
+                      Para negociar: não altera o valor salvo no CRM nem o do VHSYS
+                    </p>
+                  </div>
+                  {simVenda !== null && (
+                    <button
+                      type="button"
+                      onClick={() => setSimVenda(null)}
+                      className="text-xs font-medium text-gray-500 hover:text-gray-700"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </header>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <Campo label="Preço simulado">
+                    <CampoNumero value={simVenda} onChange={setSimVenda} prefixo="R$" />
+                  </Campo>
+                  <Campo label="Margem simulada">
+                    <CampoNumero
+                      value={simMargem === null ? null : simMargem * 100}
+                      onChange={simularMargem}
+                      sufixo="%"
+                      className={simMargem === null ? "" : simMargem < 0 ? "text-red-600" : "text-green-700"}
+                    />
+                  </Campo>
+                  <Campo label="Desconto sobre a venda atual">
+                    <CampoNumero
+                      value={simDesconto === null ? null : simDesconto * 100}
+                      onChange={simularDesconto}
+                      sufixo="%"
+                    />
+                  </Campo>
+                </div>
+              </div>
+              <div className="space-y-0.5 rounded-b-lg border-t border-gray-200 bg-white px-4 py-2.5">
+                {simVenda === null ? (
+                  <p className="text-xs text-gray-500">
+                    Digite um preço, uma margem ou um desconto para ver o resultado.
+                  </p>
+                ) : (
+                  <>
+                    <ResultadoEtapa
+                      label={`Lucro por unidade (${pct(simMargem)})`}
+                      valor={brl(simLucro)}
+                      negativo={simLucro !== null && simLucro < -0.005}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Hoje: {brl(vendaEfetiva)} de venda, lucro {brl(lucro)} ({pct(venda === null ? 0 : m)})
+                      {simVenda < (equilibrio ?? 0) ? " · abaixo do preço mínimo: dá prejuízo" : ""}
+                    </p>
+                  </>
+                )}
+              </div>
+            </section>
           </div>
         </div>
 
