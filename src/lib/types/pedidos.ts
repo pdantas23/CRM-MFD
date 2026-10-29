@@ -89,4 +89,6 @@ export interface PedidoKanban extends PedidoRow {
   cobrancaNaEntrega: boolean;
   /** Parcelas (contas a receber) do pedido, ordenadas por vencimento. */
   parcelas: ParcelaPedido[];
+  /** Pedido entregue com comprovante de recebimento anexado. */
+  comprovanteEntrega?: boolean;
 }

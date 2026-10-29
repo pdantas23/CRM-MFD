@@ -10,6 +10,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { StatusBadge, AtrasadaBadge, EntregueBadge, ehAtrasada } from "@/components/ui/Badge";
 import { ContaBadge, type ContaInfoMap } from "@/components/entregas/ContaBadge";
+import { ComprovantesEntrega } from "@/components/pedidos/ComprovantesEntrega";
 import { formatBRL, formatarData } from "@/lib/format";
 import {
   vincularEntregaOrcamento,
@@ -99,7 +100,8 @@ export function EntregaModal({ entrega, isAdmin, onClose, onChanged, contas, mos
   const [erro, setErro] = useState<string | null>(null);
 
   // Baixa de entrega (estado "entregue") — só admin.
-  const entregue = Boolean(entrega.entregue_em);
+  const [recemEntregue, setRecemEntregue] = useState(false);
+  const entregue = Boolean(entrega.entregue_em) || recemEntregue;
   const atrasada = ehAtrasada(entrega, hojeISOSaoPaulo());
   const [pendingBaixa, startBaixa] = useTransition();
   const [avisoBaixa, setAvisoBaixa] = useState<string | null>(null);
@@ -111,7 +113,9 @@ export function EntregaModal({ entrega, isAdmin, onClose, onChanged, contas, mos
       if (!res.ok) setAvisoBaixa(res.erro);
       else if (res.aviso) setAvisoBaixa(res.aviso);
       onChanged?.();
-      onClose();
+      // Com pedido vinculado, fica aberto para anexar o comprovante de entrega.
+      if (res.ok && entrega.pedido_id) setRecemEntregue(true);
+      else onClose();
     });
   }
 
@@ -594,6 +598,18 @@ export function EntregaModal({ entrega, isAdmin, onClose, onChanged, contas, mos
             )}
           </section>
         </div>
+
+        {/* Entregue: comprovante de recebimento (é o mesmo do pedido vinculado) */}
+        {entregue && entrega.pedido_id && (
+          <div className="px-6 pb-4">
+            {recemEntregue && (
+              <p className="mb-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                Entrega marcada. Anexe abaixo o comprovante de recebimento do cliente.
+              </p>
+            )}
+            <ComprovantesEntrega pedidoId={entrega.pedido_id} podeExcluir={isAdmin} />
+          </div>
+        )}
 
         {/* Footer */}
         <div className="border-t px-6 py-4">

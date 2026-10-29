@@ -23,6 +23,7 @@ import {
 import type { MontadorOpcao } from "@/lib/montagens/dados";
 import { statusServico, totalPago, type ServicoMontagem } from "@/lib/montagens/status";
 import { CampoNumero } from "@/components/produtos/CampoNumero";
+import { VisualizadorArquivo } from "@/components/ui/VisualizadorArquivo";
 import { BadgeStatus } from "./BadgeStatus";
 import { CampoData } from "./CampoData";
 import type { PermissoesMontagem } from "./MontagensView";
@@ -323,7 +324,7 @@ function Pagamentos({
         </p>
       )}
 
-      {vendo && <VisualizadorComprovante url={vendo.url} nome={vendo.nome} onFechar={() => setVendo(null)} />}
+      {vendo && <VisualizadorArquivo url={vendo.url} nome={vendo.nome} onFechar={() => setVendo(null)} />}
 
       {novo && (
         <NovoPagamentoModal
@@ -350,52 +351,6 @@ function useEscape(fechar: () => void) {
     document.addEventListener("keydown", esc);
     return () => document.removeEventListener("keydown", esc);
   }, []);
-}
-
-/** Mostra o comprovante dentro do CRM (imagem ou PDF), sem abrir outra aba. */
-function VisualizadorComprovante({ url, nome, onFechar }: { url: string; nome: string | null; onFechar: () => void }) {
-  const ehPdf = /\.pdf$/i.test(nome ?? "") || /\.pdf(\?|$)/i.test(url);
-  const [falhou, setFalhou] = useState(false);
-  useEscape(onFechar);
-  return (
-    <div
-      data-submodal
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onFechar();
-      }}
-    >
-      <div className="flex h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
-        <div className="flex shrink-0 items-center gap-3 border-b px-4 py-3">
-          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">{nome ?? "Comprovante"}</h3>
-          <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary-700 hover:underline">
-            Abrir em nova aba
-          </a>
-          <button
-            type="button"
-            onClick={onFechar}
-            aria-label="Fechar"
-            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
-        <div className="flex min-h-0 flex-1 items-center justify-center bg-gray-100">
-          {ehPdf ? (
-            <iframe src={url} title={nome ?? "Comprovante"} className="h-full w-full" />
-          ) : falhou ? (
-            <p className="px-4 text-center text-sm text-gray-600">
-              Não foi possível exibir este arquivo aqui (o formato HEIC, do iPhone, não abre em todos os navegadores). Use
-              “Abrir em nova aba”.
-            </p>
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element -- URL assinada temporária, fora do otimizador do Next
-            <img src={url} alt={nome ?? "Comprovante"} onError={() => setFalhou(true)} className="max-h-full max-w-full object-contain" />
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function NovoPagamentoModal({

@@ -8,6 +8,7 @@ import { pedidosOnda0, pedidosOnda1, pedidosOnda2, carregarModeloSituacoes } fro
 import { comCache } from "@/lib/crm/cache";
 import { ehAdmin, ehSuperadmin } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   PedidoKanban,
   SituacaoRow,
@@ -94,11 +95,25 @@ export default async function PedidosPage({
     entregasVinculadas.map((e) => e.pedido_id).filter(Boolean)
   );
 
+  // Comprovantes de entrega (fora do cache: muda ao anexar). Só dos pedidos
+  // entregues; tabela sem policies → service role. Sem a migration 0041 a
+  // consulta falha e o card só não mostra o indicador.
+  const entreguesIds = pedidos.filter((p) => p.situacao_id === modelo.entregueId).map((p) => p.id);
+  const comComprovante = new Set<string>();
+  if (entreguesIds.length) {
+    const { data } = await createAdminClient()
+      .from("pedido_comprovantes")
+      .select("pedido_id")
+      .in("pedido_id", entreguesIds);
+    for (const c of (data ?? []) as { pedido_id: string | null }[]) if (c.pedido_id) comComprovante.add(c.pedido_id);
+  }
+
   const kanban: PedidoKanban[] = pedidos.map((p) => ({
     ...p,
     financeiro: financeiroPorPedido.get(p.id) ?? null,
     cliente: p.cliente_id_vhsys ? clientePorId.get(p.cliente_id_vhsys) ?? null : null,
     entregaRegistrada: comEntrega.has(p.id),
+    comprovanteEntrega: comComprovante.has(p.id),
     cobrancaNaEntrega:
       p.id_vhsys != null && cobrancaNaEntregaIds.has(p.id_vhsys),
     parcelas:

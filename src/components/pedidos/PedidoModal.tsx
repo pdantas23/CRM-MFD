@@ -11,6 +11,7 @@ import {
 } from "@/lib/vhsys/situacoes-modelo";
 import { moverSituacaoPedido } from "@/lib/vhsys/acoes";
 import { hrefNovaEntrega } from "./PedidoCard";
+import { ComprovantesEntrega } from "./ComprovantesEntrega";
 import type { PedidoKanban, SituacaoRow } from "@/lib/types/pedidos";
 
 interface PedidoModalProps {
@@ -43,8 +44,11 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever, modelo, 
       : cobrarNaEntrega
         ? "text-red-700"
         : "text-amber-700";
+  // Acabou de ser movido para Entregue por este modal: fica aberto para anexar
+  // o comprovante de entrega.
+  const [movidoEntregue, setMovidoEntregue] = useState(false);
   // Entregue é situação final — não pode mais mover.
-  const entregue = pedido.situacao_id === modelo.entregueId;
+  const entregue = pedido.situacao_id === modelo.entregueId || movidoEntregue;
 
   // Controle de mover situação — só visível para admin
   const [erroMover, setErroMover] = useState<string | null>(null);
@@ -84,7 +88,8 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever, modelo, 
         return;
       }
       router.refresh();
-      onClose();
+      if (novaSituacaoId === modelo.entregueId) setMovidoEntregue(true);
+      else onClose();
     });
   }
 
@@ -140,6 +145,22 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever, modelo, 
               <p className="font-medium text-gray-900">{pedido.referencia || "—"}</p>
             </div>
           </div>
+
+          {/* Pedido entregue: comprovante de que o cliente recebeu */}
+          {entregue && (
+            <>
+              {movidoEntregue && (
+                <p className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                  Pedido marcado como entregue. Anexe abaixo o comprovante de recebimento do cliente.
+                </p>
+              )}
+              <ComprovantesEntrega
+                pedidoId={pedido.id}
+                podeExcluir={Boolean(podeCadastrarEntrega)}
+                onMudou={() => router.refresh()}
+              />
+            </>
+          )}
 
           {/* Financeiro — display-only (Contas a Receber); o gate usa só a situação */}
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -218,7 +239,7 @@ export function PedidoModal({ pedido, situacoes, onClose, podeEscrever, modelo, 
           )}
 
           {/* Pedido entregue: situação final, sem mover */}
-          {podeEscrever && entregue && (
+          {podeEscrever && entregue && !movidoEntregue && (
             <p className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500">
               Pedido entregue — situação final. Não é possível mover.
             </p>
