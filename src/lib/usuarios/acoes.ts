@@ -32,7 +32,7 @@ type Resultado<T = Record<never, never>> =
   | ({ ok: true } & T)
   | { ok: false; erro: string };
 
-const ROLES_VALIDOS = ["owner", "superadmin", "admin", "vendedor", "entregador", "financeiro"] as const;
+const ROLES_VALIDOS = ["owner", "superadmin", "admin", "vendedor", "entregador", "financeiro", "montador"] as const;
 type RoleValido = (typeof ROLES_VALIDOS)[number];
 
 function roleValido(r: string): r is RoleValido {

@@ -31,6 +31,7 @@ const ROLE_OPCOES_ATRIBUIVEIS = [
   { value: "vendedor", label: "Vendedor" },
   { value: "entregador", label: "Entregador" },
   { value: "financeiro", label: "Financeiro" },
+  { value: "montador", label: "Montador" },
 ];
 
 const ROLE_LABEL: Record<string, string> = {
@@ -40,6 +41,7 @@ const ROLE_LABEL: Record<string, string> = {
   vendedor: "Vendedor",
   entregador: "Entregador",
   financeiro: "Financeiro",
+  montador: "Montador",
 };
 
 // admin pode vincular um vendedor VHSYS (opcional); vendedor exige o vínculo.

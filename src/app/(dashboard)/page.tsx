@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
-import { ehAdmin, ehFinanceiro } from "@/lib/auth/roles";
+import { ehAdmin, ehFinanceiro, ehMontador } from "@/lib/auth/roles";
 
 export default async function DashboardPage() {
   const { profile } = await getSessaoComProfile();
 
+  // Montador só acompanha os próprios serviços.
+  if (profile && ehMontador(profile.role)) {
+    redirect("/montagens");
+  }
   // Financeiro opera a tela de Pedidos (aprovação de pagamento).
   if (profile && ehFinanceiro(profile.role)) {
     redirect("/pedidos");

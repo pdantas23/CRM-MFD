@@ -27,3 +27,11 @@ export function ehOwner(role: string | null | undefined): boolean {
 export function ehFinanceiro(role: string | null | undefined): boolean {
   return role === "financeiro";
 }
+
+/**
+ * True apenas para montador: vê SÓ os próprios serviços de montagem (aba
+ * Montagens), sem valores cobrados do cliente. Não acessa as demais telas.
+ */
+export function ehMontador(role: string | null | undefined): boolean {
+  return role === "montador";
+}

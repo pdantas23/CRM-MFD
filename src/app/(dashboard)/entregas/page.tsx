@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
@@ -9,7 +10,7 @@ import { TabelaSemanalEntregas } from "@/components/entregas/TabelaSemanalEntreg
 import { EntregasAdminView } from "@/components/entregas/EntregasAdminView";
 import { Suspense } from "react";
 import type { Entrega } from "@/lib/types/database";
-import { ehAdmin } from "@/lib/auth/roles";
+import { ehAdmin, ehMontador } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import { listarContasAtivas } from "@/lib/accounts/repo";
 import type { ContaInfoMap } from "@/components/entregas/ContaBadge";
@@ -63,6 +64,8 @@ export default async function EntregasPage({
 
   const { profile } = await getSessaoComProfile();
   const role = profile?.role;
+  // Montador não acessa entregas (as demais telas já redirecionam para cá).
+  if (ehMontador(role)) redirect("/montagens");
   const isAdmin = ehAdmin(role);
   // Financeiro tem acesso de LEITURA: cai na visão semanal read-only (isAdmin
   // false), igual ao vendedor. Escrita de entrega é exclusiva de admin.
