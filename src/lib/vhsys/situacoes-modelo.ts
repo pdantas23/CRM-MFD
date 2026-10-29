@@ -62,7 +62,6 @@ export function construirModeloSituacoes(situacoes: SituacaoBase[]): ModeloSitua
 
   const colunas = naoCancelado.map((s) => s.id_vhsys);
   const entregueId = primeiroPorTipo(sorted, "Atendido");
-  const pagamentoAprovadoId = primeiroPorTipo(sorted, "Em Andamento");
   const aguardandoPagamentoId = primeiroPorTipo(sorted, "Em Aberto");
 
   // "Em separação": ancorada no nome (consistente entre contas); fallback p/ o
@@ -73,6 +72,17 @@ export function construirModeloSituacoes(situacoes: SituacaoBase[]): ModeloSitua
     null;
   const emSeparacaoId = emSeparacao ? emSeparacao.id_vhsys : null;
 
+  // "Pagamento aprovado": ancorado no NOME (há conta, ex.: KCM, em que nenhuma
+  // situação tem tipo "Em Andamento" — todas são "Em Aberto" até o Entregue);
+  // fallback: 1º "Em Andamento" por ordem.
+  const pagamentoAprovadoId =
+    sorted.find((s) => /pagamento\s*aprovado/i.test(s.nome))?.id_vhsys ??
+    primeiroPorTipo(sorted, "Em Andamento");
+  // Início da liberação de entrega: o pagamento aprovado ou, na falta dele,
+  // "Em separação". Sem isso o gate ficava vazio e NENHUM pedido da conta
+  // liberava entrega. (Só afeta o gate; permissões seguem pagamentoAprovadoId.)
+  const inicioEntregaId = pagamentoAprovadoId ?? emSeparacaoId;
+
   // "Entrega parcial": ancorada no nome COMPLETO (não casar "Pagamento Parcial").
   const entregaParcialId = sorted.find((s) => /entrega\s*parcial/i.test(s.nome))?.id_vhsys ?? null;
 
@@ -80,13 +90,16 @@ export function construirModeloSituacoes(situacoes: SituacaoBase[]): ModeloSitua
   // não existir na conta (ex.: KCM) → null.
   const pagamentoParcialId = sorted.find((s) => /pagamento\s*parcial/i.test(s.nome))?.id_vhsys ?? null;
 
-  // Gate de entrega: da ordem do "pagamento aprovado" em diante, sem Entregue/Cancelado.
+  // Gate de entrega: do início da entrega em diante, sem Entregue/Cancelado.
+  const ordemInicioEntrega = inicioEntregaId
+    ? (sorted.find((s) => s.id_vhsys === inicioEntregaId)?.ordem ?? Infinity)
+    : Infinity;
+  const gateEntrega = naoCancelado
+    .filter((s) => s.ordem >= ordemInicioEntrega && s.id_vhsys !== entregueId)
+    .map((s) => s.id_vhsys);
   const ordemAprovado = pagamentoAprovadoId
     ? (sorted.find((s) => s.id_vhsys === pagamentoAprovadoId)?.ordem ?? Infinity)
     : Infinity;
-  const gateEntrega = naoCancelado
-    .filter((s) => s.ordem >= ordemAprovado && s.id_vhsys !== entregueId)
-    .map((s) => s.id_vhsys);
 
   // Segmentos visuais: até o aprovado = pagamento; depois = entrega (inclui Entregue).
   const segmentoPagamento = naoCancelado.filter((s) => s.ordem <= ordemAprovado).map((s) => s.id_vhsys);
