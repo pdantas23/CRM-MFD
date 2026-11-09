@@ -56,6 +56,11 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
+  // /api/mcp tem autenticação própria (Bearer validado na rota), sem sessão
+  if (pathname === "/api/mcp") {
+    return supabaseResponse;
+  }
+
   if (!user && pathname !== "/login" && !pathname.startsWith("/api/auth/")) {
     return redirecionar("/login");
   }
