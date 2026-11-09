@@ -11,7 +11,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cacheInvalidate } from "@/lib/crm/cache";
-import { ehAdmin } from "@/lib/auth/roles";
+import { podeOperarEntregas } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import { moverSituacaoPedido } from "@/lib/vhsys/acoes";
 import {
@@ -47,8 +47,9 @@ async function exigirAdmin() {
     .select("role")
     .eq("id", user.id)
     .single();
-  if (!ehAdmin((profile as { role: string } | null)?.role)) {
-    return { supabase, userId: null, erro: "Permissão negada: somente administradores." as const };
+  // Admin, superadmin e entregador operam entregas (RLS: 0017 + 0042).
+  if (!podeOperarEntregas((profile as { role: string } | null)?.role)) {
+    return { supabase, userId: null, erro: "Permissão negada: somente administradores e entregadores." as const };
   }
   return { supabase, userId: user.id, erro: null };
 }

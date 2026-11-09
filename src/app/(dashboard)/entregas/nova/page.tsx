@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { EntregaForm, type EntregaPrefill } from "@/components/entregas/EntregaForm";
-import { ehAdmin } from "@/lib/auth/roles";
+import { podeOperarEntregas } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,7 +27,7 @@ export default async function NovaEntregaPage({
 
   // Cadastro de entrega é exclusivo de admin/superadmin.
   const role = profile?.role;
-  if (!ehAdmin(role)) {
+  if (!podeOperarEntregas(role)) {
     redirect("/entregas");
   }
 

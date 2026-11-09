@@ -5,12 +5,11 @@ import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { aplicarEntregas, metricasEntregas, type Metrica } from "@/lib/crm/metricas";
 import { comCache } from "@/lib/crm/cache";
-import { DashboardEntregas } from "@/components/dashboard/DashboardEntregas";
 import { TabelaSemanalEntregas } from "@/components/entregas/TabelaSemanalEntregas";
 import { EntregasAdminView } from "@/components/entregas/EntregasAdminView";
 import { Suspense } from "react";
 import type { Entrega } from "@/lib/types/database";
-import { ehAdmin, ehMontador } from "@/lib/auth/roles";
+import { ehMontador, podeOperarEntregas } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import { listarContasAtivas } from "@/lib/accounts/repo";
 import type { ContaInfoMap } from "@/components/entregas/ContaBadge";
@@ -20,11 +19,6 @@ export const dynamic = "force-dynamic";
 // Limite de pedido_ids aplicáveis no filtro "só com saldo".
 // Acima de 1000 o predicado é aproximado (documentado em metricas.ts).
 const MAX_IDS_IN = 1000;
-
-function formatDate(dateStr: string) {
-  const [year, month, day] = dateStr.split("-");
-  return `${day}/${month}/${year}`;
-}
 
 // Retorna YYYY-MM-DD no fuso de São Paulo, independente de onde o código
 // está rodando (server em UTC ou browser local).
@@ -66,9 +60,9 @@ export default async function EntregasPage({
   const role = profile?.role;
   // Montador não acessa entregas (as demais telas já redirecionam para cá).
   if (ehMontador(role)) redirect("/montagens");
-  const isAdmin = ehAdmin(role);
-  // Financeiro tem acesso de LEITURA: cai na visão semanal read-only (isAdmin
-  // false), igual ao vendedor. Escrita de entrega é exclusiva de admin.
+  // Operam entregas (visão completa: calendário, lista, cadastro, baixa):
+  // admin, superadmin e entregador. Financeiro e vendedor: semanal só leitura.
+  const isAdmin = podeOperarEntregas(role);
 
   // Garante que há uma conta selecionada (redireciona para /selecionar-conta se
   // não). O MURAL é compartilhado entre contas, então a conta ativa não recorta
@@ -92,32 +86,10 @@ export default async function EntregasPage({
     ? contas.find((c) => c.slug === filtros.contaSlug)?.id ?? null
     : null;
 
-  // Role decide a visão: entregador vê só HOJE (turnos); vendedor/admin veem a
-  // TABELA SEMANAL. Carrega-se apenas o que cada visão precisa.
-  const isEntregador = role === "entregador";
-
   // Client de serviço: ignora o recorte de RLS por vendedor para a visão de
   // hoje e a semana (mostra TODAS as entregas). A tabela completa do admin,
   // mais abaixo, segue escopada por RLS via `supabase`.
   const admin = createAdminClient();
-
-  // ── Visão de entregas do dia (apenas entregador) ─────────────────────────
-  let manha: Entrega[] = [];
-  let tarde: Entrega[] = [];
-  let noite: Entrega[] = [];
-  if (isEntregador) {
-    const { data: entregasHojeData } = await admin
-      .from("entregas")
-      .select("*")
-      .eq("data", today)
-      .order("ordem", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: true });
-
-    const entregasHoje = (entregasHojeData ?? []) as Entrega[];
-    manha = entregasHoje.filter((e) => e.periodo === "manha");
-    tarde = entregasHoje.filter((e) => e.periodo === "tarde");
-    noite = entregasHoje.filter((e) => e.periodo === "noite");
-  }
 
   // ── Tabela semanal (vendedor e admin) ────────────────────────────────────
   // Segunda da semana: usa o param `inicio` (YYYY-MM-DD válido) ou a segunda da
@@ -131,7 +103,7 @@ export default async function EntregasPage({
   const sabadoSemana = somarDiasCivil(inicioSemana, 5);
 
   let entregasSemana: Entrega[] = [];
-  if (!isEntregador) {
+  {
     const { data: semanaData } = await admin
       .from("entregas")
       .select("*")
@@ -208,26 +180,14 @@ export default async function EntregasPage({
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Entregas</h1>
         <p className="mt-1 text-sm text-gray-500">
-          {isEntregador
-            ? `Entregas de hoje · ${formatDate(today)}`
-            : "Programação semanal"}
+          Programação semanal
         </p>
       </div>
 
       {/* Roteamento por papel:
-          - entregador → visão do dia (turnos);
-          - admin → mini-navbar para alternar calendário semanal / lista completa;
-          - vendedor → calendário semanal (só leitura). */}
-      {isEntregador ? (
-        <DashboardEntregas
-          manha={manha}
-          tarde={tarde}
-          noite={noite}
-          isAdmin={isAdmin}
-          contas={contasMap}
-          mostrarConta={mostrarConta}
-        />
-      ) : isAdmin ? (
+          - admin/superadmin/entregador → calendário semanal / lista completa;
+          - vendedor/financeiro → calendário semanal (só leitura). */}
+      {isAdmin ? (
         <Suspense>
           <EntregasAdminView
             semana={entregasSemana}

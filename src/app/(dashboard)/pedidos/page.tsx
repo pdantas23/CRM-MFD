@@ -6,7 +6,7 @@ import { parseFiltros, type SearchParamsLike } from "@/lib/crm/filtros";
 import { type Escopo } from "@/lib/crm/metricas";
 import { pedidosOnda0, pedidosOnda1, pedidosOnda2, carregarModeloSituacoes } from "@/lib/crm/carregar";
 import { comCache } from "@/lib/crm/cache";
-import { ehAdmin, ehSuperadmin } from "@/lib/auth/roles";
+import { ehAdmin, ehSuperadmin, podeOperarEntregas } from "@/lib/auth/roles";
 import { getContaAtiva } from "@/lib/accounts/contexto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
@@ -25,27 +25,42 @@ export default async function PedidosPage({
 
   const { profile } = await getSessaoComProfile();
 
-  // Pedidos: admin, vendedor e financeiro. Entregador não tem acesso.
+  // Pedidos: admin, vendedor, financeiro e entregador (este só a partir de
+  // "pagamento aprovado").
   if (
     profile &&
     !ehAdmin(profile.role) &&
     profile.role !== "vendedor" &&
-    profile.role !== "financeiro"
+    profile.role !== "financeiro" &&
+    profile.role !== "entregador"
   ) {
     redirect("/entregas");
   }
 
   const role = profile?.role;
-  const podeEscrever = ehAdmin(role) || role === "vendedor" || role === "financeiro";
+  const podeEscrever = ehAdmin(role) || role === "vendedor" || role === "financeiro" || role === "entregador";
   // Aprovar pagamento (parcial/aprovado) e mover pedidos em "aguardando pagamento"
   // são exclusivos de superadmin e financeiro. Admin e vendedor ficam restritos.
   const restricaoPagamento = !(ehSuperadmin(role) || role === "financeiro");
-  // Cadastro de entrega é exclusivo de admin/superadmin.
-  const podeCadastrarEntrega = ehAdmin(role);
+  // Cadastro de entrega: admin/superadmin e entregador.
+  const podeCadastrarEntrega = podeOperarEntregas(role);
   const vendedorId = profile?.vendedor_id ?? null;
 
   const conta = await getContaAtiva();
-  const modelo = await carregarModeloSituacoes(supabase, conta.id);
+  const modeloConta = await carregarModeloSituacoes(supabase, conta.id);
+  // Entregador: só as colunas da liberação de entrega em diante (sem
+  // aguardando/pagamento parcial). Recortar `colunas` limita o kanban, as
+  // consultas e as métricas (carregar.ts / metricas.ts usam modelo.colunas).
+  const faixaEntregador =
+    role === "entregador"
+      ? new Set<number>([
+          ...modeloConta.gateEntrega,
+          ...(modeloConta.entregueId !== null ? [modeloConta.entregueId] : []),
+        ])
+      : null;
+  const modelo = faixaEntregador
+    ? { ...modeloConta, colunas: modeloConta.colunas.filter((id) => faixaEntregador.has(id)) }
+    : modeloConta;
   const escopo: Escopo = { role: role ?? "", vendedorId, contaId: conta.id, modelo };
   const filtros = parseFiltros(searchParams, "pedidos");
 
@@ -127,7 +142,9 @@ export default async function PedidosPage({
       </div>
 
       <PedidosView
-        situacoes={(situacoes ?? []) as SituacaoRow[]}
+        situacoes={((situacoes ?? []) as SituacaoRow[]).filter(
+          (s) => !faixaEntregador || faixaEntregador.has(s.id_vhsys)
+        )}
         pedidos={kanban}
         podeEscrever={podeEscrever}
         atingiuLimitePorSituacao={atingiuLimitePorSituacao}

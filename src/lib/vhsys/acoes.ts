@@ -97,7 +97,7 @@ export async function exigirMoverPedido(): Promise<ContextoAcao> {
     .eq("id", user.id)
     .single();
 
-  if (!profile || !["admin", "superadmin", "vendedor", "financeiro"].includes(profile.role as string)) {
+  if (!profile || !["admin", "superadmin", "vendedor", "financeiro", "entregador"].includes(profile.role as string)) {
     throw new Error("Permissão negada: sem autorização para mover a situação de pedidos.");
   }
 
@@ -352,6 +352,18 @@ export async function moverSituacaoPedido(
       throw new Error(
         "Aprovar pagamento (ou mover um pedido em 'aguardando pagamento') é exclusivo do financeiro ou superadmin."
       );
+    }
+
+    // Entregador só atua da liberação de entrega em diante (pagamento aprovado →
+    // em separação → entrega parcial → entregue): origem e destino nessa faixa.
+    if (ctx.role === "entregador") {
+      const faixa = new Set<number>([
+        ...conta.modelo.gateEntrega,
+        ...(conta.modelo.entregueId !== null ? [conta.modelo.entregueId] : []),
+      ]);
+      if (situacaoAtual === null || !faixa.has(situacaoAtual) || !faixa.has(novaSituacaoId)) {
+        throw new Error("O entregador só move pedidos a partir de 'pagamento aprovado'.");
+      }
     }
 
     if (!transicaoPermitida(conta.modelo, situacaoAtual, novaSituacaoId)) {

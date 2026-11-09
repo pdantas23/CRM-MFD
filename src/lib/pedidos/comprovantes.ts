@@ -11,7 +11,7 @@ import { getSessaoComProfile } from "@/lib/auth/sessao";
 import { contasDoUsuario } from "@/lib/accounts/contexto";
 
 const BUCKET = "comprovantes-entrega";
-const PAPEIS = new Set(["admin", "superadmin", "financeiro", "vendedor"]);
+const PAPEIS = new Set(["admin", "superadmin", "financeiro", "vendedor", "entregador"]);
 const TAMANHO_MAX = 5 * 1024 * 1024; // depois da compressão (PDF sobe como está)
 
 type Resultado<T = Record<never, never>> = ({ ok: true } & T) | { ok: false; erro: string };
@@ -121,10 +121,12 @@ export async function linkComprovanteEntrega(id: string): Promise<Resultado<{ ur
   return { ok: true, url: data.signedUrl };
 }
 
-/** Excluir: só admin/superadmin. */
+/** Excluir: admin/superadmin e entregador (opera as entregas). */
 export async function excluirComprovanteEntrega(id: string): Promise<Resultado> {
   const { profile } = await getSessaoComProfile();
-  if (!profile || !["admin", "superadmin"].includes(profile.role)) return { ok: false, erro: "Permissão negada." };
+  if (!profile || !["admin", "superadmin", "entregador"].includes(profile.role)) {
+    return { ok: false, erro: "Permissão negada." };
+  }
   const c = await comprovanteDoPedido(id);
   if (!c?.pedido_id || !(await autorizarPedido(c.pedido_id))) return { ok: false, erro: "Permissão negada." };
   const admin = createAdminClient();

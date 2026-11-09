@@ -35,3 +35,12 @@ export function ehFinanceiro(role: string | null | undefined): boolean {
 export function ehMontador(role: string | null | undefined): boolean {
   return role === "montador";
 }
+
+/**
+ * Opera ENTREGAS (cadastrar, editar, excluir, dar baixa, anexos): admin,
+ * superadmin e entregador. Nos pedidos o entregador só vê/move a partir de
+ * "pagamento aprovado".
+ */
+export function podeOperarEntregas(role: string | null | undefined): boolean {
+  return ehAdmin(role) || role === "entregador";
+}
