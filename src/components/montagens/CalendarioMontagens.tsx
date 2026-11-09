@@ -18,7 +18,7 @@ type Estilo = "previsto" | "andamento" | "finalizado" | "atraso";
 
 const ESTILOS: Record<Estilo, string> = {
   previsto: "border border-dashed border-amber-400 bg-amber-50 text-amber-800",
-  andamento: "bg-primary-100 text-primary-800",
+  andamento: "bg-blue-100 text-blue-800",
   finalizado: "bg-green-100 text-green-800",
   atraso: "bg-red-100 text-red-800",
 };

@@ -9,16 +9,27 @@ const ESTILO = {
   atrasado: { pilula: "bg-red-50 text-red-700 ring-red-600/20", ponto: "bg-red-500" },
 } as const;
 
+/** Versão discreta para a tabela: só o marcador colorido e o texto. */
+export function StatusDiscreto({ st }: { st: StatusServico }) {
+  const { ponto } = ESTILO[st.atrasado ? "atrasado" : st.fase];
+  const rotulo = st.atrasado ? `Atrasado ${st.diasAtraso}d` : ROTULO_FASE[st.fase];
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-xs text-gray-500">
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ponto}`} />
+      <span className="truncate">{rotulo}</span>
+    </span>
+  );
+}
+
 export function BadgeStatus({ st }: { st: StatusServico }) {
   const chave = st.atrasado ? "atrasado" : st.fase;
   const { pilula, ponto } = ESTILO[chave];
   const rotulo = st.atrasado ? (st.fase === "previsto" ? "Início atrasado" : "Atrasado") : ROTULO_FASE[st.fase];
-  const dias = st.atrasado || st.terminouAtrasado ? st.diasAtraso : 0;
+  const dias = st.atrasado ? st.diasAtraso : 0;
 
   return (
     <span
       className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${pilula}`}
-      title={st.terminouAtrasado ? `Terminou ${st.diasAtraso} dia(s) depois do previsto` : undefined}
     >
       {st.fase === "finalizado" && !st.atrasado ? (
         <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
@@ -34,12 +45,8 @@ export function BadgeStatus({ st }: { st: StatusServico }) {
       )}
       {rotulo}
       {dias > 0 && (
-        <span
-          className={`rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums ${
-            st.atrasado ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800"
-          }`}
-        >
-          {st.atrasado ? `${dias}d` : `+${dias}d`}
+        <span className="rounded-full bg-red-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-red-700">
+          {dias}d
         </span>
       )}
     </span>
