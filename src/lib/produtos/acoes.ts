@@ -278,17 +278,28 @@ export async function salvarProduto(entrada: EntradaProduto): Promise<ResultadoS
   const atualVhsys = atualData as { descricao: string; fornecedor_produto_id: number | null } | null;
 
   // Fornecedor: o MESMO que o produto já tem no VHSYS grava null (segue o
-  // VHSYS); outro precisa ser um fornecedor já usado em algum produto da conta.
+  // VHSYS); outro precisa estar no cadastro de fornecedores da conta (ou já
+  // ser usado em algum produto dela).
   let fornecedorId: number | null = null;
   if (entrada.fornecedorId !== null && Number(atualVhsys?.fornecedor_produto_id) !== entrada.fornecedorId) {
-    const { data: usado } = await admin
-      .from("vhsys_produtos")
-      .select("id_vhsys")
-      .eq("conta_id", entrada.contaId)
-      .eq("fornecedor_produto_id", entrada.fornecedorId)
-      .eq("lixeira", false)
-      .limit(1);
-    if (!usado?.length) return { ok: false, erro: "Fornecedor não encontrado no VHSYS desta conta." };
+    const [{ data: cadastro }, { data: usado }] = await Promise.all([
+      admin
+        .from("vhsys_clientes")
+        .select("id_vhsys")
+        .eq("conta_id", entrada.contaId)
+        .eq("id_vhsys", entrada.fornecedorId)
+        .eq("lixeira", false)
+        .in("dados->>tipo_cadastro", ["Fornecedor", "Ambos"])
+        .limit(1),
+      admin
+        .from("vhsys_produtos")
+        .select("id_vhsys")
+        .eq("conta_id", entrada.contaId)
+        .eq("fornecedor_produto_id", entrada.fornecedorId)
+        .eq("lixeira", false)
+        .limit(1),
+    ]);
+    if (!cadastro?.length && !usado?.length) return { ok: false, erro: "Fornecedor não encontrado no VHSYS desta conta." };
     fornecedorId = entrada.fornecedorId;
   }
 

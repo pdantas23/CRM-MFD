@@ -10,6 +10,8 @@ import { CONFIG_PADRAO, SEM_SECAO, ehServico, type ConfigPrecificacao } from "./
 export interface FornecedorVhsys {
   id: number;
   nome: string;
+  /** CNPJ/CPF do cadastro (distingue fornecedores de mesmo nome). */
+  cnpj: string | null;
 }
 
 /** Linha da tabela — seguro para o client (sem segredos). */
@@ -151,39 +153,50 @@ async function carregarEspelho(contaId: string): Promise<EspelhoRow[]> {
 }
 
 /**
- * Fornecedores já usados nos produtos do VHSYS de uma conta (ordenados por
- * nome). Alguns produtos trazem só o id do fornecedor, com o nome vazio: vale
- * o nome de QUALQUER produto que o tenha; sem nenhum, o do cadastro em
- * vhsys_clientes (no VHSYS o fornecedor é um cadastro de cliente/fornecedor,
- * com o mesmo id).
+ * Fornecedores de uma conta, ordenados por nome: os do CADASTRO do VHSYS
+ * (vhsys_clientes com tipo_cadastro "Fornecedor" ou "Ambos" — no VHSYS
+ * clientes e fornecedores são um cadastro só) mais os já usados em algum
+ * produto. Nome do cadastro; sem ele, o do produto. O CNPJ distingue
+ * cadastros de mesmo nome (ex.: filiais).
  */
 async function fornecedoresDaConta(contaId: string, espelho: EspelhoRow[]): Promise<FornecedorVhsys[]> {
-  const mapa = new Map<number, string>();
+  const nomeProduto = new Map<number, string>();
   for (const e of espelho) {
     const id = idFornecedor(e.fornecedor_produto_id);
     if (!id) continue;
     const nome = e.fornecedor_produto?.trim() ?? "";
-    if (!mapa.get(id)) mapa.set(id, nome);
+    if (!nomeProduto.get(id)) nomeProduto.set(id, nome);
   }
 
-  const semNome = Array.from(mapa.entries())
-    .filter(([, nome]) => !nome)
-    .map(([id]) => id);
-  if (semNome.length) {
-    const { data } = await createAdminClient()
+  const admin = createAdminClient();
+  type Cadastro = { id_vhsys: number; razao: string | null; fantasia: string | null; cnpj_cpf: string | null };
+  const [{ data: cadastrados }, { data: usados }] = await Promise.all([
+    admin
       .from("vhsys_clientes")
-      .select("id_vhsys, razao, fantasia")
+      .select("id_vhsys, razao, fantasia, cnpj_cpf")
       .eq("conta_id", contaId)
-      .in("id_vhsys", semNome);
-    for (const c of (data ?? []) as { id_vhsys: number; razao: string | null; fantasia: string | null }[]) {
-      const nome = c.razao?.trim() || c.fantasia?.trim();
-      if (nome) mapa.set(Number(c.id_vhsys), nome);
-    }
-  }
+      .eq("lixeira", false)
+      .in("dados->>tipo_cadastro", ["Fornecedor", "Ambos"]),
+    nomeProduto.size
+      ? admin
+          .from("vhsys_clientes")
+          .select("id_vhsys, razao, fantasia, cnpj_cpf")
+          .eq("conta_id", contaId)
+          .in("id_vhsys", Array.from(nomeProduto.keys()))
+      : Promise.resolve({ data: [] as Cadastro[] }),
+  ]);
 
-  return Array.from(mapa.entries())
-    .map(([id, nome]) => ({ id, nome: nome || `Fornecedor #${id}` }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  const mapa = new Map<number, FornecedorVhsys>();
+  for (const c of [...((cadastrados ?? []) as Cadastro[]), ...((usados ?? []) as Cadastro[])]) {
+    const id = Number(c.id_vhsys);
+    const nome = c.razao?.trim() || c.fantasia?.trim() || nomeProduto.get(id) || `Fornecedor #${id}`;
+    mapa.set(id, { id, nome, cnpj: c.cnpj_cpf?.trim() || null });
+  }
+  nomeProduto.forEach((nome, id) => {
+    if (!mapa.has(id)) mapa.set(id, { id, nome: nome || `Fornecedor #${id}`, cnpj: null });
+  });
+
+  return Array.from(mapa.values()).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 }
 
 export async function carregarProdutos(contas: Account[]): Promise<{

@@ -54,7 +54,12 @@ export function SeletorFornecedor({
   }, [aberto]);
 
   const termo = normalizar(busca.trim());
-  const filtradas = termo ? opcoes.filter((f) => normalizar(f.nome).includes(termo)) : opcoes;
+  const digitos = busca.replace(/\D/g, "");
+  const filtradas = termo
+    ? opcoes.filter(
+        (f) => normalizar(f.nome).includes(termo) || (digitos.length >= 3 && (f.cnpj ?? "").replace(/\D/g, "").includes(digitos))
+      )
+    : opcoes;
 
   return (
     <div ref={ref} className="relative">
@@ -104,7 +109,7 @@ export function SeletorFornecedor({
                 }
               }
             }}
-            placeholder="Buscar fornecedor"
+            placeholder="Buscar por nome ou CNPJ"
             className="w-full rounded-t-lg border-b border-gray-100 px-3 py-2 text-sm focus:outline-none"
           />
           <div role="listbox" className="max-h-64 overflow-y-auto py-1">
@@ -123,6 +128,7 @@ export function SeletorFornecedor({
                 }`}
               >
                 {f.nome}
+                {f.cnpj && <span className="block text-xs font-normal text-gray-400">{f.cnpj}</span>}
               </button>
             ))}
             {filtradas.length === 0 && (

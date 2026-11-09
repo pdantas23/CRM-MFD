@@ -2,7 +2,7 @@
 // Chamado pelo cron de sync, no máximo a cada INTERVALO_MIN por conta. Para cada
 // produto de cada nota NOVA (id_entrada > cursor da conta):
 //   - última compra = data da nota (só avança, nunca volta);
-//   - preço de custo = valor unitário da nota, SE a unidade da nota for a mesma
+//   - preço de custo = valor unitário da nota COM IPI, SE a unidade da nota for a mesma
 //     do cadastro; senão só a data muda e o motivo vai para aviso_compra.
 // Produto do VHSYS ainda sem precificação ganha um registro com as taxas padrão.
 // Nada é enviado ao VHSYS: a linha fica "Diferente" até o envio manual.
@@ -26,6 +26,8 @@ interface ItemEntrada {
   id_produto: number;
   unidade_produto: string;
   valor_unit_produto: string;
+  /** IPI do item, em % (ex.: "6.50"). */
+  ipi_produto?: string;
 }
 
 interface Compra {
@@ -101,7 +103,10 @@ export async function sincronizarComprasNotas(conta: { id: string; tokens: Vhsys
       compras.set(it.id_produto, {
         data,
         nota: String(e.nota_numero ?? e.id_entrada),
-        valorUnit: Number(String(it.valor_unit_produto ?? "").replace(",", ".")) || 0,
+        // Preço de custo com o IPI embutido (o VHSYS guarda o unitário sem IPI).
+        valorUnit:
+          (Number(String(it.valor_unit_produto ?? "").replace(",", ".")) || 0) *
+          (1 + (Number(String(it.ipi_produto ?? "").replace(",", ".")) || 0) / 100),
         unidade: unidade(it.unidade_produto),
       });
     }
