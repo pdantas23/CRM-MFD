@@ -1,5 +1,5 @@
 // Ferramentas do MCP (IA externa) — SERVER-ONLY. Consultas, mais uma única
-// escrita: `alterar_margem`, que grava só no CRM (o envio ao VHSYS segue manual).
+// escrita: `alterar_margem`, que grava a venda no CRM e já envia ao VHSYS.
 // Service role, sem sessão: por isso cada ferramenta devolve só campos listados
 // aqui, nunca o jsonb `dados`, CPF/CNPJ, endereço, telefone, e-mail ou observações.
 
@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getContaComTokensPorId, listarContasAtivas, type Account } from "@/lib/accounts/repo";
 import { runComTokensVhsys, vhsysGet } from "@/lib/vhsys/client";
 import { carregarConfigs } from "@/lib/produtos/dados";
+import { COLUNAS_ENVIO, enviarRegistro, type RegistroEnvio } from "@/lib/produtos/envio";
 import { centavos, custoLiquido, vendaParaMargem, type TaxasProduto } from "@/lib/produtos/precificacao";
 import { calcularMargem, detalharCusto, type ItemOrcamento } from "./margem";
 
@@ -265,17 +266,24 @@ async function alterarMargem(args: Args) {
     .update({ valor_venda: novaVenda, atualizado_em: agora, alterado_em: agora, atualizado_por: null })
     .eq("conta_id", conta.id)
     .eq("id_vhsys", idProduto)
-    .select("id_vhsys");
+    .select(COLUNAS_ENVIO);
   if (error) throw new Error(`precificacao_produtos: ${error.message}`);
   if (!data?.length) throw new ErroFerramenta("Produto sem precificação na aba Produtos.");
-  console.info(`[mcp] alterar_margem conta=${conta.slug} produto=${idProduto} venda ${num(linha.valor_venda)} -> ${novaVenda}`);
+
+  const envio = await enviarRegistro(data[0] as unknown as RegistroEnvio, "Codex (MCP)");
+  console.info(
+    `[mcp] alterar_margem conta=${conta.slug} produto=${idProduto} venda ${num(linha.valor_venda)} -> ${novaVenda} vhsys=${envio.ok ? "ok" : "ERRO"}`
+  );
 
   return {
     conta: conta.slug,
     id_produto: idProduto,
     valor_venda_anterior: num(linha.valor_venda),
     ...detalharCusto(taxas, icmsAtual, novaVenda),
-    aviso: "Salvo só no CRM. O novo preço só vale no VHSYS depois de enviado na aba Produtos.",
+    enviado_ao_vhsys: envio.ok,
+    ...(envio.ok
+      ? {}
+      : { erro_vhsys: envio.erro, aviso: "Salvo no CRM, mas NÃO enviado ao VHSYS. O preço no VHSYS continua o anterior; reenvie pela aba Produtos." }),
   };
 }
 
@@ -324,7 +332,7 @@ export const FERRAMENTAS = [
   {
     name: "alterar_margem",
     description:
-      "Altera a margem de um produto: recalcula e grava o valor de venda no CRM. Não envia ao VHSYS. Confirme com o usuário produto, conta e margem antes de chamar; pegue id_produto em buscar_produto.",
+      "Altera a margem de um produto: o CRM recalcula o valor de venda, salva e envia ao VHSYS, mudando o preço real. Confirme com o usuário produto, conta e margem antes de chamar; pegue id_produto em buscar_produto.",
     inputSchema: {
       type: "object",
       properties: {
