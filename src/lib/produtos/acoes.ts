@@ -20,7 +20,7 @@ import { runComTokensVhsys, vhsysDelete, vhsysGet } from "@/lib/vhsys/client";
 import { humanizarErroVhsys } from "@/lib/vhsys/erros";
 import type { VhsysProduto } from "@/lib/vhsys/types";
 import { COLUNAS_ENVIO, enviarRegistro, type RegistroEnvio } from "./envio";
-import { somaTaxas } from "./precificacao";
+import { autoriaPrecificacao, somaTaxas } from "./precificacao";
 
 type Resultado = { ok: boolean; erro?: string };
 
@@ -60,6 +60,8 @@ export interface DetalhesProduto {
   tipo: string | null;
   status: string | null;
   modificadoEm: string | null;
+  /** Data e autor do bloco "[Precificação CRM …]" no espelho (pode estar defasado até o sync). */
+  precificacao: { data: string; autor: string } | null;
 }
 
 export interface EntradaConfig {
@@ -288,7 +290,7 @@ export async function detalhesProduto(contaId: string, idVhsys: number): Promise
     tipo: string | null;
     status: string | null;
     data_mod_vhsys: string | null;
-    dados: { ncm_produto?: string } | null;
+    dados: { ncm_produto?: string; obs_produto?: string } | null;
   };
   return {
     codigo: p.codigo,
@@ -299,6 +301,7 @@ export async function detalhesProduto(contaId: string, idVhsys: number): Promise
     tipo: p.tipo,
     status: p.status,
     modificadoEm: p.data_mod_vhsys,
+    precificacao: autoriaPrecificacao(p.dados?.obs_produto),
   };
 }
 

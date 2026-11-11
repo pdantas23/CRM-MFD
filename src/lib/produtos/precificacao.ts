@@ -174,5 +174,11 @@ export function obsComPrecificacao(obsAtual: string | null | undefined, bloco: s
   return atual ? `${atual}\n\n${bloco}` : bloco;
 }
 
+/** Data ("dd/mm/aaaa") e autor do cabeçalho do bloco nas observações; null = sem bloco. */
+export function autoriaPrecificacao(obs: string | null | undefined): { data: string; autor: string } | null {
+  const m = /\[Precificação CRM — (\d{2}\/\d{2}\/\d{4})[^·\]]*· ([^\]]+)\]/.exec(obs ?? "");
+  return m ? { data: m[1], autor: m[2].trim() } : null;
+}
+
 /** Cabeçalho do bloco (1ª linha) — usado para conferir que o VHSYS gravou. */
 export const cabecalhoBloco = (bloco: string) => bloco.split("\n")[0];

@@ -28,7 +28,7 @@ import {
 import { BadgeConta } from "./BadgeConta";
 import { CampoNumero } from "./CampoNumero";
 import { SeletorFornecedor } from "./SeletorFornecedor";
-import { aplicarEnvio, situacaoDe } from "./situacao";
+import { aplicarEnvio, dataHoraPrecificacao, nuncaPrecificado, situacaoDe } from "./situacao";
 
 // Percentuais: o banco guarda fração (0.0982); o formulário mostra pontos (9,82).
 const emPct = (f: number | null) => (f === null ? null : Math.round(f * 1e6) / 1e4);
@@ -169,6 +169,18 @@ export function ProdutoModal({
   );
   const fornecedorVhsys = fornecedores.find((f) => f.id === linha.vhsys?.fornecedorId)?.nome;
   const situacao = situacaoDe(linha, icmsAtual);
+  // Última precificação pelo CRM (envio ao VHSYS). O autor vem do bloco nas
+  // observações do espelho — só exibido se for do mesmo dia do envio registrado.
+  const precificadoEm = linha.enviadoEm ? dataHoraPrecificacao(linha.enviadoEm) : null;
+  const autor =
+    precificadoEm && detalhes?.precificacao && precificadoEm.startsWith(detalhes.precificacao.data)
+      ? detalhes.precificacao.autor
+      : null;
+  const precificado = precificadoEm
+    ? `${precificadoEm}${autor ? ` · ${autor}` : ""}`
+    : nuncaPrecificado(linha)
+      ? "Nunca precificado"
+      : null;
 
   // ── Simulador (não salva) ─────────────────────────────────────────────
   const simValor = simVenda === undefined ? venda : simVenda;
@@ -368,6 +380,7 @@ export function ProdutoModal({
                 ["Estoque", detalhes?.estoque?.toLocaleString("pt-BR")],
                 ["Situação no VHSYS", detalhes?.status],
                 ["Última compra", linha.ultimaCompra ? formatarData(linha.ultimaCompra) : null],
+                ["Precificado pelo CRM", precificado],
                 ["No VHSYS hoje", linha.vhsys ? `custo ${brl(linha.vhsys.valorCusto)} · venda ${brl(linha.vhsys.valor)}` : "sem cadastro"],
               ].map(([label, valor]) => (
                 <div key={label as string} className={label === "No VHSYS hoje" ? "col-span-2" : ""}>

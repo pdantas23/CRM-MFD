@@ -12,12 +12,25 @@ import {
   margem,
   type ConfigPrecificacao,
 } from "@/lib/produtos/precificacao";
-import { FILTROS_SITUACAO, FiltrosModal, type FiltroSituacao } from "./FiltrosModal";
+import {
+  FILTROS_PRECIFICACAO,
+  FILTROS_SITUACAO,
+  FiltrosModal,
+  type FiltroPrecificacao,
+  type FiltroSituacao,
+} from "./FiltrosModal";
 import { LinhaProdutoEditavel } from "./LinhaProdutoEditavel";
 import { ParametrosModal } from "./ParametrosModal";
 import { ProdutoModal } from "./ProdutoModal";
 import { enviarProdutoAoVhsys } from "@/lib/produtos/acoes";
-import { aplicarEnvio, pendenteEnvio, situacaoDe } from "./situacao";
+import {
+  DIAS_PRECIFICACAO_ANTIGA,
+  aplicarEnvio,
+  diasDesdePrecificacao,
+  nuncaPrecificado,
+  pendenteEnvio,
+  situacaoDe,
+} from "./situacao";
 
 function normalizar(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -50,6 +63,7 @@ export function ProdutosView({
   const [conta, setConta] = useState<string | undefined>();
   const [secao, setSecao] = useState<string | undefined>();
   const [situacao, setSituacao] = useState<FiltroSituacao | undefined>();
+  const [precificacao, setPrecificacao] = useState<FiltroPrecificacao | undefined>();
   const [filtros, setFiltros] = useState(false);
   const [parametros, setParametros] = useState(false);
   const [abertoChave, setAbertoChave] = useState<string | null>(null);
@@ -72,6 +86,8 @@ export function ProdutosView({
       if (conta && l.contaId !== conta) return false;
       if (secao && l.secao !== secao) return false;
       if (termo && !normalizar(`${l.produto} ${nomeFornecedor(l)}`).includes(termo)) return false;
+      if (precificacao === "nunca" && !nuncaPrecificado(l)) return false;
+      if (precificacao === "antiga" && !((diasDesdePrecificacao(l) ?? 0) > DIAS_PRECIFICACAO_ANTIGA)) return false;
       switch (situacao) {
         case "sem_margem":
           return l.valorVenda === null;
@@ -91,7 +107,7 @@ export function ProdutosView({
           return true;
       }
     });
-  }, [dados, busca, conta, secao, situacao, icmsPorConta, nomeFornecedor]);
+  }, [dados, busca, conta, secao, situacao, precificacao, icmsPorConta, nomeFornecedor]);
 
   const grupos = useMemo(() => {
     const mapa = new Map<string, LinhaProduto[]>();
@@ -117,11 +133,12 @@ export function ProdutosView({
     if (secao && !secoesDaConta(c).includes(secao)) setSecao(undefined);
   }
 
-  const filtrosAtivos = [conta, secao, situacao].filter(Boolean).length;
+  const filtrosAtivos = [conta, secao, situacao, precificacao].filter(Boolean).length;
   const rotuloFiltro = [
     conta ? slugs.get(conta)?.toUpperCase() : null,
     secao,
     situacao ? FILTROS_SITUACAO.find((f) => f.valor === situacao)?.label : null,
+    precificacao ? FILTROS_PRECIFICACAO.find((f) => f.valor === precificacao)?.label : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -240,6 +257,7 @@ export function ProdutosView({
               <th className={th}>Margem</th>
               <th className="px-3 py-2.5 text-left font-medium">Fornecedor</th>
               <th className={th}>Última compra</th>
+              <th className={th}>Precificado</th>
               <th className="px-3 py-2.5 text-center font-medium">VHSYS</th>
             </tr>
           </thead>
@@ -247,7 +265,7 @@ export function ProdutosView({
             {grupos.map(([nomeSecao, itens]) => (
               <Fragment key={nomeSecao}>
                 <tr className="bg-primary-50">
-                  <td colSpan={14} className="px-3 py-1.5 text-xs font-semibold text-primary-800">
+                  <td colSpan={15} className="px-3 py-1.5 text-xs font-semibold text-primary-800">
                     {nomeSecao} <span className="font-normal text-primary-600">({itens.length})</span>
                   </td>
                 </tr>
@@ -265,7 +283,7 @@ export function ProdutosView({
             ))}
             {grupos.length === 0 && (
               <tr>
-                <td colSpan={14} className="px-3 py-10 text-center text-gray-500">
+                <td colSpan={15} className="px-3 py-10 text-center text-gray-500">
                   Nenhum produto encontrado.
                 </td>
               </tr>
@@ -281,9 +299,11 @@ export function ProdutosView({
           conta={conta}
           secao={secao}
           situacao={situacao}
+          precificacao={precificacao}
           onConta={mudarConta}
           onSecao={setSecao}
           onSituacao={setSituacao}
+          onPrecificacao={setPrecificacao}
           onFechar={() => setFiltros(false)}
         />
       )}

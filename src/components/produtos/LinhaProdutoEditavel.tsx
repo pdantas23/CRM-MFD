@@ -18,7 +18,14 @@ import {
 import { BadgeConta } from "./BadgeConta";
 import { CampoNumero } from "./CampoNumero";
 import { SeletorFornecedor } from "./SeletorFornecedor";
-import { aplicarEnvio, situacaoDe } from "./situacao";
+import {
+  DIAS_PRECIFICACAO_ANTIGA,
+  aplicarEnvio,
+  dataHoraPrecificacao,
+  diasDesdePrecificacao,
+  situacaoDe,
+  tempoRelativo,
+} from "./situacao";
 
 // Percentuais: o banco guarda fração (0.0982); a tabela mostra pontos (9,82).
 const emPct = (f: number | null) => (f === null ? null : Math.round(f * 1e6) / 1e4);
@@ -308,6 +315,9 @@ export function LinhaProdutoEditavel({
           {linha.ultimaCompra ? formatarData(linha.ultimaCompra) : "—"}
         </span>
       </td>
+      <td className={td}>
+        <Precificado linha={linha} />
+      </td>
       <td className="px-3 py-1.5 text-center whitespace-nowrap">
         {estado !== "livre" ? (
           <span className="text-xs text-gray-500">{estado === "salvando" ? "Salvando…" : "Enviando…"}</span>
@@ -348,5 +358,20 @@ export function LinhaProdutoEditavel({
         ) : null}
       </td>
     </tr>
+  );
+}
+
+// Quando o produto foi precificado pelo CRM (último envio ao VHSYS).
+function Precificado({ linha }: { linha: LinhaProduto }) {
+  const dias = diasDesdePrecificacao(linha);
+  if (dias === null || !linha.enviadoEm) return <>—</>;
+  return (
+    <span
+      suppressHydrationWarning
+      title={`Precificado pelo CRM em ${dataHoraPrecificacao(linha.enviadoEm)}`}
+      className={dias > DIAS_PRECIFICACAO_ANTIGA ? "text-amber-700" : undefined}
+    >
+      {tempoRelativo(dias)}
+    </span>
   );
 }

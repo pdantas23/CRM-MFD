@@ -1,9 +1,10 @@
 "use client";
-// Filtros da aba Produtos (conta, seção e situação), empilhados numa coluna.
+// Filtros da aba Produtos (conta, seção, situação e precificação), empilhados numa coluna.
 // Aplicam na hora; o modal só agrupa os dropdowns. As seções oferecidas
 // dependem da conta escolhida (todas as contas = todas as seções).
 
 import { DropdownFiltro } from "@/components/ui/DropdownFiltro";
+import { DIAS_PRECIFICACAO_ANTIGA } from "./situacao";
 
 export const FILTROS_SITUACAO = [
   { valor: "sem_margem", label: "Sem margem" },
@@ -16,15 +17,24 @@ export const FILTROS_SITUACAO = [
 ] as const;
 export type FiltroSituacao = (typeof FILTROS_SITUACAO)[number]["valor"];
 
+// Precificação pelo CRM = último envio ao VHSYS (ver situacao.ts).
+export const FILTROS_PRECIFICACAO = [
+  { valor: "nunca", label: "Nunca precificados" },
+  { valor: "antiga", label: `Precificados há mais de ${DIAS_PRECIFICACAO_ANTIGA} dias` },
+] as const;
+export type FiltroPrecificacao = (typeof FILTROS_PRECIFICACAO)[number]["valor"];
+
 export function FiltrosModal({
   contas,
   secoes,
   conta,
   secao,
   situacao,
+  precificacao,
   onConta,
   onSecao,
   onSituacao,
+  onPrecificacao,
   onFechar,
 }: {
   contas: { id: string; slug: string }[];
@@ -32,9 +42,11 @@ export function FiltrosModal({
   conta: string | undefined;
   secao: string | undefined;
   situacao: FiltroSituacao | undefined;
+  precificacao: FiltroPrecificacao | undefined;
   onConta: (c: string | undefined) => void;
   onSecao: (s: string | undefined) => void;
   onSituacao: (s: FiltroSituacao | undefined) => void;
+  onPrecificacao: (p: FiltroPrecificacao | undefined) => void;
   onFechar: () => void;
 }) {
   return (
@@ -74,6 +86,14 @@ export function FiltrosModal({
             valorAtual={situacao}
             onChange={(v) => onSituacao(v as FiltroSituacao | undefined)}
           />
+          <DropdownFiltro
+            label="Precificação"
+            larguraTotal
+            placeholder="Todas"
+            opcoes={FILTROS_PRECIFICACAO.map((f) => ({ valor: f.valor, label: f.label }))}
+            valorAtual={precificacao}
+            onChange={(v) => onPrecificacao(v as FiltroPrecificacao | undefined)}
+          />
         </div>
 
         <div className="flex justify-between gap-3 border-t px-5 py-3">
@@ -83,6 +103,7 @@ export function FiltrosModal({
               onConta(undefined);
               onSecao(undefined);
               onSituacao(undefined);
+              onPrecificacao(undefined);
             }}
             className="btn-secondary"
           >

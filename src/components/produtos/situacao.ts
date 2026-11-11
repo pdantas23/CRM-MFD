@@ -45,3 +45,47 @@ export function pendenteEnvio(l: LinhaProduto, icmsAtual: number): boolean {
   const s = situacaoDe(l, icmsAtual);
   return s === "divergente" || s === "erro";
 }
+
+// Precificação pelo CRM = último envio com sucesso ao VHSYS (enviadoEm), que
+// grava custo/venda e o bloco "[Precificação CRM — data · autor]". Edições ou
+// custo de nota sem envio não contam. Produto sem VHSYS não entra (não há envio).
+const DIA = 86_400_000;
+const FUSO_MS = 3 * 3_600_000; // America/Fortaleza = UTC−3, sem horário de verão
+const diaLocal = (ms: number) => Math.floor((ms - FUSO_MS) / DIA);
+
+export const DIAS_PRECIFICACAO_ANTIGA = 90;
+
+/** Dias (de calendário, em Fortaleza) desde a última precificação; null = nunca. */
+export function diasDesdePrecificacao(l: LinhaProduto, agora: number = Date.now()): number | null {
+  if (!l.enviadoEm) return null;
+  const t = Date.parse(l.enviadoEm);
+  return Number.isNaN(t) ? null : Math.max(0, diaLocal(agora) - diaLocal(t));
+}
+
+export function nuncaPrecificado(l: LinhaProduto): boolean {
+  return l.idVhsys !== null && l.vhsys !== null && !l.enviadoEm;
+}
+
+/** "hoje", "ontem", "há 5 dias", "há 3 meses", "há 1 ano". */
+export function tempoRelativo(dias: number): string {
+  if (dias === 0) return "hoje";
+  if (dias === 1) return "ontem";
+  if (dias < 60) return `há ${dias} dias`;
+  if (dias < 365) return `há ${Math.floor(dias / 30)} meses`;
+  const anos = Math.floor(dias / 365);
+  return `há ${anos} ano${anos > 1 ? "s" : ""}`;
+}
+
+/** Data e hora da precificação em Fortaleza ("11/11/2026 14:30"). */
+export function dataHoraPrecificacao(iso: string): string {
+  return new Date(iso)
+    .toLocaleString("pt-BR", {
+      timeZone: "America/Fortaleza",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    .replace(",", "");
+}
